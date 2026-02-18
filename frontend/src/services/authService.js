@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 const apiClient = axios.create({
   baseURL: API_URL,
@@ -18,12 +18,12 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-export const login = (email, password) => {
-  return apiClient.post('/auth/login', { email, password });
+export const login = (username, password) => {
+  return apiClient.post('/auth/login', { username, password });
 };
 
-export const register = (email, password, name, role) => {
-  return apiClient.post('/auth/register', { email, password, name, role });
+export const register = (username, email, password, name, role) => {
+  return apiClient.post('/auth/register', { username, email, password, name, role });
 };
 
 export const logout = () => {
