@@ -9,6 +9,7 @@ class UserRole(str, Enum):
     STUDENT = "student"
 
 class UserBase(BaseModel):
+    username: str
     email: EmailStr
     name: str
     role: UserRole = UserRole.STUDENT
@@ -36,5 +37,5 @@ class TokenResponse(BaseModel):
     role: str
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    username: str
     password: str

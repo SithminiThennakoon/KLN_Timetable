@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { login } from '../services/authService';
+import { DEMO_CREDENTIALS } from '../config/demoCredentials';
 import '../styles/LoginPage.css';
 
 function LoginPage({ onLogin }) {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -16,7 +17,7 @@ function LoginPage({ onLogin }) {
     setLoading(true);
 
     try {
-      const response = await login(email, password);
+      const response = await login(username, password);
       const { access_token, role } = response.data;
       onLogin(access_token, role);
       navigate('/dashboard');
@@ -31,20 +32,20 @@ function LoginPage({ onLogin }) {
     <div className="login-container">
       <div className="login-card">
         <div className="login-header">
-          <h1>KLN Timetable</h1>
-          <p>Faculty of Science, University of Kelaniya</p>
+          <h1>KelaniyaFOS</h1>
+          <p>Timetable Management Portal</p>
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
           <div className="form-group">
-            <label htmlFor="email">Email Address</label>
+            <label htmlFor="username">Username</label>
             <input
-              type="email"
-              id="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="text"
+              id="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               required
-              placeholder="Enter your email"
+              placeholder={DEMO_CREDENTIALS.email}
             />
           </div>
 
@@ -56,16 +57,24 @@ function LoginPage({ onLogin }) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              placeholder="Enter your password"
+              placeholder={DEMO_CREDENTIALS.password}
             />
           </div>
 
           {error && <div className="error-message">{error}</div>}
 
           <button type="submit" disabled={loading} className="login-button">
-            {loading ? 'Logging in...' : 'Login'}
+            {loading ? 'Logging in...' : 'Log in'}
           </button>
         </form>
+
+        <div className="helper-link">
+          <button type="button" className="text-link">Lost password?</button>
+        </div>
+
+        <div className="demo-credentials">
+          <span>Example login: {DEMO_CREDENTIALS.email} / {DEMO_CREDENTIALS.password}</span>
+        </div>
 
         <div className="login-footer">
           <p>© 2026 Faculty of Science, University of Kelaniya</p>

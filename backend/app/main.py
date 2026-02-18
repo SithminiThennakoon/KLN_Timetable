@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.database import Base, engine
+from app.models.student_login import StudentLogin
 from app.routes.auth import router as auth_router
 from app.core.config import settings
 
