@@ -1,5 +1,6 @@
 from app.core.database import engine, Base, SessionLocal
 from app.models.user import User
+from app.models.admin_login import AdminLogin
 from app.models.student_login import StudentLogin
 
 def recreate_tables():

@@ -9,6 +9,7 @@ from app.core.security import (
     create_access_token,
 )
 from app.core.config import settings
+from app.models.admin_login import AdminLogin
 from app.models.user import User
 from app.models.student_login import StudentLogin
 from app.schemas.user import LoginRequest, TokenResponse, UserCreate, UserResponse
@@ -120,6 +121,21 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)):
             "access_token": access_token,
             "token_type": "bearer",
             "role": "student"
+        }
+
+    # Fallback login against admin_login table
+    admin = db.query(AdminLogin).filter(AdminLogin.adminemail == identifier).first()
+    if admin and admin.password == credentials.password:
+        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": admin.adminemail, "user_id": admin.id, "role": "admin"},
+            expires_delta=access_token_expires
+        )
+
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "role": "admin"
         }
 
     raise HTTPException(
