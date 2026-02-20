@@ -4,10 +4,12 @@ from app.core.database import Base, engine
 from app.models.admin_login import AdminLogin
 from app.models.student_login import StudentLogin
 from app.routes.auth import router as auth_router
+from app.routes.timetable import router as timetable_router
+from app.routes.dashboard import router as dashboard_router
 from app.core.config import settings
 
-# Create tables
-Base.metadata.create_all(bind=engine)
+# Create tables (temporarily commented out due to database connection issues)
+# Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -25,6 +27,8 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth_router)
+app.include_router(timetable_router)
+app.include_router(dashboard_router)
 
 @app.get("/")
 def read_root():

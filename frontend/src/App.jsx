@@ -1,33 +1,13 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import LoginPage from './pages/LoginPage.jsx';
-import Dashboard from './pages/Dashboard.jsx';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import AdminDashboard from './pages/AdminDashboard.jsx';
 import './App.css';
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userRole, setUserRole] = useState('');
-  const location = useLocation();
-
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    const role = localStorage.getItem('userRole');
-    if (token) {
-      setIsAuthenticated(true);
-      setUserRole(role || '');
-    }
-  }, []);
-
-  const handleLogin = (token, role) => {
-    localStorage.setItem('token', token);
-    localStorage.setItem('userRole', role);
-    setIsAuthenticated(true);
-    setUserRole(role);
-  };
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
+  const [userRole, setUserRole] = useState('admin');
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('userRole');
     setIsAuthenticated(false);
     setUserRole('');
   };
@@ -36,15 +16,11 @@ function App() {
     <Routes>
       <Route 
         path="/" 
-        element={isAuthenticated ? <Navigate to="/dashboard" /> : <Navigate to="/login" />} 
-      />
-      <Route 
-        path="/login" 
-        element={<LoginPage onLogin={handleLogin} />} 
+        element={<Navigate to="/dashboard" />} 
       />
       <Route 
         path="/dashboard" 
-        element={isAuthenticated ? <Dashboard onLogout={handleLogout} userRole={userRole} /> : <Navigate to="/login" state={{ from: location }} />} 
+        element={<AdminDashboard onLogout={handleLogout} userRole={userRole} />} 
       />
     </Routes>
   );

@@ -9,3 +9,4 @@ mysql-connector-python==8.0.33
 sqlalchemy==2.0.14
 python-dotenv==1.0.0
 alembic==1.10.2
+ortools==9.12.4544

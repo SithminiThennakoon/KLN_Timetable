@@ -76,6 +76,7 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
 def login(credentials: LoginRequest, db: Session = Depends(get_db)):
     """Login user and return JWT token"""
     identifier = credentials.username.strip()
+    print(f"Login attempt: {identifier} / {credentials.password}")
 
     # Try login against users table by username or email
     user = db.query(User).filter(User.username == identifier).first()
@@ -83,6 +84,7 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)):
         user = db.query(User).filter(User.email == identifier).first()
 
     if user:
+        print(f"Found user: {user.email}")
         if not verify_password(credentials.password, user.hashed_password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -110,6 +112,7 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)):
 
     # Fallback login against student_login table
     student = db.query(StudentLogin).filter(StudentLogin.studentemail == identifier).first()
+    print(f"Student lookup: {student}")
     if student and student.password == credentials.password:
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
@@ -125,6 +128,8 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)):
 
     # Fallback login against admin_login table
     admin = db.query(AdminLogin).filter(AdminLogin.adminemail == identifier).first()
+    print(f"Admin lookup: {admin}")
+    print(f"Password match: {admin.password if admin else None} == {credentials.password}")
     if admin and admin.password == credentials.password:
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
