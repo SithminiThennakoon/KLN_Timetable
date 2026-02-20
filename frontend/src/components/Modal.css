@@ -1,0 +1,137 @@
+/* Modal overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.18);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Modal box */
+.modal-content {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  min-width: 420px;
+  max-width: 520px;
+  width: 100%;
+  padding: 0;
+  animation: modal-pop 0.18s ease;
+}
+
+@keyframes modal-pop {
+  0% { transform: scale(0.95); opacity: 0.7; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px 8px 24px;
+  border-bottom: 1.5px solid #f0f1f3;
+}
+
+.modal-title {
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: #222;
+}
+
+.modal-close-btn {
+  background: none;
+  border: none;
+  font-size: 1.7rem;
+  color: #444;
+  cursor: pointer;
+  margin-left: 12px;
+}
+
+.modal-body {
+  padding: 18px 24px 24px 24px;
+}
+
+.modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modal-form-row {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 8px;
+}
+
+.modal-form-row label {
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: #333;
+}
+
+.modal-form-row input,
+.modal-form-row textarea {
+  font-size: 1.05rem;
+  padding: 10px 12px;
+  border-radius: 7px;
+  border: 1.5px solid #e0e3e8;
+  background: #fafbfc;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.modal-form-row input:focus,
+.modal-form-row textarea:focus {
+  border-color: #1976d2;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.save-btn {
+  background: #1976d2;
+  color: #fff;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 32px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(25,118,210,0.08);
+  transition: background 0.18s;
+}
+.save-btn:hover {
+  background: #1565c0;
+}
+
+.cancel-btn {
+  background: #f5f6fa;
+  color: #444;
+  font-weight: 500;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 32px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: background 0.18s;
+}
+.cancel-btn:hover {
+  background: #e0e3e8;
+}
+
+/* Note box */
+.modal-body .note-box {
+  background: #fffde7;
+  border: 1.5px solid #ffe082;
+  border-radius: 8px;
+  padding: 12px 18px;
+  color: #b28704;
+  font-size: 1.05rem;
+  margin-top: 12px;
+  margin-bottom: 8px;
+}

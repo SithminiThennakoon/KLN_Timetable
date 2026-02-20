@@ -1,4 +1,4 @@
 export const DEMO_CREDENTIALS = {
-  email: 'example@kln.ac.lk',
-  password: 'example123',
+  email: 'admin@kln.ac.lk',
+  password: 'admin123',
 };

@@ -1,0 +1,82 @@
+.db-management {
+  background: #fff;
+  margin: 32px auto;
+  padding: 32px 32px 24px 32px;
+  border-radius: 12px;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+  max-width: 1100px;
+}
+.db-management h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.db-management p {
+  color: #444;
+  margin-bottom: 18px;
+}
+.db-tabs {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 18px;
+  border-bottom: 1.5px solid #e5e7eb;
+}
+.db-tab {
+  background: none;
+  border: none;
+  font-size: 1.08rem;
+  font-weight: 500;
+  color: #1a237e;
+  padding: 8px 0 10px 0;
+  cursor: pointer;
+  border-bottom: 2.5px solid transparent;
+  transition: border 0.2s, color 0.2s;
+}
+.db-tab.active, .db-tab:hover {
+  color: #1976d2;
+  border-bottom: 2.5px solid #1976d2;
+}
+.db-tab-content {
+  margin-top: 18px;
+}
+.db-table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.add-btn {
+  background: #1976d2;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 18px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.add-btn:hover {
+  background: #125ea7;
+}
+.db-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fafbfc;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.db-table th, .db-table td {
+  padding: 12px 10px;
+  text-align: left;
+}
+.db-table th {
+  background: #f3f6fa;
+  color: #1a237e;
+  font-weight: 600;
+  border-bottom: 1.5px solid #e5e7eb;
+}
+.db-table td {
+  color: #444;
+  border-bottom: 1px solid #f0f0f0;
+}

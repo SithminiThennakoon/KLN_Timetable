@@ -1,0 +1,47 @@
+.appbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 18px 32px 12px 32px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.appbar-title {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.appbar-icon {
+  font-size: 2.2rem;
+  margin-right: 8px;
+}
+.faculty-title {
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: #1a237e;
+}
+.faculty-sub {
+  font-size: 0.98rem;
+  color: #555;
+}
+.appbar-nav {
+  display: flex;
+  gap: 32px;
+}
+.appbar-nav a {
+  color: #1a237e;
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 1.08rem;
+  padding-bottom: 4px;
+  border-bottom: 2px solid transparent;
+  transition: border 0.2s, color 0.2s;
+}
+.appbar-nav a.active, .appbar-nav a:hover {
+  color: #1976d2;
+  border-bottom: 2px solid #1976d2;
+}

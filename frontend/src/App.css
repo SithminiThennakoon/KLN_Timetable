@@ -2,3 +2,16 @@
   width: 100%;
   min-height: 100vh;
 }
+
+body {
+  margin: 0;
+  font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+  background: #f7f9fb;
+}
+
+/* Ensure AppBar is always on top */
+.app-root > .AppBar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}

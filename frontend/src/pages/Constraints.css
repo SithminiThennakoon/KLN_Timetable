@@ -1,0 +1,115 @@
+.constraints-page {
+  max-width: 1100px;
+  margin: 32px auto;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+  padding: 32px 32px 24px 32px;
+}
+.constraints-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+.constraints-icon {
+  background: #f3eaff;
+  border-radius: 50%;
+  padding: 10px 14px;
+  color: #a259ff;
+  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.constraints-header h2 {
+  font-size: 1.35rem;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.constraints-header p {
+  color: #444;
+  font-size: 1rem;
+}
+.add-constraint-btn {
+  margin-left: auto;
+  background: #00c853;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 24px;
+  font-size: 1.08rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.add-constraint-btn:hover {
+  background: #009624;
+}
+.constraints-list {
+  margin-bottom: 24px;
+}
+.constraint-card {
+  background: #f8fff8;
+  border: 2px solid #b9f6ca;
+  border-radius: 12px;
+  margin-bottom: 18px;
+  padding: 18px 24px 12px 24px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+}
+.constraint-card-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+.constraint-check {
+  color: #00c853;
+  font-size: 1.5rem;
+  margin-top: 2px;
+}
+.constraint-info {
+  flex: 1 1 0;
+}
+.constraint-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #1a237e;
+}
+.constraint-desc {
+  color: #444;
+  font-size: 1rem;
+  margin-bottom: 6px;
+}
+.constraint-config-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+.constraint-enabled {
+  background: #eafff3;
+  color: #00c853;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 6px 18px;
+  font-size: 1rem;
+  margin-left: 18px;
+  align-self: flex-start;
+}
+.constraints-how {
+  background: #f3f7ff;
+  border-radius: 10px;
+  padding: 18px 24px;
+  color: #1a237e;
+  font-size: 1rem;
+}
+.constraints-how h4 {
+  margin-top: 0;
+  margin-bottom: 8px;
+  color: #1976d2;
+}
+.constraints-how ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #1976d2;
+}
