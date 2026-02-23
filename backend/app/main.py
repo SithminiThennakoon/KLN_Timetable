@@ -1,39 +1,17 @@
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from app.core.database import Base, engine
-from app.models.admin_login import AdminLogin
-from app.models.student_login import StudentLogin
-from app.routes.auth import router as auth_router
-from app.core.config import settings
 
-# Create tables
-Base.metadata.create_all(bind=engine)
+from app.routes import admin, dashboard, timetable
 
-app = FastAPI(
-    title=settings.PROJECT_NAME,
-    version=settings.PROJECT_VERSION,
-)
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Update with specific domains in production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+def create_app() -> FastAPI:
+    app = FastAPI()
 
-# Include routers
-app.include_router(auth_router)
+    # include route modules
+    app.include_router(admin.router)
+    app.include_router(dashboard.router)
+    app.include_router(timetable.router)
 
-@app.get("/")
-def read_root():
-    return {"message": "KLN Timetable API"}
+    return app
 
-@app.get("/api/health")
-def health_check():
-    return {"status": "healthy"}
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+app = create_app()
