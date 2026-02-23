@@ -1,12 +1,17 @@
-import React from 'react'
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import DatabaseManagement from './pages/DatabaseManagement_simple';
+import './styles/App.css';
 
 function App() {
   return (
-    <div className="App">
-      <h1>Timetable App</h1>
-      <p>Welcome to the Timetable Application</p>
-    </div>
-  )
+    <Router>
+      <Routes>
+        <Route path="/database" element={<DatabaseManagement />} />
+        <Route path="/" element={<Navigate to="/database" />} />
+      </Routes>
+    </Router>
+  );
 }
 
-export default App
+export default App;
