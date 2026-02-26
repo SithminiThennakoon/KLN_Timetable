@@ -1,191 +1,230 @@
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem 2rem;
-  background-color: #ffffff;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.logo img {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-}
-
-.title h1 {
-  font-size: 1.5rem;
-  color: #4a5568;
-  margin: 0;
-}
-
-.title p {
-  font-size: 0.875rem;
-  color: #718096;
-  margin: 0;
-}
-
-.main-nav ul {
-  display: flex;
-  list-style: none;
-  gap: 2rem;
+/* Styling for Database Management page matching provided image and actual JSX class names */
+body, html {
   margin: 0;
   padding: 0;
+  min-height: 100vh;
+  background: #fff;
+  font-family: 'Segoe UI', 'Arial', 'Roboto', sans-serif;
 }
 
-.main-nav li {
-  cursor: pointer;
-  font-size: 1rem;
-  color: #4a5568;
-  padding: 0.5rem 0;
-  border-bottom: 2px solid transparent;
-}
-
-.main-nav li.active {
-  color: #2d3748;
-  border-bottom-color: #2d3748;
+.database-management {
+  width: 100vw;
+  min-height: 100vh;
+  background: #fff;
 }
 
 .content {
-  padding: 2rem;
-  background-color: #f7fafc;
-  min-height: calc(100vh - 80px);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 65vh;
 }
 
 .section-header {
-  margin-bottom: 1.5rem;
+  border: 2px solid #222;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 2px 7px rgba(0,0,0,0.08);
+  padding: 28px 28px 18px 28px;
+  margin-top: 36px;
+  max-width: 780px;
+  width: 100%;
 }
 
-.section-header h2 {
-  font-size: 1.75rem;
-  color: #2d3748;
-  margin: 0 0 0.5rem 0;
+.db-management-header, .database-management-header, h2 {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #222;
+  margin-bottom: 8px;
 }
 
-.section-header p {
-  font-size: 1rem;
-  color: #4a5568;
-  margin: 0;
+.db-management-subhead, .database-management-subtitle, p {
+  font-size: 1.06rem;
+  color: #444;
+  margin-bottom: 20px;
 }
 
-.tabs {
-  background-color: #ffffff;
-  border-radius: 0.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-}
-
-.tab-container {
+/* TABS */
+.db-tabs, .tabs {
   display: flex;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 2px solid #222;
+  margin-bottom: 8px;
+  gap: 0;
 }
 
-.tab {
-  padding: 1rem 1.5rem;
-  cursor: pointer;
-  background-color: #f7fafc;
+.db-tab-btn, .tab {
+  font-size: 1.13rem;
+  font-weight: 700;
+  padding: 12px 22px;
+  background: none;
   border: none;
-  font-size: 1rem;
-  color: #4a5568;
-  position: relative;
-}
-
-.tab.active {
-  background-color: #ffffff;
-  color: #2d3748;
-  font-weight: 600;
-}
-
-.tab-content {
-  padding: 1.5rem;
-}
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-
-.section-header h3 {
-  font-size: 1.25rem;
-  color: #2d3748;
-  margin: 0;
-}
-
-.add-button {
-  background-color: #2d3748;
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 0.25rem;
+  border-right: 1px solid #222;
+  color: #222;
   cursor: pointer;
-  font-size: 0.875rem;
+  outline: none;
+}
+.db-tab-btn:last-child, .tab:last-child {
+  border-right: none;
+}
+.db-tab-btn.active, .tab.active {
+  text-decoration: underline;
 }
 
-.add-button:hover {
-  background-color: #1a202c;
+.db-add-btn, .add-button {
+  float: right;
+  background: #111;
+  color: #fff;
+  font-weight: bold;
+  border: none;
+  border-radius: 0px;
+  padding: 7px 18px;
+  font-size: 1.01rem;
+  margin-top: 4px;
+  cursor: pointer;
 }
 
+/* TABLES AND CONTAINER */
 .table-container {
-  background-color: #ffffff;
-  border-radius: 0.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
+  width: 100%;
+  margin-top: 8px;
 }
 
-table {
+.db-table, .batches-table, .courses-table, .lecturers-table, .departments-table, .rooms-table {
   width: 100%;
   border-collapse: collapse;
+  background: #fff;
+  font-size: 1.07rem;
+  border: 2px solid #222;
+  margin-bottom: 20px;
 }
 
-th {
-  background-color: #f7fafc;
-  padding: 1rem;
+.db-table th, .batches-table th, .courses-table th, .lecturers-table th, .departments-table th, .rooms-table th,
+.db-table td, .batches-table td, .courses-table td, .lecturers-table td, .departments-table td, .rooms-table td {
+  padding: 10px 14px;
   text-align: left;
-  font-weight: 600;
-  color: #4a5568;
-  border-bottom: 1px solid #e2e8f0;
+  border: 1px solid #222;
 }
 
-td {
-  padding: 1rem;
-  border-bottom: 1px solid #e2e8f0;
-  color: #4a5568;
+.db-table th, .batches-table th {
+  font-weight: bold;
+  color: #222;
+  background: #fff;
+}
+
+.db-table td, .batches-table td {
+  color: #222;
+  background: #fff;
 }
 
 .no-data {
+  color: #555;
+  font-size: 1.03rem;
   text-align: center;
-  padding: 2rem;
-  color: #718096;
-  font-style: italic;
+  font-weight: 400;
 }
 
-/* Responsive design */
-@media (max-width: 768px) {
-  .header {
-    flex-direction: column;
-    gap: 1rem;
-    padding: 1rem;
-  }
-
-  .main-nav ul {
-    gap: 1rem;
-  }
-
-  .tab-container {
-    flex-wrap: wrap;
-  }
-
-  .tab {
-    flex: 1;
-    min-width: 120px;
-    text-align: center;
-  }
+/* BOTTOM ACTION BUTTONS */
+.bottom-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 12px;
 }
+
+.db-cancel-btn, .db-save-btn, .bottom-btn {
+  background: #111;
+  color: #fff;
+  font-weight: bold;
+  border: none;
+  border-radius: 0px;
+  padding: 10px 24px;
+  font-size: 1rem;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.db-cancel-btn:disabled, .db-save-btn:disabled, .bottom-btn:disabled {
+  background: #ccc;
+  color: #fff;
+}
+
+/* MODALS */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.08);
+  z-index: 2;
+}
+
+.modal {
+  background: #fff;
+  border: 2px solid #222;
+  border-radius: 8px;
+  padding: 36px 24px;
+  width: 360px;
+  max-width: 90vw;
+  position: relative;
+  box-shadow: 0 2px 15px rgba(0,0,0,0.15);
+}
+
+.modal-header h3 {
+  font-size: 1.25rem;
+}
+
+.modal-close {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  font-size: 1.2rem;
+  color: #222;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.modal-btn {
+  background: #111;
+  color: #fff;
+  font-weight: bold;
+  border: none;
+  border-radius: 0px;
+  padding: 8px 24px;
+  font-size: 1rem;
+  cursor: pointer;
+  box-shadow: none;
+  margin-right: 8px;
+}
+.modal-btn:last-child {
+  margin-right: 0;
+}
+
+/* FORMS */
+.form-group label {
+  font-weight: bold;
+  color: #222;
+  font-size: 1rem;
+}
+
+.form-group input, .form-group select {
+  padding: 7px 14px;
+  border-radius: 0px;
+  border: 1px solid #222;
+  background: #fff;
+  font-size: 1rem;
+  color: #222;
+}
+.form-group input:focus, .form-group select:focus {
+  border-color: #111;
+  outline: none;
+}
+.select-column, .actions-column {
+  min-width: 60px;
+}
+
+/* Fixes for extra layout */
+.db-section { margin-bottom: 16px; }
+.tab-content { margin-bottom: 12px; }

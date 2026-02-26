@@ -1,4 +1,53 @@
-.App {
-  width: 100%;
-  min-height: 100vh;
+.main-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 26px 60px 0 62px;
+  background: #fff;
+  min-height: 88px;
+  border-bottom: 2px solid #f3f3f7;
+}
+.main-logo {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.logo-circle {
+  background: #445167;
+  color: #fff;
+  border-radius: 50%;
+  font-weight: bold;
+  font-size: 1.6rem;
+  width: 46px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.main-title {
+  font-size: 2rem;
+  color: #38414c;
+  font-weight: bold;
+}
+.main-subtitle {
+  font-size: 1.05rem;
+  color: #8492a5;
+}
+.main-menu {
+  display: flex;
+  gap: 38px;
+  align-items: center;
+}
+.nav-link {
+  font-size: 1.18rem;
+  color: #425064;
+  text-decoration: none;
+  padding-bottom: 5px;
+  border-bottom: 2.5px solid transparent;
+  transition: border-color 0.15s, color 0.15s;
+}
+.nav-link.active {
+  color: #6922af;
+  border-bottom: 2.5px solid #282548;
+  font-weight: bold;
 }
