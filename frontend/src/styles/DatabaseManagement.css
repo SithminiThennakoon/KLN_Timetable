@@ -15,72 +15,97 @@ body, html {
 
 .content {
   display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: center;
   min-height: 65vh;
 }
 
 .section-header {
-  border: 2px solid #222;
+  border: 1px solid #e5e7eb;
   border-radius: 10px;
   background: #fff;
-  box-shadow: 0 2px 7px rgba(0,0,0,0.08);
-  padding: 28px 28px 18px 28px;
-  margin-top: 36px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  padding: 24px;
+  margin-top: 24px;
   max-width: 780px;
   width: 100%;
 }
 
 .db-management-header, .database-management-header, h2 {
-  font-size: 2rem;
-  font-weight: bold;
-  color: #222;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #111827;
   margin-bottom: 8px;
 }
 
 .db-management-subhead, .database-management-subtitle, p {
-  font-size: 1.06rem;
-  color: #444;
+  font-size: 1rem;
+  color: #6b7280;
   margin-bottom: 20px;
 }
 
 /* TABS */
 .db-tabs, .tabs {
   display: flex;
-  border-bottom: 2px solid #222;
+  border-bottom: 2px solid #e5e7eb;
   margin-bottom: 8px;
   gap: 0;
+  width: 100%;
+  background: #fff;
+  border-radius: 8px 8px 0 0;
 }
 
 .db-tab-btn, .tab {
-  font-size: 1.13rem;
-  font-weight: 700;
-  padding: 12px 22px;
+  font-size: 1rem;
+  font-weight: 500;
+  padding: 12px 20px;
   background: none;
   border: none;
-  border-right: 1px solid #222;
-  color: #222;
+  border-bottom: 3px solid transparent;
+  color: #6b7280;
   cursor: pointer;
   outline: none;
+  transition: all 0.2s ease;
+  border-radius: 6px 6px 0 0;
+  margin-bottom: -2px;
 }
+
+.db-tab-btn:hover, .tab:hover {
+  color: #2563eb;
+  background: #f3f4f6;
+}
+
 .db-tab-btn:last-child, .tab:last-child {
   border-right: none;
 }
+
 .db-tab-btn.active, .tab.active {
-  text-decoration: underline;
+  color: #2563eb;
+  border-bottom-color: #2563eb;
+  background: #eff6ff;
+  font-weight: 600;
 }
 
 .db-add-btn, .add-button {
   float: right;
-  background: #111;
+  background: #2563eb;
   color: #fff;
-  font-weight: bold;
+  font-weight: 600;
   border: none;
-  border-radius: 0px;
-  padding: 7px 18px;
-  font-size: 1.01rem;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 0.95rem;
   margin-top: 4px;
   cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.db-add-btn:hover, .add-button:hover {
+  background: #1d4ed8;
+}
+
+.db-add-btn:active, .add-button:active {
+  transform: scale(0.98);
 }
 
 /* TABLES AND CONTAINER */
@@ -102,18 +127,32 @@ body, html {
 .db-table td, .batches-table td, .courses-table td, .lecturers-table td, .departments-table td, .rooms-table td {
   padding: 10px 14px;
   text-align: left;
-  border: 1px solid #222;
+  border: 1px solid #e5e7eb;
 }
 
 .db-table th, .batches-table th {
-  font-weight: bold;
-  color: #222;
-  background: #fff;
+  font-weight: 600;
+  color: #374151;
+  background: #f3f4f6;
 }
 
 .db-table td, .batches-table td {
   color: #222;
   background: #fff;
+}
+
+.db-table tr:nth-child(even) td,
+.batches-table tr:nth-child(even) td,
+.courses-table tr:nth-child(even) td,
+.lecturers-table tr:nth-child(even) td {
+  background: #f9fafb;
+}
+
+.db-table tbody tr:hover td,
+.batches-table tbody tr:hover td,
+.courses-table tbody tr:hover td,
+.lecturers-table tbody tr:hover td {
+  background: #eff6ff;
 }
 
 .no-data {
@@ -132,15 +171,24 @@ body, html {
 }
 
 .db-cancel-btn, .db-save-btn, .bottom-btn {
-  background: #111;
+  background: #2563eb;
   color: #fff;
-  font-weight: bold;
+  font-weight: 600;
   border: none;
-  border-radius: 0px;
+  border-radius: 6px;
   padding: 10px 24px;
   font-size: 1rem;
   cursor: pointer;
   box-shadow: none;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.db-cancel-btn:hover, .db-save-btn:hover, .bottom-btn:hover {
+  background: #1d4ed8;
+}
+
+.db-cancel-btn:active, .db-save-btn:active, .bottom-btn:active {
+  transform: scale(0.98);
 }
 
 .db-cancel-btn:disabled, .db-save-btn:disabled, .bottom-btn:disabled {
@@ -187,19 +235,44 @@ body, html {
 }
 
 .modal-btn {
-  background: #111;
+  background: #2563eb;
   color: #fff;
-  font-weight: bold;
+  font-weight: 600;
   border: none;
-  border-radius: 0px;
+  border-radius: 6px;
   padding: 8px 24px;
   font-size: 1rem;
   cursor: pointer;
   box-shadow: none;
   margin-right: 8px;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.modal-btn:hover {
+  background: #1d4ed8;
+}
+
+.modal-btn:active {
+  transform: scale(0.98);
 }
 .modal-btn:last-child {
   margin-right: 0;
+}
+
+.modal-btn.cancel {
+  background: #6b7280;
+}
+
+.modal-btn.cancel:hover {
+  background: #4b5563;
+}
+
+.modal-btn.delete {
+  background: #dc2626;
+}
+
+.modal-btn.delete:hover {
+  background: #b91c1c;
 }
 
 /* FORMS */
@@ -226,5 +299,22 @@ body, html {
 }
 
 /* Fixes for extra layout */
-.db-section { margin-bottom: 16px; }
-.tab-content { margin-bottom: 12px; }
+.db-section {
+  width: 100%;
+  max-width: 780px;
+  margin: 0 auto;
+  margin-bottom: 16px;
+}
+
+.db-tabs {
+  width: 100%;
+  max-width: 780px;
+  margin: 0 auto;
+}
+
+.tab-content {
+  width: 100%;
+  max-width: 780px;
+  margin: 0 auto;
+  margin-bottom: 12px;
+}
