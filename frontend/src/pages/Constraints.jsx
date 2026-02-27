@@ -17,8 +17,12 @@ const Constraints = () => {
   const [addError, setAddError] = useState('');
   const [addLoading, setAddLoading] = useState(false);
   const [constraints, setConstraints] = useState([]);
+  const [originalConstraints, setOriginalConstraints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [saveSuccess, setSaveSuccess] = useState("");
+  const [saveLoading, setSaveLoading] = useState(false);
 
   useEffect(() => {
     fetchConstraints();
@@ -27,7 +31,14 @@ const Constraints = () => {
   function fetchConstraints() {
     setLoading(true);
     axios.get(`${API_BASE}/constraints`).then(res => {
-      setConstraints(res.data);
+      const disabledConstraints = (res.data || []).map(c => ({
+        ...c,
+        enabled: false
+      }));
+      setConstraints(disabledConstraints);
+      setOriginalConstraints(disabledConstraints);
+      setSaveError("");
+      setSaveSuccess("");
       setLoading(false);
     }).catch(err => {
       setError("Error fetching constraints");
@@ -36,6 +47,7 @@ const Constraints = () => {
   }
 
   function handleToggle(constraint) {
+    setSaveSuccess("");
     axios.patch(`${API_BASE}/constraints/${constraint.Constraint_ID}`, { enabled: !constraint.enabled })
       .then(res => {
         setConstraints(constraints => constraints.map(c =>
@@ -50,6 +62,38 @@ const Constraints = () => {
       setConstraints(constraints => constraints.filter(c => c.Constraint_ID !== constraint.Constraint_ID));
     });
   }
+
+  async function handleSaveSelection() {
+    setSaveError("");
+    setSaveSuccess("");
+    setSaveLoading(true);
+    try {
+      const selectedIds = constraints.filter(c => c.enabled).map(c => c.Constraint_ID);
+      await axios.post(`${API_BASE}/constraints/selection`, selectedIds);
+      setSaveSuccess("Constraints saved successfully.");
+      setOriginalConstraints(constraints);
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      const message = Array.isArray(detail)
+        ? detail.map(item => item?.msg || JSON.stringify(item)).join(', ')
+        : typeof detail === 'string'
+          ? detail
+          : detail
+            ? JSON.stringify(detail)
+            : err.message || 'Failed to save constraints.';
+      setSaveError(message);
+    } finally {
+      setSaveLoading(false);
+    }
+  }
+
+  function handleCancelSelection() {
+    setConstraints(originalConstraints);
+    setSaveError("");
+    setSaveSuccess("");
+  }
+
+  const hasChanges = JSON.stringify(constraints) !== JSON.stringify(originalConstraints);
 
   return (
     <div className="content">
@@ -105,7 +149,15 @@ const Constraints = () => {
                   setAddForm({ name: '', description: '' });
                   fetchConstraints();
                 } catch (err) {
-                  setAddError('Failed to add constraint.');
+                  const detail = err?.response?.data?.detail;
+                  const message = Array.isArray(detail)
+                    ? detail.map(item => item?.msg || JSON.stringify(item)).join(', ')
+                    : typeof detail === 'string'
+                      ? detail
+                      : detail
+                        ? JSON.stringify(detail)
+                        : err.message || 'Failed to add constraint.';
+                  setAddError(message);
                 }
                 setAddLoading(false);
               }} disabled={addLoading}>
@@ -156,6 +208,16 @@ const Constraints = () => {
             )}
           </tbody>
         </table>
+      </div>
+      <div className="bottom-actions" style={{justifyContent: 'flex-end', paddingRight: 8}}>
+        {saveError && <div style={{color: '#dc2626', marginRight: 12}}>{saveError}</div>}
+        {saveSuccess && <div style={{color: '#16a34a', marginRight: 12}}>{saveSuccess}</div>}
+        <button className="db-cancel-btn" onClick={handleCancelSelection} disabled={!hasChanges}>
+          Cancel
+        </button>
+        <button className="db-save-btn" onClick={handleSaveSelection} disabled={saveLoading || !hasChanges}>
+          {saveLoading ? 'Saving...' : 'Save'}
+        </button>
       </div>
     </div>
   );

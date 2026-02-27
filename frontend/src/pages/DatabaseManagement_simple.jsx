@@ -33,6 +33,7 @@ const [semesterFormData, setSemesterFormData] = useState({
 
 // Courses and lecturers state
 const [courses, setCourses] = useState([]);
+const [selectedCourses, setSelectedCourses] = useState([]);
 const [lecturers, setLecturers] = useState([]);
 const [coursesLoading, setCoursesLoading] = useState(false);
 const [coursesError, setCoursesError] = useState(null);
@@ -41,7 +42,13 @@ const [coursesError, setCoursesError] = useState(null);
 const [showAddLecturerModal, setShowAddLecturerModal] = useState(false);
 const [addLecturerForm, setAddLecturerForm] = useState({ name: '', email: '', max_teaching_hours: '' });
 const [addLecturerError, setAddLecturerError] = useState(null);
-const [addLecturerLoading, setAddLecturerLoading] = useState(false);
+  const [addLecturerLoading, setAddLecturerLoading] = useState(false);
+  const [showLecturerViewModal, setShowLecturerViewModal] = useState(false);
+  const [viewLecturer, setViewLecturer] = useState(null);
+  const [showLecturerEditModal, setShowLecturerEditModal] = useState(false);
+  const [editLecturerForm, setEditLecturerForm] = useState({ id: null, name: '', email: '', max_teaching_hours: '' });
+  const [showLecturerDeleteModal, setShowLecturerDeleteModal] = useState(false);
+  const [deleteLecturer, setDeleteLecturer] = useState(null);
 
 // Add Course modal state
 const [showAddCourseModal, setShowAddCourseModal] = useState(false);
@@ -54,9 +61,21 @@ const [addCourseForm, setAddCourseForm] = useState({
 });
 const [addCourseError, setAddCourseError] = useState(null);
 const [addCourseLoading, setAddCourseLoading] = useState(false);
+const [showEditCourseModal, setShowEditCourseModal] = useState(false);
+const [editCourseForm, setEditCourseForm] = useState({
+  id: null,
+  course_code: '',
+  course_name: '',
+  hours_per_week: '',
+  lecturer_id: '',
+  is_practical: false
+});
+const [showDeleteCourseModal, setShowDeleteCourseModal] = useState(false);
+const [deleteCourse, setDeleteCourse] = useState(null);
 
 // Rooms state
 const [rooms, setRooms] = useState([]);
+const [selectedRooms, setSelectedRooms] = useState([]);
 const [roomsLoading, setRoomsLoading] = useState(false);
 const [roomsError, setRoomsError] = useState(null);
 const [showAddRoomModal, setShowAddRoomModal] = useState(false);
@@ -69,6 +88,18 @@ const [addRoomForm, setAddRoomForm] = useState({
 });
 const [addRoomError, setAddRoomError] = useState(null);
 const [addRoomLoading, setAddRoomLoading] = useState(false);
+const [showEditRoomModal, setShowEditRoomModal] = useState(false);
+const [editRoomForm, setEditRoomForm] = useState({
+  id: null,
+  roomName: '',
+  roomType: '',
+  location: '',
+  capacity: '',
+  isLaboratory: false
+});
+const [showDeleteRoomModal, setShowDeleteRoomModal] = useState(false);
+const [deleteRoom, setDeleteRoom] = useState(null);
+const [selectedLecturers, setSelectedLecturers] = useState([]);
 
 useEffect(() => {
   fetchBatches();
@@ -92,7 +123,54 @@ const fetchCourses = async () => {
   }
 };
 
-const fetchLecturers = async () => {
+const handleCourseEdit = (course) => {
+  setEditCourseForm({
+    id: course.id,
+    course_code: course.course_code || '',
+    course_name: course.course_name || '',
+    hours_per_week: course.is_practical ? course.practical_hours_per_week : course.lecture_hours_per_week,
+    lecturer_id: course.lecturer_id || '',
+    is_practical: course.is_practical || false
+  });
+  setShowEditCourseModal(true);
+};
+
+const handleCourseDeleteClick = (course) => {
+  setDeleteCourse(course);
+  setShowDeleteCourseModal(true);
+};
+
+const handleCourseDeleteConfirm = async () => {
+  if (!deleteCourse) return;
+  try {
+    await courseService.delete(deleteCourse.id);
+    setShowDeleteCourseModal(false);
+    setDeleteCourse(null);
+    await fetchCourses();
+  } catch (err) {
+    setAddCourseError(err.message);
+  }
+};
+
+const handleToggleCourseSelection = (courseId) => {
+  setSelectedCourses(prev =>
+    prev.includes(courseId) ? prev.filter(id => id !== courseId) : [...prev, courseId]
+  );
+};
+
+const handleToggleLecturerSelection = (lecturerId) => {
+  setSelectedLecturers(prev =>
+    prev.includes(lecturerId) ? prev.filter(id => id !== lecturerId) : [...prev, lecturerId]
+  );
+};
+
+const handleToggleRoomSelection = (roomId) => {
+  setSelectedRooms(prev =>
+    prev.includes(roomId) ? prev.filter(id => id !== roomId) : [...prev, roomId]
+  );
+};
+
+  const fetchLecturers = async () => {
   try {
     const data = await lecturerService.getAll();
     setLecturers(data);
@@ -115,6 +193,35 @@ const fetchRooms = async () => {
   }
 };
 
+const handleRoomEdit = (room) => {
+  setEditRoomForm({
+    id: room.id,
+    roomName: room.roomName || '',
+    roomType: room.roomType || '',
+    location: room.location || '',
+    capacity: room.capacity || '',
+    isLaboratory: room.isLaboratory === 1
+  });
+  setShowEditRoomModal(true);
+};
+
+const handleRoomDeleteClick = (room) => {
+  setDeleteRoom(room);
+  setShowDeleteRoomModal(true);
+};
+
+const handleRoomDeleteConfirm = async () => {
+  if (!deleteRoom) return;
+  try {
+    await roomService.delete(deleteRoom.id);
+    setShowDeleteRoomModal(false);
+    setDeleteRoom(null);
+    await fetchRooms();
+  } catch (err) {
+    setAddRoomError(err.message);
+  }
+};
+
   const fetchBatches = async () => {
     try {
       setLoading(true);
@@ -126,6 +233,38 @@ const fetchRooms = async () => {
       console.error('Error fetching batches:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleLecturerView = (lecturer) => {
+    setViewLecturer(lecturer);
+    setShowLecturerViewModal(true);
+  };
+
+  const handleLecturerEdit = (lecturer) => {
+    setEditLecturerForm({
+      id: lecturer.id,
+      name: lecturer.name || '',
+      email: lecturer.email || '',
+      max_teaching_hours: lecturer.max_teaching_hours || ''
+    });
+    setShowLecturerEditModal(true);
+  };
+
+  const handleLecturerDeleteClick = (lecturer) => {
+    setDeleteLecturer(lecturer);
+    setShowLecturerDeleteModal(true);
+  };
+
+  const handleLecturerDeleteConfirm = async () => {
+    if (!deleteLecturer) return;
+    try {
+      await lecturerService.delete(deleteLecturer.id);
+      setShowLecturerDeleteModal(false);
+      setDeleteLecturer(null);
+      await fetchLecturers();
+    } catch (err) {
+      setAddLecturerError(err.message);
     }
   };
 
@@ -448,20 +587,38 @@ const handleCloseRoomModal = () => {
   </thead>
   <tbody>
                       {lecturers === undefined || lecturers.length === 0 ? (
-                        <tr><td colSpan="4" className="no-data">No data available. Click "Add Lecturer" to create.</td></tr>
+                        <tr><td colSpan="5" className="no-data">No data available. Click "Add Lecturer" to create.</td></tr>
                       ) : (
                         lecturers.map(l => (
                           <tr key={l.id}>
-                            <td className="select-column"><input type="checkbox" className="batch-checkbox" disabled /></td>
-<td>{l.name}</td>
-<td>{l.email}</td>
-<td>{l.max_teaching_hours || '-'}</td>
-<td className="actions-column">{/* (Future) Edit/Delete buttons here */}</td>
+                            <td className="select-column">
+                              <input
+                                type="checkbox"
+                                className="batch-checkbox"
+                                checked={selectedLecturers.includes(l.id)}
+                                onChange={() => handleToggleLecturerSelection(l.id)}
+                              />
+                            </td>
+                            <td>{l.name}</td>
+                            <td>{l.email}</td>
+                            <td>{l.max_teaching_hours || '-'}</td>
+                            <td className="actions-column">
+                              <button className="action-btn edit-btn" onClick={() => handleLecturerEdit(l)} title="Edit">
+                                <span className="edit-icon">✎</span>
+                              </button>
+                              <button className="action-btn delete-btn" onClick={() => handleLecturerDeleteClick(l)} title="Delete">
+                                <span className="delete-icon">🗑</span>
+                              </button>
+                            </td>
                           </tr>
                         ))
                       )}
                     </tbody>
                   </table>
+                </div>
+                <div className="bottom-actions">
+                  <button className="db-cancel-btn" onClick={() => setSelectedLecturers([])} disabled={selectedLecturers.length === 0}>Cancel</button>
+                  <button className="db-save-btn" onClick={() => {}} disabled={selectedLecturers.length === 0}>Save</button>
                 </div>
               </div>
             )}
@@ -504,7 +661,12 @@ const handleCloseRoomModal = () => {
             courses.map(course => (
               <tr key={course.id}>
                 <td className="select-column">
-                  <input type="checkbox" className="batch-checkbox" disabled />
+                  <input
+                    type="checkbox"
+                    className="batch-checkbox"
+                    checked={selectedCourses.includes(course.id)}
+                    onChange={() => handleToggleCourseSelection(course.id)}
+                  />
                 </td>
                 <td>{course.course_code}</td>
                 <td>{course.course_name}</td>
@@ -513,16 +675,25 @@ const handleCloseRoomModal = () => {
                     ? course.practical_hours_per_week
                     : course.lecture_hours_per_week}
                 </td>
-                <td>{course.lecturer_name || course.lecturer?.name || ''}</td>
+                <td>{lecturers.find(l => l.id === course.lecturer_id)?.name || ''}</td>
                 <td>{course.is_practical ? 'Yes' : 'No'}</td>
                 <td className="actions-column">
-                  {/* Future: Add Edit/Delete here */}
+                  <button className="action-btn edit-btn" onClick={() => handleCourseEdit(course)} title="Edit">
+                    <span className="edit-icon">✎</span>
+                  </button>
+                  <button className="action-btn delete-btn" onClick={() => handleCourseDeleteClick(course)} title="Delete">
+                    <span className="delete-icon">🗑</span>
+                  </button>
                 </td>
               </tr>
             ))
           )}
         </tbody>
       </table>
+    </div>
+    <div className="bottom-actions">
+      <button className="db-cancel-btn" onClick={() => setSelectedCourses([])} disabled={selectedCourses.length === 0}>Cancel</button>
+      <button className="db-save-btn" onClick={() => {}} disabled={selectedCourses.length === 0}>Save</button>
     </div>
   </>
 )}
@@ -537,6 +708,7 @@ const handleCloseRoomModal = () => {
                   <table className="rooms-table">
                     <thead>
                       <tr>
+                        <th className="select-column">Select</th>
                         <th>Room Name</th>
                         <th>Is Laboratory</th>
                         <th>Type</th>
@@ -548,34 +720,51 @@ const handleCloseRoomModal = () => {
                     <tbody>
                       {roomsLoading ? (
                         <tr>
-                          <td colSpan="6" className="no-data">Loading rooms...</td>
+                          <td colSpan="7" className="no-data">Loading rooms...</td>
                         </tr>
                       ) : roomsError ? (
                         <tr>
-                          <td colSpan="6" className="no-data">Error: {roomsError}</td>
+                          <td colSpan="7" className="no-data">Error: {roomsError}</td>
                         </tr>
                       ) : rooms.length === 0 ? (
                         <tr>
-                          <td colSpan="6" className="no-data">
+                          <td colSpan="7" className="no-data">
                             No data available. Click "Add Room" to create.
                           </td>
                         </tr>
                       ) : (
                         rooms.map(room => (
                           <tr key={room.id}>
-                            <td>{room.roomName}</td>
+                            <td className="select-column">
+                              <input
+                                type="checkbox"
+                                className="batch-checkbox"
+                                checked={selectedRooms.includes(room.id)}
+                                onChange={() => handleToggleRoomSelection(room.id)}
+                              />
+                            </td>
+                            <td>{room.roomName || room.name || '-'}</td>
                             <td>{room.isLaboratory === 1 ? 'Yes' : 'No'}</td>
-                            <td>{room.roomType}</td>
-                            <td>{room.location}</td>
-                            <td>{room.capacity}</td>
+                            <td>{room.roomType || room.type || '-'}</td>
+                            <td>{room.location || room.building || '-'}</td>
+                            <td>{room.capacity ?? '-'}</td>
                             <td className="actions-column">
-                              {/* Future: Edit/Delete buttons */}
+                              <button className="action-btn edit-btn" onClick={() => handleRoomEdit(room)} title="Edit">
+                                <span className="edit-icon">✎</span>
+                              </button>
+                              <button className="action-btn delete-btn" onClick={() => handleRoomDeleteClick(room)} title="Delete">
+                                <span className="delete-icon">🗑</span>
+                              </button>
                             </td>
                           </tr>
                         ))
                       )}
                     </tbody>
                   </table>
+                </div>
+                <div className="bottom-actions">
+                  <button className="db-cancel-btn" onClick={() => setSelectedRooms([])} disabled={selectedRooms.length === 0}>Cancel</button>
+                  <button className="db-save-btn" onClick={() => {}} disabled={selectedRooms.length === 0}>Save</button>
                 </div>
               </div>
             )}
@@ -709,7 +898,7 @@ const handleCloseRoomModal = () => {
         </div>
       )}
 
-      {showAddLecturerModal && (
+    {showAddLecturerModal && (
   <div className="modal-overlay" onClick={() => setShowAddLecturerModal(false)}>
     <div className="modal" onClick={e => e.stopPropagation()}>
       <div className="modal-header">
@@ -742,12 +931,10 @@ const handleCloseRoomModal = () => {
             return;
           }
           try {
-            // Temporarily alert instead of API call. Add API call to add lecturer here (see below for note).
-            // await lecturerService.create({ ...addLecturerForm });
-            alert('Lecturer would be added with:\n' + JSON.stringify(addLecturerForm));
+            await lecturerService.create({ ...addLecturerForm });
             setShowAddLecturerModal(false);
-            setAddLecturerForm({ name: '', email: '' });
-            // await fetchLecturers();
+            setAddLecturerForm({ name: '', email: '', max_teaching_hours: '' });
+            await fetchLecturers();
           } catch (err) {
             setAddLecturerError(err.message);
           } finally {
@@ -757,9 +944,68 @@ const handleCloseRoomModal = () => {
       </div>
     </div>
   </div>
-)}
+    )}
 
-{showAddCourseModal && (
+    {showLecturerEditModal && (
+      <div className="modal-overlay" onClick={() => setShowLecturerEditModal(false)}>
+        <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>Edit Lecturer</h3>
+            <button className="modal-close" onClick={() => setShowLecturerEditModal(false)}>×</button>
+          </div>
+          <div className="modal-body">
+            <div className="form-group">
+              <label>Name</label>
+              <input type="text" value={editLecturerForm.name} onChange={e => setEditLecturerForm(f => ({ ...f, name: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label>Email</label>
+              <input type="email" value={editLecturerForm.email} onChange={e => setEditLecturerForm(f => ({ ...f, email: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label>Max Teaching Hours</label>
+              <input type="number" min="0" value={editLecturerForm.max_teaching_hours} onChange={e => setEditLecturerForm(f => ({ ...f, max_teaching_hours: e.target.value }))} />
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button className="modal-btn cancel" onClick={() => setShowLecturerEditModal(false)}>Cancel</button>
+            <button className="modal-btn save" onClick={async () => {
+              try {
+                await lecturerService.update(editLecturerForm.id, {
+                  name: editLecturerForm.name,
+                  email: editLecturerForm.email,
+                  max_teaching_hours: Number(editLecturerForm.max_teaching_hours) || 0
+                });
+                setShowLecturerEditModal(false);
+                await fetchLecturers();
+              } catch (err) {
+                setAddLecturerError(err.message);
+              }
+            }}>Save</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {showLecturerDeleteModal && (
+      <div className="modal-overlay" onClick={() => setShowLecturerDeleteModal(false)}>
+        <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>Delete Lecturer</h3>
+            <button className="modal-close" onClick={() => setShowLecturerDeleteModal(false)}>×</button>
+          </div>
+          <div className="modal-body">
+            <p>Delete lecturer "{deleteLecturer?.name}"?</p>
+          </div>
+          <div className="modal-footer">
+            <button className="modal-btn cancel" onClick={() => setShowLecturerDeleteModal(false)}>Cancel</button>
+            <button className="modal-btn delete" onClick={handleLecturerDeleteConfirm}>Delete</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {showAddCourseModal && (
   <div className="modal-overlay" onClick={() => setShowAddCourseModal(false)}>
     <div className="modal" onClick={e => e.stopPropagation()}>
       <div className="modal-header">
@@ -824,7 +1070,93 @@ const handleCloseRoomModal = () => {
       </div>
     </div>
   </div>
-)}
+    )}
+
+    {showEditCourseModal && (
+      <div className="modal-overlay" onClick={() => setShowEditCourseModal(false)}>
+        <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>Edit Course</h3>
+            <button className="modal-close" onClick={() => setShowEditCourseModal(false)}>×</button>
+          </div>
+          <div className="modal-body">
+            <div className="form-group">
+              <label>Course Code</label>
+              <input type="text" value={editCourseForm.course_code} onChange={e => setEditCourseForm(f => ({ ...f, course_code: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label>Course Name</label>
+              <input type="text" value={editCourseForm.course_name} onChange={e => setEditCourseForm(f => ({ ...f, course_name: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label>Hours for Week</label>
+              <input type="number" min="1" value={editCourseForm.hours_per_week} onChange={e => setEditCourseForm(f => ({ ...f, hours_per_week: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label>Lecturer</label>
+              <select value={editCourseForm.lecturer_id} onChange={e => setEditCourseForm(f => ({ ...f, lecturer_id: e.target.value }))}>
+                <option value="">Select Lecturer</option>
+                {lecturers.map(l => (
+                  <option key={l.id} value={l.id}>{l.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group practical-checkbox-group" style={{display: 'flex', alignItems: 'center', gap: '0.75rem', whiteSpace: 'nowrap'}}>
+              <input
+                type="checkbox"
+                id="editCoursePractical"
+                checked={editCourseForm.is_practical}
+                onChange={e => setEditCourseForm(f => ({ ...f, is_practical: e.target.checked }))}
+              />
+              <label htmlFor="editCoursePractical" style={{margin: 0, cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 500}}>
+                Practical Course (Requires Laboratory)
+              </label>
+            </div>
+            {addCourseError && (<div className="form-error">{addCourseError}</div>)}
+          </div>
+          <div className="modal-footer">
+            <button className="modal-btn cancel" onClick={() => setShowEditCourseModal(false)}>Cancel</button>
+            <button className="modal-btn save" onClick={async () => {
+              if (!editCourseForm.course_code || !editCourseForm.course_name || !editCourseForm.hours_per_week || !editCourseForm.lecturer_id) {
+                setAddCourseError('Please fill all required fields');
+                return;
+              }
+              try {
+                await courseService.update(editCourseForm.id, {
+                  course_code: editCourseForm.course_code,
+                  course_name: editCourseForm.course_name,
+                  hours_per_week: Number(editCourseForm.hours_per_week),
+                  lecturer_id: Number(editCourseForm.lecturer_id),
+                  is_practical: editCourseForm.is_practical
+                });
+                setShowEditCourseModal(false);
+                await fetchCourses();
+              } catch (err) {
+                setAddCourseError(err.message);
+              }
+            }}>Save</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {showDeleteCourseModal && (
+      <div className="modal-overlay" onClick={() => setShowDeleteCourseModal(false)}>
+        <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>Delete Course</h3>
+            <button className="modal-close" onClick={() => setShowDeleteCourseModal(false)}>×</button>
+          </div>
+          <div className="modal-body">
+            <p>Delete course "{deleteCourse?.course_name}"?</p>
+          </div>
+          <div className="modal-footer">
+            <button className="modal-btn cancel" onClick={() => setShowDeleteCourseModal(false)}>Cancel</button>
+            <button className="modal-btn delete" onClick={handleCourseDeleteConfirm}>Delete</button>
+          </div>
+        </div>
+      </div>
+    )}
 
 {showSaveModal && (
         <div className="modal-overlay" onClick={() => setShowSaveModal(false)}>
@@ -882,7 +1214,7 @@ const handleCloseRoomModal = () => {
           </div>
         </div>
       )}
-      {showAddRoomModal && (
+    {showAddRoomModal && (
         <div className="modal-overlay" onClick={handleCloseRoomModal}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -985,7 +1317,91 @@ const handleCloseRoomModal = () => {
             </div>
           </div>
         </div>
-      )}
+    )}
+
+    {showEditRoomModal && (
+      <div className="modal-overlay" onClick={() => setShowEditRoomModal(false)}>
+        <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>Edit Room</h3>
+            <button className="modal-close" onClick={() => setShowEditRoomModal(false)}>×</button>
+          </div>
+          <div className="modal-body">
+            <div className="form-group">
+              <label>Room Name</label>
+              <input type="text" value={editRoomForm.roomName} onChange={e => setEditRoomForm(f => ({ ...f, roomName: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label>Type</label>
+              <input type="text" value={editRoomForm.roomType} onChange={e => setEditRoomForm(f => ({ ...f, roomType: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label>Location</label>
+              <input type="text" value={editRoomForm.location} onChange={e => setEditRoomForm(f => ({ ...f, location: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label>Capacity</label>
+              <input type="number" min="1" value={editRoomForm.capacity} onChange={e => setEditRoomForm(f => ({ ...f, capacity: e.target.value }))} />
+            </div>
+            <div className="form-group practical-checkbox-group" style={{display: 'flex', alignItems: 'center', gap: '0.75rem', whiteSpace: 'nowrap'}}>
+              <input
+                type="checkbox"
+                id="editRoomIsLab"
+                checked={editRoomForm.isLaboratory}
+                onChange={e => setEditRoomForm(f => ({ ...f, isLaboratory: e.target.checked }))}
+              />
+              <label htmlFor="editRoomIsLab" style={{margin: 0, cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 500}}>
+                Laboratory
+              </label>
+            </div>
+            {addRoomError && <div className="form-error">{addRoomError}</div>}
+          </div>
+          <div className="modal-footer">
+            <button className="modal-btn cancel" onClick={() => setShowEditRoomModal(false)}>Cancel</button>
+            <button className="modal-btn save" onClick={async () => {
+              if (!editRoomForm.roomName || !editRoomForm.roomType || !editRoomForm.location || !editRoomForm.capacity) {
+                setAddRoomError('Please fill room name, type, location, and capacity');
+                return;
+              }
+              const isLaboratoryValue = editRoomForm.isLaboratory ? 1 : 0;
+              const isLectureHallValue = editRoomForm.isLaboratory ? 0 : 1;
+              try {
+                await roomService.update(editRoomForm.id, {
+                  name: editRoomForm.roomName,
+                  type: editRoomForm.roomType,
+                  building: editRoomForm.location,
+                  capacity: Number(editRoomForm.capacity),
+                  isLaboratory: isLaboratoryValue,
+                  isLectureHall: isLectureHallValue
+                });
+                setShowEditRoomModal(false);
+                await fetchRooms();
+              } catch (err) {
+                setAddRoomError(err.message);
+              }
+            }}>Save</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {showDeleteRoomModal && (
+      <div className="modal-overlay" onClick={() => setShowDeleteRoomModal(false)}>
+        <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>Delete Room</h3>
+            <button className="modal-close" onClick={() => setShowDeleteRoomModal(false)}>×</button>
+          </div>
+          <div className="modal-body">
+            <p>Delete room "{deleteRoom?.roomName}"?</p>
+          </div>
+          <div className="modal-footer">
+            <button className="modal-btn cancel" onClick={() => setShowDeleteRoomModal(false)}>Cancel</button>
+            <button className="modal-btn delete" onClick={handleRoomDeleteConfirm}>Delete</button>
+          </div>
+        </div>
+      </div>
+    )}
      </div>
    );
  };

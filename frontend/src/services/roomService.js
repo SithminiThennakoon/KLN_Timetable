@@ -41,5 +41,35 @@ export const roomService = {
     }
 
     return await response.json();
+  },
+
+  update: async (roomId, roomData) => {
+    const response = await fetch(`${API_BASE_URL}/rooms/${roomId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(roomData),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to update room');
+    }
+
+    return await response.json();
+  },
+
+  delete: async (roomId) => {
+    const response = await fetch(`${API_BASE_URL}/rooms/${roomId}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to delete room');
+    }
+
+    return await response.json();
   }
 };
