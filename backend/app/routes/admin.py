@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from typing import cast
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.core.database import get_db, engine
@@ -7,6 +8,25 @@ from app.models.student_login import StudentLogin
 from app.schemas.admin import GroupCreate, GroupResponse, CourseCreate, CourseResponse, DepartmentCreate, DepartmentResponse, RoomCreate, RoomResponse, SemesterCreate, SemesterResponse
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+def ensure_room_table(db: Session) -> None:
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS room (
+                Room_ID INT AUTO_INCREMENT PRIMARY KEY,
+                Room_name VARCHAR(100) NOT NULL,
+                Type VARCHAR(50) NOT NULL,
+                Location VARCHAR(100) NOT NULL,
+                Capacity INT NOT NULL,
+                is_laboratory TINYINT(1) NOT NULL DEFAULT 0,
+                is_lecturehall TINYINT(1) NOT NULL DEFAULT 0
+            )
+            """
+        )
+    )
+    db.commit()
 
 # Semesters endpoints
 @router.post("/semesters", response_model=SemesterResponse)
@@ -32,7 +52,7 @@ def create_semester(
         print(f"DEBUG: Semester created with ID: {new_semester.Semester_ID}")
 
         return SemesterResponse(
-            id=new_semester.Semester_ID,
+            id=cast(int, new_semester.Semester_ID),
             semesterName=semester.semesterName,
             academicYear=semester.academicYear
         )
@@ -227,7 +247,7 @@ def delete_group(group_id: int, db: Session = Depends(get_db)):
         )
         db.commit()
 
-        if result.rowcount == 0:
+        if getattr(result, "rowcount", 0) == 0:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Group not found"
@@ -336,14 +356,79 @@ def delete_department(department_id: int, db: Session = Depends(get_db)):
 @router.post("/rooms", response_model=RoomResponse)
 def create_room(room: RoomCreate, db: Session = Depends(get_db)):
     """Create a new room"""
-    # Implementation would go here
-    pass
+    try:
+        ensure_room_table(db)
+        db.execute(
+            text("""
+                INSERT INTO room (Room_name, Type, Location, Capacity, is_laboratory, is_lecturehall)
+                VALUES (:room_name, :room_type, :location, :capacity, :is_laboratory, :is_lecturehall)
+            """),
+            {
+                "room_name": room.roomName,
+                "room_type": room.roomType,
+                "location": room.location,
+                "capacity": room.capacity,
+                "is_laboratory": room.isLaboratory,
+                "is_lecturehall": room.isLectureHall
+            }
+        )
+        db.commit()
+        room_id = db.execute(text("SELECT LAST_INSERT_ID()")).scalar()
+
+        return RoomResponse(
+            id=int(room_id) if room_id is not None else 0,
+            roomName=room.roomName,
+            roomType=room.roomType,
+            location=room.location,
+            capacity=room.capacity,
+            isLaboratory=room.isLaboratory,
+            isLectureHall=room.isLectureHall
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating room: {str(e)}"
+        )
 
 @router.get("/rooms", response_model=list[RoomResponse])
 def get_rooms(db: Session = Depends(get_db)):
     """Get all rooms"""
-    # Implementation would go here
-    return []
+    try:
+        ensure_room_table(db)
+        result = db.execute(
+            text("""
+                SELECT
+                    Room_ID as id,
+                    Room_name as roomName,
+                    Type as roomType,
+                    Location as location,
+                    Capacity as capacity,
+                    is_laboratory as isLaboratory,
+                    is_lecturehall as isLectureHall
+                FROM room
+                ORDER BY Room_ID DESC
+            """)
+        )
+
+        rooms = []
+        for row in result:
+            rooms.append(RoomResponse(
+            id=int(row.id),
+            roomName=row.roomName,
+            roomType=row.roomType,
+            location=row.location,
+            capacity=int(row.capacity),
+            isLaboratory=int(row.isLaboratory),
+            isLectureHall=int(row.isLectureHall)
+            ))
+
+        return rooms
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching rooms: {str(e)}"
+        )
 
 @router.get("/rooms/{room_id}", response_model=RoomResponse)
 def get_room(room_id: int, db: Session = Depends(get_db)):

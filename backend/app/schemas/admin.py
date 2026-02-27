@@ -58,10 +58,14 @@ class SemesterResponse(SemesterBase):
 
 # Room schemas
 class RoomBase(BaseModel):
-    name: str = Field(..., min_length=1, max_length=50)
+    roomName: str = Field(..., min_length=1, max_length=100, alias="name")
+    roomType: str = Field(..., min_length=1, max_length=50, alias="type")
+    location: str = Field(..., min_length=1, max_length=100, alias="building")
     capacity: int = Field(..., gt=0)
-    building: str = Field(..., min_length=1, max_length=50)
-    type: str = Field(..., min_length=1, max_length=20)
+    isLaboratory: int = Field(0, ge=0, le=1)
+    isLectureHall: int = Field(0, ge=0, le=1)
+
+    model_config = {"populate_by_name": True}
 
 class RoomCreate(RoomBase):
     pass
@@ -69,7 +73,7 @@ class RoomCreate(RoomBase):
 class RoomResponse(RoomBase):
     id: int
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 # Batch with courses relationship
 class BatchWithCourses(GroupResponse):

@@ -3,6 +3,7 @@ import '../styles/DatabaseManagement.css';
 import { groupService } from '../services/groupService';
 import { semesterService } from '../services/semesterService';
 import { courseService, lecturerService } from '../services/courseService';
+import { roomService } from '../services/roomService';
 
 const DatabaseManagement = () => {
   const [activeTab, setActiveTab] = useState('batch');
@@ -54,11 +55,27 @@ const [addCourseForm, setAddCourseForm] = useState({
 const [addCourseError, setAddCourseError] = useState(null);
 const [addCourseLoading, setAddCourseLoading] = useState(false);
 
+// Rooms state
+const [rooms, setRooms] = useState([]);
+const [roomsLoading, setRoomsLoading] = useState(false);
+const [roomsError, setRoomsError] = useState(null);
+const [showAddRoomModal, setShowAddRoomModal] = useState(false);
+const [addRoomForm, setAddRoomForm] = useState({
+  roomName: '',
+  roomType: '',
+  location: '',
+  capacity: '',
+  isLaboratory: false
+});
+const [addRoomError, setAddRoomError] = useState(null);
+const [addRoomLoading, setAddRoomLoading] = useState(false);
+
 useEffect(() => {
   fetchBatches();
   fetchSemesters();
   fetchCourses();
   fetchLecturers();
+  fetchRooms();
 }, []);
 
 const fetchCourses = async () => {
@@ -81,6 +98,20 @@ const fetchLecturers = async () => {
     setLecturers(data);
   } catch (err) {
     setLecturers([]);
+  }
+};
+
+const fetchRooms = async () => {
+  try {
+    setRoomsLoading(true);
+    setRoomsError(null);
+    const data = await roomService.getAll();
+    setRooms(data);
+  } catch (err) {
+    setRoomsError(err.message);
+    setRooms([]);
+  } finally {
+    setRoomsLoading(false);
   }
 };
 
@@ -156,7 +187,6 @@ const fetchLecturers = async () => {
     { id: 'batch', label: 'Batch' },
     { id: 'lecturers', label: 'Lecturer' },
     { id: 'courses', label: 'Courses' },
-    { id: 'departments', label: 'Departments' },
     { id: 'rooms', label: 'Rooms' }
   ];
 
@@ -199,11 +229,11 @@ const fetchLecturers = async () => {
 
   const handleEditClick = (batch) => {
     setEditingBatch(batch);
-    const semester = semesters.find(s => s.name === batch.semesterName);
+    const semesterId = batch.semesterId ?? batch.semester_id ?? '';
 
     setFormData({
       groupName: batch.groupName,
-      semesterId: semester?.id?.toString() || '',
+      semesterId: semesterId ? String(semesterId) : '',
       studentCount: batch.studentCount
     });
     setShowEditModal(true);
@@ -275,19 +305,31 @@ const fetchLecturers = async () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleCloseModal = () => {
-    setShowModal(false);
-    setShowEditModal(false);
-    setShowDeleteModal(false);
-    setShowSaveModal(false);
-    setFormData({
-      groupName: '',
-      semesterId: '',
-      studentCount: ''
-    });
-    setEditingBatch(null);
-    setDeletingBatch(null);
-  };
+const handleCloseModal = () => {
+  setShowModal(false);
+  setShowEditModal(false);
+  setShowDeleteModal(false);
+  setShowSaveModal(false);
+  setFormData({
+    groupName: '',
+    semesterId: '',
+    studentCount: ''
+  });
+  setEditingBatch(null);
+  setDeletingBatch(null);
+};
+
+const handleCloseRoomModal = () => {
+  setShowAddRoomModal(false);
+  setAddRoomForm({
+    roomName: '',
+    roomType: '',
+    location: '',
+    capacity: '',
+    isLaboratory: false
+  });
+  setAddRoomError(null);
+};
 
   return (
     <div className="database-management">
@@ -340,7 +382,10 @@ const fetchLecturers = async () => {
                           </td>
                         </tr>
                       ) : (
-                        batches.map(batch => (
+                        batches.map(batch => {
+                          const semesterId = batch.semesterId ?? batch.semester_id;
+                          const matchedSemester = semesters.find(s => s.id === semesterId);
+                          return (
                           <tr key={batch.id} className={selectedBatches.includes(batch.id) ? 'selected-row' : ''}>
                             <td className="select-column">
                               <input
@@ -351,8 +396,8 @@ const fetchLecturers = async () => {
                               />
                             </td>
                             <td>{batch.groupName}</td>
-                            <td>{batch.academicYear}</td>
-                            <td>{batch.semesterName}</td>
+                            <td>{matchedSemester?.academicYear || '-'}</td>
+                            <td>{matchedSemester?.name || '-'}</td>
                             <td>{batch.studentCount}</td>
                             <td className="actions-column">
                               <button className="action-btn edit-btn" onClick={() => handleEditClick(batch)}>
@@ -363,7 +408,8 @@ const fetchLecturers = async () => {
                               </button>
                             </td>
                           </tr>
-                        ))
+                        );
+                        })
                       )}
                     </tbody>
                   </table>
@@ -481,60 +527,53 @@ const fetchLecturers = async () => {
   </>
 )}
 
-            {activeTab === 'departments' && (
-              <div className="departments-section">
-                <div className="section-header">
-                  <h3>Departments</h3>
-                  <button className="add-button">+ Add Department</button>
-                </div>
-                <div className="table-container">
-                  <table className="departments-table">
-                    <thead>
-                      <tr>
-                        <th>Departments</th>
-                        <th>Departments</th>
-                        <th>Departments</th>
-                        <th>Departments</th>
-                        <th>Departments</th>
-                        <th>Departments</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td colSpan="6" className="no-data">
-                          No data available. Click "Add" to create.
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
             {activeTab === 'rooms' && (
               <div className="rooms-section">
                 <div className="section-header">
                   <h3>Rooms</h3>
-                  <button className="add-button">+ Add Room</button>
+                  <button className="add-button" onClick={() => setShowAddRoomModal(true)}>+ Add Room</button>
                 </div>
                 <div className="table-container">
                   <table className="rooms-table">
                     <thead>
                       <tr>
-                        <th>Rooms</th>
-                        <th>Rooms</th>
-                        <th>Rooms</th>
-                        <th>Rooms</th>
-                        <th>Rooms</th>
-                        <th>Rooms</th>
+                        <th>Room Name</th>
+                        <th>Is Laboratory</th>
+                        <th>Type</th>
+                        <th>Location</th>
+                        <th>Capacity</th>
+                        <th className="actions-column">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr>
-                        <td colSpan="6" className="no-data">
-                          No data available. Click "Add" to create.
-                        </td>
-                      </tr>
+                      {roomsLoading ? (
+                        <tr>
+                          <td colSpan="6" className="no-data">Loading rooms...</td>
+                        </tr>
+                      ) : roomsError ? (
+                        <tr>
+                          <td colSpan="6" className="no-data">Error: {roomsError}</td>
+                        </tr>
+                      ) : rooms.length === 0 ? (
+                        <tr>
+                          <td colSpan="6" className="no-data">
+                            No data available. Click "Add Room" to create.
+                          </td>
+                        </tr>
+                      ) : (
+                        rooms.map(room => (
+                          <tr key={room.id}>
+                            <td>{room.roomName}</td>
+                            <td>{room.isLaboratory === 1 ? 'Yes' : 'No'}</td>
+                            <td>{room.roomType}</td>
+                            <td>{room.location}</td>
+                            <td>{room.capacity}</td>
+                            <td className="actions-column">
+                              {/* Future: Edit/Delete buttons */}
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -839,6 +878,110 @@ const fetchLecturers = async () => {
             <div className="modal-footer">
               <button className="modal-btn cancel" onClick={handleCloseSemesterModal}>Cancel</button>
               <button className="modal-btn save" onClick={handleAddSemester}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showAddRoomModal && (
+        <div className="modal-overlay" onClick={handleCloseRoomModal}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Add Room</h3>
+              <button className="modal-close" onClick={handleCloseRoomModal}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Room Name</label>
+                <input
+                  type="text"
+                  name="roomName"
+                  value={addRoomForm.roomName}
+                  onChange={e => setAddRoomForm(f => ({ ...f, roomName: e.target.value }))}
+                  placeholder="Enter room name"
+                />
+              </div>
+              <div className="form-group">
+                <label>Type</label>
+                <input
+                  type="text"
+                  name="roomType"
+                  value={addRoomForm.roomType}
+                  onChange={e => setAddRoomForm(f => ({ ...f, roomType: e.target.value }))}
+                  placeholder="Enter room type"
+                />
+              </div>
+              <div className="form-group">
+                <label>Location</label>
+                <input
+                  type="text"
+                  name="location"
+                  value={addRoomForm.location}
+                  onChange={e => setAddRoomForm(f => ({ ...f, location: e.target.value }))}
+                  placeholder="Enter location"
+                />
+              </div>
+              <div className="form-group">
+                <label>Capacity</label>
+                <input
+                  type="number"
+                  name="capacity"
+                  min="1"
+                  value={addRoomForm.capacity}
+                  onChange={e => setAddRoomForm(f => ({ ...f, capacity: e.target.value }))}
+                  placeholder="Enter capacity"
+                />
+              </div>
+              <div className="form-group practical-checkbox-group" style={{display: 'flex', alignItems: 'center', gap: '0.75rem', whiteSpace: 'nowrap'}}>
+                <input
+                  type="checkbox"
+                  id="isLaboratory"
+                  checked={addRoomForm.isLaboratory}
+                  onChange={e => setAddRoomForm(f => ({ ...f, isLaboratory: e.target.checked }))}
+                />
+                <label htmlFor="isLaboratory" style={{margin: 0, cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 500}}>
+                  Laboratory
+                </label>
+              </div>
+              {addRoomError && <div className="form-error">{addRoomError}</div>}
+            </div>
+            <div className="modal-footer">
+              <button className="modal-btn cancel" onClick={handleCloseRoomModal} disabled={addRoomLoading}>Cancel</button>
+              <button
+                className="modal-btn save"
+                onClick={async () => {
+                  setAddRoomLoading(true);
+                  setAddRoomError(null);
+                  if (!addRoomForm.roomName || !addRoomForm.roomType || !addRoomForm.location || !addRoomForm.capacity) {
+                    setAddRoomError('Please fill room name, type, location, and capacity');
+                    setAddRoomLoading(false);
+                    return;
+                  }
+
+                  const isLaboratoryValue = addRoomForm.isLaboratory ? 1 : 0;
+                  const isLectureHallValue = addRoomForm.isLaboratory ? 0 : 1;
+
+                  try {
+                    await roomService.create({
+                      name: addRoomForm.roomName,
+                      type: addRoomForm.roomType,
+                      building: addRoomForm.location,
+                      capacity: Number(addRoomForm.capacity),
+                      isLaboratory: isLaboratoryValue,
+                      isLectureHall: isLectureHallValue
+                    });
+                    setShowAddRoomModal(false);
+                    setAddRoomForm({ roomName: '', roomType: '', location: '', capacity: '', isLaboratory: false });
+                    await fetchRooms();
+                  } catch (err) {
+                    setAddRoomError(err.message);
+                  } finally {
+                    setAddRoomLoading(false);
+                  }
+                }}
+                disabled={addRoomLoading}
+              >
+                {addRoomLoading ? 'Saving...' : 'Save'}
+              </button>
             </div>
           </div>
         </div>
