@@ -22,5 +22,5 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    class Config:
-        from_attributes = True
+model_config = {"from_attributes": True}
+
