@@ -1,226 +1,61 @@
-import React, { useEffect, useState } from "react";
-import "../styles/App.css";
-import "../styles/DatabaseManagement.css";
-import axios from "axios";
+import React, { useState } from "react";
+import "../styles/ConstraintsPage.css";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const defaultConstraints = [
+  { id: "no_lunch", label: "Block lunch hour (12:00-13:00)", enabled: true },
+  { id: "weekday_only", label: "Weekdays only (Mon-Fri)", enabled: true },
+  { id: "room_capacity", label: "Room capacity must fit group", enabled: true },
+  { id: "lecturer_conflict", label: "No lecturer overlap", enabled: true },
+  { id: "pathway_conflict", label: "No pathway overlap", enabled: true },
+  { id: "lab_type", label: "Lab type must match practical", enabled: true },
+  { id: "year_restriction", label: "Room year restrictions enforced", enabled: true },
+  { id: "concurrent_split", label: "Concurrent split groups aligned", enabled: true },
+];
 
-const gearIcon = (
-  <svg height="32" width="32" viewBox="0 0 24 24" fill="currentColor" style={{marginRight: '10px'}}>
-    <path d="M19.14,12.94c.04-.31.06-.62.06-.94s-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41,.12-.61l-1.92-3.32c-.11-.2-.35-.26-.55-.2l-2.39,.96c-.5-.38-1.05-.7-1.66-.94l-.36-2.53c-.03-.22-.22-.39-.45-.39h-3.84c-.23,0-.42,.16-.45,.39l-.36,2.53c-.61,.24-1.17,.56-1.66,.94l-2.39-.96c-.21-.07-.44,0-.55,.2l-1.92,3.32c-.11,.2-.06,.47,.12,.61l2.03,1.58c-.04,.31-.06,.62-.06,.94s.02,.63,.06,.94l-2.03,1.58c-.18,.14-.23,.41-.12,.61l1.92,3.32c.11,.2,.35,.26,.55,.20l2.39-.96c.5,.38,1.05,.7,1.66,.94l.36,2.53c.03,.22,.22,.39,.45,.39h3.84c.23,0,.42-.16,.45-.39l.36-2.53c.61-.24,1.17-.56,1.66-.94l2.39,.96c.21,.07,.44,0,.55-.20l1.92-3.32c.11-.2,.06-.47-.12-.61l-2.03-1.58ZM12,15.5c-1.93,0-3.5-1.57-3.5-3.5s1.57-3.5,3.5-3.5,3.5,1.57,3.5,3.5-1.57,3.5-3.5,3.5Z" />
-  </svg>
-);
+function Constraints() {
+  const [constraints, setConstraints] = useState(defaultConstraints);
+  const [status, setStatus] = useState("");
 
-const Constraints = () => {
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [addForm, setAddForm] = useState({ name: '', description: '' });
-  const [addError, setAddError] = useState('');
-  const [addLoading, setAddLoading] = useState(false);
-  const [constraints, setConstraints] = useState([]);
-  const [originalConstraints, setOriginalConstraints] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [saveError, setSaveError] = useState("");
-  const [saveSuccess, setSaveSuccess] = useState("");
-  const [saveLoading, setSaveLoading] = useState(false);
+  const toggleConstraint = (id) => {
+    setConstraints((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, enabled: !item.enabled } : item))
+    );
+  };
 
-  useEffect(() => {
-    fetchConstraints();
-  }, []);
-
-  function fetchConstraints() {
-    setLoading(true);
-    axios.get(`${API_BASE}/constraints`).then(res => {
-      const disabledConstraints = (res.data || []).map(c => ({
-        ...c,
-        enabled: false
-      }));
-      setConstraints(disabledConstraints);
-      setOriginalConstraints(disabledConstraints);
-      setSaveError("");
-      setSaveSuccess("");
-      setLoading(false);
-    }).catch(err => {
-      setError("Error fetching constraints");
-      setLoading(false);
-    });
-  }
-
-  function handleToggle(constraint) {
-    setSaveSuccess("");
-    axios.patch(`${API_BASE}/constraints/${constraint.Constraint_ID}`, { enabled: !constraint.enabled })
-      .then(res => {
-        setConstraints(constraints => constraints.map(c =>
-          c.Constraint_ID === constraint.Constraint_ID ? {...c, enabled: res.data.enabled} : c
-        ));
-      });
-  }
-
-  function handleDelete(constraint) {
-    if (!window.confirm(`Delete "${constraint.name}"?`)) return;
-    axios.delete(`${API_BASE}/constraints/${constraint.Constraint_ID}`).then(() => {
-      setConstraints(constraints => constraints.filter(c => c.Constraint_ID !== constraint.Constraint_ID));
-    });
-  }
-
-  async function handleSaveSelection() {
-    setSaveError("");
-    setSaveSuccess("");
-    setSaveLoading(true);
-    try {
-      const selectedIds = constraints.filter(c => c.enabled).map(c => c.Constraint_ID);
-      await axios.post(`${API_BASE}/constraints/selection`, selectedIds);
-      setSaveSuccess("Constraints saved successfully.");
-      setOriginalConstraints(constraints);
-    } catch (err) {
-      const detail = err?.response?.data?.detail;
-      const message = Array.isArray(detail)
-        ? detail.map(item => item?.msg || JSON.stringify(item)).join(', ')
-        : typeof detail === 'string'
-          ? detail
-          : detail
-            ? JSON.stringify(detail)
-            : err.message || 'Failed to save constraints.';
-      setSaveError(message);
-    } finally {
-      setSaveLoading(false);
-    }
-  }
-
-  function handleCancelSelection() {
-    setConstraints(originalConstraints);
-    setSaveError("");
-    setSaveSuccess("");
-  }
-
-  const hasChanges = JSON.stringify(constraints) !== JSON.stringify(originalConstraints);
+  const handleSave = () => {
+    setStatus("Constraints saved (local UI only). Backend toggle support coming next.");
+  };
 
   return (
-    <div className="content">
-      {/* Nav is globally included */}
-      <div className="section-header">
-        <h2>Constraints</h2>
-        <button className="add-button" onClick={() => setShowAddModal(true)}>+ Add Constraint</button>
-      </div>
-
-      {showAddModal && (
-        <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Add Constraint</h3>
-              <button className="modal-close" onClick={() => setShowAddModal(false)}>×</button>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label>Name</label>
-                <input
-                  type="text"
-                  name="name"
-                  value={addForm.name}
-                  onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder="Enter constraint name"
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label>Description</label>
-                <input
-                  type="text"
-                  name="description"
-                  value={addForm.description}
-                  onChange={e => setAddForm(f => ({ ...f, description: e.target.value }))}
-                  placeholder="Enter constraint description"
-                />
-              </div>
-              {addError && <div style={{color: '#dc2626', marginTop: 4}}>{addError}</div>}
-            </div>
-            <div className="modal-footer">
-              <button className="modal-btn cancel" onClick={() => setShowAddModal(false)}>Cancel</button>
-              <button className="modal-btn save" onClick={async () => {
-                setAddError('');
-                if (!addForm.name.trim()) {
-                  setAddError('Name is required.');
-                  return;
-                }
-                setAddLoading(true);
-                try {
-                  await axios.post(`${API_BASE}/constraints`, { name: addForm.name.trim(), description: addForm.description.trim() });
-                  setShowAddModal(false);
-                  setAddForm({ name: '', description: '' });
-                  fetchConstraints();
-                } catch (err) {
-                  const detail = err?.response?.data?.detail;
-                  const message = Array.isArray(detail)
-                    ? detail.map(item => item?.msg || JSON.stringify(item)).join(', ')
-                    : typeof detail === 'string'
-                      ? detail
-                      : detail
-                        ? JSON.stringify(detail)
-                        : err.message || 'Failed to add constraint.';
-                  setAddError(message);
-                }
-                setAddLoading(false);
-              }} disabled={addLoading}>
-                {addLoading ? 'Saving...' : 'Save'}
-              </button>
-            </div>
+    <div className="page-shell">
+      <div className="panel constraints-panel">
+        <div className="constraints-header">
+          <div>
+            <h1 className="section-title">Constraints</h1>
+            <p className="section-subtitle">
+              Control which rules the solver enforces.
+            </p>
           </div>
+          <button className="primary-btn" onClick={handleSave}>Save</button>
         </div>
-      )}
 
-      <div className="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Description</th>
-              <th>Enabled</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan="4">Loading...</td></tr>
-            ) : error ? (
-              <tr><td colSpan="4">{error}</td></tr>
-            ) : constraints.length === 0 ? (
-              <tr><td colSpan="4">No constraints found.</td></tr>
-            ) : (
-              constraints.map(constraint => (
-                <tr key={constraint.Constraint_ID}>
-                  <td>{constraint.name}</td>
-                  <td>{constraint.description}</td>
-                  <td>
-                    <button className={"toggle-btn"} onClick={() => handleToggle(constraint)}>
-                      {constraint.enabled ? "Yes" : "No"}
-                    </button>
-                  </td>
-                  <td>
-                    <button className="action-btn edit-btn" title="Edit/View">
-                      <span className="edit-icon">✏️</span>
-                    </button>
-                    <button className="action-btn delete-btn" title="Delete" onClick={() => handleDelete(constraint)}>
-                      <span className="delete-icon">🗑️</span>
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-      <div className="bottom-actions" style={{justifyContent: 'flex-end', paddingRight: 8}}>
-        {saveError && <div style={{color: '#dc2626', marginRight: 12}}>{saveError}</div>}
-        {saveSuccess && <div style={{color: '#16a34a', marginRight: 12}}>{saveSuccess}</div>}
-        <button className="db-cancel-btn" onClick={handleCancelSelection} disabled={!hasChanges}>
-          Cancel
-        </button>
-        <button className="db-save-btn" onClick={handleSaveSelection} disabled={saveLoading || !hasChanges}>
-          {saveLoading ? 'Saving...' : 'Save'}
-        </button>
+        {status && <div className="info-banner">{status}</div>}
+
+        <div className="constraints-grid">
+          {constraints.map((constraint) => (
+            <label key={constraint.id} className={`constraint-card ${constraint.enabled ? "enabled" : ""}`}>
+              <input
+                type="checkbox"
+                checked={constraint.enabled}
+                onChange={() => toggleConstraint(constraint.id)}
+              />
+              <span>{constraint.label}</span>
+            </label>
+          ))}
+        </div>
       </div>
     </div>
   );
-};
+}
 
 export default Constraints;

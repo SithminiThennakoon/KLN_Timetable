@@ -15,5 +15,6 @@ class Settings:
         "DATABASE_URL",
         "mysql+pymysql://root:password@localhost:3306/kln_timetable"
     )
+    RESET_DB: bool = os.getenv("RESET_DB", "0") == "1"
 
 settings = Settings()
