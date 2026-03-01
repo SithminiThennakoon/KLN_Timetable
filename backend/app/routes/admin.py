@@ -430,6 +430,81 @@ def get_rooms(db: Session = Depends(get_db)):
             detail=f"Error fetching rooms: {str(e)}"
         )
 
+
+@router.put("/rooms/{room_id}", response_model=RoomResponse)
+def update_room(room_id: int, room: RoomCreate, db: Session = Depends(get_db)):
+    """Update a room"""
+    try:
+        ensure_room_table(db)
+        result = db.execute(
+            text("""
+                UPDATE room
+                SET Room_name = :room_name,
+                    Type = :room_type,
+                    Location = :location,
+                    Capacity = :capacity,
+                    is_laboratory = :is_laboratory,
+                    is_lecturehall = :is_lecturehall
+                WHERE Room_ID = :room_id
+            """),
+            {
+                "room_name": room.roomName,
+                "room_type": room.roomType,
+                "location": room.location,
+                "capacity": room.capacity,
+                "is_laboratory": room.isLaboratory,
+                "is_lecturehall": room.isLectureHall,
+                "room_id": room_id
+            }
+        )
+        db.commit()
+
+        if getattr(result, "rowcount", 0) == 0:
+            raise HTTPException(status_code=404, detail="Room not found")
+
+        return RoomResponse(
+            id=room_id,
+            roomName=room.roomName,
+            roomType=room.roomType,
+            location=room.location,
+            capacity=room.capacity,
+            isLaboratory=room.isLaboratory,
+            isLectureHall=room.isLectureHall
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating room: {str(e)}"
+        )
+
+
+@router.delete("/rooms/{room_id}")
+def delete_room(room_id: int, db: Session = Depends(get_db)):
+    """Delete a room"""
+    try:
+        ensure_room_table(db)
+        result = db.execute(
+            text("DELETE FROM room WHERE Room_ID = :room_id"),
+            {"room_id": room_id}
+        )
+        db.commit()
+
+        if getattr(result, "rowcount", 0) == 0:
+            raise HTTPException(status_code=404, detail="Room not found")
+
+        return {"message": "Room deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting room: {str(e)}"
+        )
+
 @router.get("/rooms/{room_id}", response_model=RoomResponse)
 def get_room(room_id: int, db: Session = Depends(get_db)):
     """Get a specific room"""

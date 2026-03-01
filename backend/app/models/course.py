@@ -9,6 +9,6 @@ class Course(Base):
     course_name = Column(String(100), nullable=False)
     lecture_hours_per_week = Column(Integer, nullable=True)
     practical_hours_per_week = Column(Integer, nullable=True)
-    lecturer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    lecturer_id = Column(Integer, nullable=False)
 
     # Optionally, created_at/updated_at fields can be added if needed
