@@ -142,6 +142,20 @@ function ViewTimetable() {
     return map;
   }, [modules]);
 
+  const roomLookup = useMemo(() => {
+    const map = new Map();
+    rooms.forEach((r) => map.set(r.id, r));
+    return map;
+  }, [rooms]);
+
+  const sessionGroupLookup = useMemo(() => {
+    const map = new Map();
+    sessionsInEntries.forEach((s) => {
+      map.set(`${s.session_id}-${s.group_number}`, s);
+    });
+    return map;
+  }, [sessionsInEntries]);
+
   return (
     <div className="page-shell">
       <div className="panel timetable-panel">
@@ -208,11 +222,16 @@ function ViewTimetable() {
                 >
                   {filteredEntries
                     .filter((e) => e.timeslot_id === dayIndex * times.length + timeIndex + 1)
-                    .map((entry) => (
-                      <div key={entry.id} className="entry-card">
-                        Session {entry.session_id} / Room {entry.room_id}
-                      </div>
-                    ))}
+                    .map((entry) => {
+                      const sessionGroup = sessionGroupLookup.get(`${entry.session_id}-${entry.group_number}`);
+                      const module = sessionGroup ? moduleLookup.get(sessionGroup.module_id) : null;
+                      const room = roomLookup.get(entry.room_id);
+                      return (
+                        <div key={entry.id} className="entry-card">
+                          {module?.code || `Session ${entry.session_id}`} / {room?.name || `Room ${entry.room_id}`}
+                        </div>
+                      );
+                    })}
                 </div>
               ))}
             </React.Fragment>
