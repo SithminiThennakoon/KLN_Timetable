@@ -26,13 +26,14 @@ def resolve_around_manual(payload: ResolveRequest, db: Session = Depends(get_db)
         (entry.session_id, entry.room_id, entry.timeslot_id, entry.group_number)
         for entry in payload.entries
     ]
-    status, results = solve_timetable(db, fixed_entries=fixed_entries)
+    status, results, diagnostics = solve_timetable(db, fixed_entries=fixed_entries)
     if status == "infeasible":
         return TimetableGenerateResponse(
             status="infeasible",
             total_scheduled_sessions=0,
             unscheduled_sessions=0,
             version="",
+            diagnostics=diagnostics,
         )
 
     return TimetableGenerateResponse(
@@ -40,4 +41,5 @@ def resolve_around_manual(payload: ResolveRequest, db: Session = Depends(get_db)
         total_scheduled_sessions=len(results),
         unscheduled_sessions=0,
         version="",
+        diagnostics=diagnostics,
     )

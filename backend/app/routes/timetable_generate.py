@@ -13,8 +13,11 @@ router = APIRouter(prefix="/api/timetable", tags=["timetable"])
 
 @router.post("/generate", response_model=TimetableGenerateResponse)
 def generate_timetable(db: Session = Depends(get_db)):
+    import sys
+    print("DEBUG: generate endpoint called", flush=True)
     try:
         status, results, diagnostics = solve_timetable(db)
+        print(f"DEBUG: status={status}, results={len(results)}", flush=True)
         sessions = _expand_sessions(db)
     except Exception as exc:
         print(f"Generate failed: {exc}")
