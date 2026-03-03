@@ -1,21 +1,20 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
-# Batch schemas
-class BatchBase(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
-    year: int = Field(..., gt=1900, lt=2100)
-    semester: str = Field(..., min_length=1, max_length=20)
-    strength: int = Field(..., gt=0)
+# Group (Batch) schemas
+class GroupBase(BaseModel):
+    groupName: str = Field(..., min_length=1, max_length=100, description="Batch/Group name")
+    semesterId: int = Field(..., gt=0, description="Semester ID from Semester table")
+    studentCount: int = Field(..., gt=0, description="Number of students (strength)")
 
-class BatchCreate(BatchBase):
+class GroupCreate(GroupBase):
     pass
 
-class BatchResponse(BatchBase):
+class GroupResponse(GroupBase):
     id: int
 
-    class Config:
-        orm_mode = True
+model_config = {"from_attributes": True}
+
 
 # Course schemas
 class CourseBase(BaseModel):
@@ -30,8 +29,7 @@ class CourseCreate(CourseBase):
 class CourseResponse(CourseBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 # Department schemas
 class DepartmentBase(BaseModel):
@@ -44,15 +42,30 @@ class DepartmentCreate(DepartmentBase):
 class DepartmentResponse(DepartmentBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
+
+# Semester schemas
+class SemesterBase(BaseModel):
+    semesterName: str
+    academicYear: str
+
+class SemesterCreate(SemesterBase):
+    pass
+
+class SemesterResponse(SemesterBase):
+    id: int
+    model_config = {"from_attributes": True}
 
 # Room schemas
 class RoomBase(BaseModel):
-    name: str = Field(..., min_length=1, max_length=50)
+    roomName: str = Field(..., min_length=1, max_length=100, alias="name")
+    roomType: str = Field(..., min_length=1, max_length=50, alias="type")
+    location: str = Field(..., min_length=1, max_length=100, alias="building")
     capacity: int = Field(..., gt=0)
-    building: str = Field(..., min_length=1, max_length=50)
-    type: str = Field(..., min_length=1, max_length=20)
+    isLaboratory: int = Field(0, ge=0, le=1)
+    isLectureHall: int = Field(0, ge=0, le=1)
+
+    model_config = {"populate_by_name": True}
 
 class RoomCreate(RoomBase):
     pass
@@ -60,12 +73,17 @@ class RoomCreate(RoomBase):
 class RoomResponse(RoomBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 # Batch with courses relationship
-class BatchWithCourses(BatchResponse):
+class BatchWithCourses(GroupResponse):
     courses: List[CourseResponse] = []
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
+
+# Group with semester details
+class GroupWithSemester(GroupResponse):
+    semesterName: str
+    academicYear: str
+
+    model_config = {"from_attributes": True}
