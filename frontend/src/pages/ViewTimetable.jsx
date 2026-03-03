@@ -6,6 +6,8 @@ import { lecturerService } from "../services/lecturerService";
 import { roomService } from "../services/roomServiceNew";
 import { sessionService } from "../services/sessionService";
 import { moduleService } from "../services/moduleService";
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 const times = [
@@ -113,8 +115,69 @@ function ViewTimetable() {
     }
   };
 
+  const handleDownloadPDF = () => {
+    const doc = new jsPDF({ orientation: 'landscape' });
+    
+    doc.setFontSize(18);
+    doc.text('Timetable', 14, 20);
+    doc.setFontSize(10);
+    doc.text(new Date().toLocaleDateString(), 14, 28);
+    
+    const header = ['Time', ...days];
+    const body = times.map((time, timeIndex) => {
+      const row = [time];
+      days.forEach((day, dayIndex) => {
+        const timeslotId = dayIndex * times.length + timeIndex + 1;
+        const cellEntries = filteredEntries.filter(e => e.timeslot_id === timeslotId);
+        const cellText = cellEntries.map(entry => {
+          const sg = sessionGroupLookup.get(`${entry.session_id}-${entry.group_number}`);
+          const mod = sg ? moduleLookup.get(sg.module_id) : null;
+          const rm = roomLookup.get(entry.room_id);
+          return `${mod?.code || entry.session_id} / ${rm?.name || entry.room_id}`;
+        }).join('\n');
+        row.push(cellText);
+      });
+      return row;
+    });
+    
+    doc.autoTable({
+      head: [header],
+      body: body,
+      startY: 35,
+      styles: { fontSize: 8, cellPadding: 2, valign: 'middle' },
+      columnStyles: { 0: { fontStyle: 'bold', cellWidth: 25 } },
+    });
+    
+    const unschedData = filteredUnscheduled.map(s => [
+      moduleLookup.get(s.module_id)?.code || s.module_id,
+      s.session_id,
+      s.group_number
+    ]);
+    
+    if (unschedData.length > 0) {
+      doc.text('Unscheduled Sessions', 14, doc.lastAutoTable.finalY + 15);
+      doc.autoTable({
+        head: [['Module', 'Session', 'Group']],
+        body: unschedData,
+        startY: doc.lastAutoTable.finalY + 20,
+      });
+    }
+    
+    doc.save(`timetable-${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
   const filteredEntries = useMemo(() => {
-    return entries.filter((entry) => {
+    const seen = new Set();
+    const unique = [];
+    entries.forEach((entry) => {
+      const key = `${entry.session_id}-${entry.group_number}-${entry.timeslot_id}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(entry);
+      }
+    });
+
+    return unique.filter((entry) => {
       if (filters.room && entry.room_id !== Number(filters.room)) return false;
       if (filters.lecturer) {
         const match = sessionsInEntries.find((s) => s.session_id === entry.session_id);
@@ -173,6 +236,9 @@ function ViewTimetable() {
             </button>
             <button className="ghost-btn" onClick={handlePersistManual} disabled={loading || manualEntries.length === 0}>
               Save Manual
+            </button>
+            <button className="ghost-btn" onClick={handleDownloadPDF} disabled={entries.length === 0}>
+              Download
             </button>
           </div>
         </div>
