@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import "../styles/DatabaseDashboard.css";
 import { dataStatusService } from "../services/dataStatusService";
-import { departmentService } from "../services/departmentService";
 import { subjectService } from "../services/subjectService";
 import { pathwayService } from "../services/pathwayService";
 import { moduleService } from "../services/moduleService";
@@ -10,7 +9,6 @@ import { lecturerService } from "../services/lecturerService";
 import { roomService } from "../services/roomServiceNew";
 
 const tabs = [
-  "Departments",
   "Subjects",
   "Pathways",
   "Modules",
@@ -26,13 +24,12 @@ const emptyModal = {
 };
 
 function DatabaseDashboard() {
-  const [activeTab, setActiveTab] = useState("Departments");
+  const [activeTab, setActiveTab] = useState("Subjects");
   const [status, setStatus] = useState({ ready: false, issues: [], warnings: [] });
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [modal, setModal] = useState(emptyModal);
   const [error, setError] = useState("");
 
-  const [departments, setDepartments] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [pathways, setPathways] = useState([]);
   const [modules, setModules] = useState([]);
@@ -56,8 +53,7 @@ function DatabaseDashboard() {
 
   const fetchAll = async () => {
     try {
-      const [dept, subj, path, mod, sess, lect, room] = await Promise.all([
-        departmentService.list(),
+      const [subj, path, mod, sess, lect, room] = await Promise.all([
         subjectService.list(),
         pathwayService.list(),
         moduleService.list(),
@@ -65,7 +61,6 @@ function DatabaseDashboard() {
         lecturerService.list(),
         roomService.list(),
       ]);
-      setDepartments(dept || []);
       setSubjects(subj || []);
       setPathways(path || []);
       setModules(mod || []);
@@ -105,7 +100,6 @@ function DatabaseDashboard() {
 
   const handleDelete = async (entity, id) => {
     try {
-      if (entity === "Departments") await departmentService.remove(id);
       if (entity === "Subjects") await subjectService.remove(id);
       if (entity === "Pathways") await pathwayService.remove(id);
       if (entity === "Modules") await moduleService.remove(id);
@@ -121,10 +115,6 @@ function DatabaseDashboard() {
 
   const handleSave = async () => {
     try {
-      if (activeTab === "Departments") {
-        if (modal.mode === "create") await departmentService.create(form);
-        else await departmentService.update(form.id, form);
-      }
       if (activeTab === "Subjects") {
         if (modal.mode === "create") await subjectService.create(form);
         else await subjectService.update(form.id, form);
@@ -158,7 +148,6 @@ function DatabaseDashboard() {
   };
 
   const tableRows = useMemo(() => {
-    if (activeTab === "Departments") return departments;
     if (activeTab === "Subjects") return subjects;
     if (activeTab === "Pathways") return pathways;
     if (activeTab === "Modules") return modules;
@@ -166,12 +155,10 @@ function DatabaseDashboard() {
     if (activeTab === "Lecturers") return lecturers;
     if (activeTab === "Rooms") return rooms;
     return [];
-  }, [activeTab, departments, subjects, pathways, modules, sessions, lecturers, rooms]);
+  }, [activeTab, subjects, pathways, modules, sessions, lecturers, rooms]);
 
   const renderColumns = () => {
     switch (activeTab) {
-      case "Departments":
-        return ["id", "name", "code"];
       case "Subjects":
         return ["id", "name", "code", "department_id"];
       case "Pathways":
