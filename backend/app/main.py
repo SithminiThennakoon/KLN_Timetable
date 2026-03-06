@@ -19,6 +19,7 @@ from app.routes import (
     timetable_generate,
     timetable_validate,
     timetable_resolve,
+    timetable_v2,
 )
 
 
@@ -54,6 +55,7 @@ def create_app() -> FastAPI:
     app.include_router(timetable_generate.router)
     app.include_router(timetable_validate.router)
     app.include_router(timetable_resolve.router)
+    app.include_router(timetable_v2.router)
 
     return app
 

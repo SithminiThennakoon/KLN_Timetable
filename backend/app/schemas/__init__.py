@@ -6,5 +6,20 @@ from .session import SessionCreate, SessionRead, SessionUpdate
 from .lecturer import LecturerCreate, LecturerRead, LecturerUpdate
 from .room import RoomCreate, RoomRead, RoomUpdate
 from .timeslot import TimeslotRead
-from .timetable_entry import TimetableEntryCreate, TimetableEntryRead, TimetableEntryUpdate
+from .timetable_entry import (
+    TimetableEntryCreate,
+    TimetableEntryRead,
+    TimetableEntryUpdate,
+)
 from .expanded_session import ExpandedSessionRead
+from .v2 import (
+    DatasetResponse,
+    DatasetSummary,
+    DatasetUpsertRequest,
+    DefaultSelectionRequest,
+    ExportResponse,
+    GenerationRequest,
+    GenerationResponse,
+    LookupResponse,
+    ViewResponse,
+)
