@@ -27,6 +27,32 @@ def resolve_around_manual(payload: ResolveRequest, db: Session = Depends(get_db)
         for entry in payload.entries
     ]
     status, results, diagnostics = solve_timetable(db, fixed_entries=fixed_entries)
+    
+    # Persist the resolved entries
+    from datetime import datetime
+    from app.models.timeslot import Timeslot
+    from app.models.room import Room
+    from app.services.timetable_solver import _expand_sessions
+    
+    sessions = _expand_sessions(db)
+    version = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    ordered_timeslots = db.query(Timeslot).order_by(Timeslot.id).all()
+    rooms = db.query(Room).order_by(Room.id).all()
+    
+    for (s_idx, r_idx, t_idx, group_number) in results:
+        db.add(
+            TimetableEntry(
+                version=version,
+                session_id=sessions[s_idx].session_id,
+                room_id=rooms[r_idx].id,
+                timeslot_id=ordered_timeslots[t_idx].id,
+                group_number=group_number,
+                duration_hours=sessions[s_idx].duration_hours,
+                is_manual=False,
+            )
+        )
+    db.commit()
+    
     if status == "infeasible":
         return TimetableGenerateResponse(
             status="infeasible",
@@ -40,6 +66,6 @@ def resolve_around_manual(payload: ResolveRequest, db: Session = Depends(get_db)
         status=status,
         total_scheduled_sessions=len(results),
         unscheduled_sessions=0,
-        version="",
+        version=version,
         diagnostics=diagnostics,
     )

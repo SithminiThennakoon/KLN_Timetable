@@ -36,8 +36,13 @@ function ViewTimetable() {
   const [unscheduled, setUnscheduled] = useState([]);
   const [modules, setModules] = useState([]);
   const [sessionsInEntries, setSessionsInEntries] = useState([]);
+  const [currentVersion, setCurrentVersion] = useState(null);
 
   const loadAll = async () => {
+    const versionData = await timetableViewService.getLatestVersion();
+    const version = versionData?.version || null;
+    setCurrentVersion(version);
+
     const [entriesData, pathwaysData, lecturersData, roomsData, unscheduledData, modulesData, expandedData] = await Promise.all([
       timetableViewService.listEntries(),
       pathwayService.list(),
@@ -133,7 +138,7 @@ function ViewTimetable() {
           const sg = sessionGroupLookup.get(`${entry.session_id}-${entry.group_number}`);
           const mod = sg ? moduleLookup.get(sg.module_id) : null;
           const rm = roomLookup.get(entry.room_id);
-          return `${mod?.code || entry.session_id} / ${rm?.name || entry.room_id}`;
+          return `${mod?.code || ''} / ${rm?.name || ''}`;
         }).join('\n');
         row.push(cellText);
       });
@@ -225,7 +230,11 @@ function ViewTimetable() {
         <div className="timetable-header">
           <div>
             <h1 className="section-title">Timetable View</h1>
-            <p className="section-subtitle">Drag unscheduled sessions into the grid.</p>
+            <p className="section-subtitle">
+              {entries.length > 0
+                ? `Version: ${currentVersion || 'manual'} • Drag unscheduled sessions into the grid.`
+                : "No timetable entries • Generate a timetable first."}
+            </p>
           </div>
           <div className="timetable-actions">
             <button className="ghost-btn" onClick={handleValidate} disabled={loading}>
@@ -294,7 +303,7 @@ function ViewTimetable() {
                       const room = roomLookup.get(entry.room_id);
                       return (
                         <div key={entry.id} className="entry-card">
-                          {module?.code || `Session ${entry.session_id}`} / {room?.name || `Room ${entry.room_id}`}
+                          {module?.code || ''} / {room?.name || ''}
                         </div>
                       );
                     })}
@@ -319,8 +328,7 @@ function ViewTimetable() {
               draggable
               onDragStart={() => setSelectedSession(s)}
             >
-              {moduleLookup.get(s.module_id)?.code || `Module ${s.module_id}`} •
-              Session {s.session_id} • Group {s.group_number}
+              {moduleLookup.get(s.module_id)?.code || ''} • Group {s.group_number}
             </div>
           ))}
         </aside>

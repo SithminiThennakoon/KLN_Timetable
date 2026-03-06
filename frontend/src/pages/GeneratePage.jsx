@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "../styles/GeneratePage.css";
 import { timetableService } from "../services/timetableService";
 
@@ -6,6 +7,7 @@ function GeneratePage() {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const navigate = useNavigate();
 
   const handleGenerate = async () => {
     setLoading(true);
@@ -54,6 +56,15 @@ function GeneratePage() {
                 <strong>{status.version || "-"}</strong>
               </div>
             </div>
+
+            {status.status !== "infeasible" && (
+              <div className="action-buttons">
+                <button className="primary-btn" onClick={() => navigate("/view-timetable")}>
+                  View Timetable
+                </button>
+              </div>
+            )}
+
             {status.diagnostics && status.diagnostics.length > 0 && (
               <div className="diagnostics">
                 <h3>Diagnostics</h3>

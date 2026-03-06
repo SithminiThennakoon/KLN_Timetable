@@ -100,17 +100,22 @@ def seed_demo(db: Session) -> None:
         ("Prof. N. Fernando", "fernando@kln.ac.lk", 12),
         ("Dr. R. Jayasinghe", "jayasinghe@kln.ac.lk", 10),
         ("Dr. M. Wickramasinghe", "wickramasinghe@kln.ac.lk", 10),
+        ("Dr. V. Perera", "vperera@kln.ac.lk", 8),
+        ("Prof. T. Bandaranaike", "bandaranaike@kln.ac.lk", 12),
+        ("Dr. R. Wijewardena", "wijewardena@kln.ac.lk", 10),
         ("Dr. A. Gunasekara", "gunasekara@kln.ac.lk", 10),
+        ("Ms. S. Fonseka", "sfonseka@kln.ac.lk", 10),
         ("Dr. P. Dissanayake", "dissanayake@kln.ac.lk", 10),
+        ("Dr. M. De Alwis", "dealwis@kln.ac.lk", 10),
         ("Dr. L. Ranil", "ranil@kln.ac.lk", 8),
         ("Dr. S. Kumara", "kumara@kln.ac.lk", 10),
+        ("Dr. H. Pathirana", "pathirana@kln.ac.lk", 10),
         ("Ms. N. Rodrigo", "rodrigo@kln.ac.lk", 10),
         ("Ms. K. Weerawardena", "weerawardena@kln.ac.lk", 10),
         ("Prof. B. Atapattu", "atapattu@kln.ac.lk", 12),
         ("Dr. G. Senanayake", "senanayake@kln.ac.lk", 10),
         ("Dr. W. Liyanage", "liyanage@kln.ac.lk", 10),
         ("Prof. M. Abeysekera", "abeysekera@kln.ac.lk", 12),
-        ("Dr. H. Pathirana", "pathirana@kln.ac.lk", 10),
         ("Dr. U. Peiris", "peiris@kln.ac.lk", 8),
         ("Prof. A. De Zoysa", "dezoysa@kln.ac.lk", 12),
         ("Dr. D. Samarasinghe", "samarasinghe@kln.ac.lk", 10),
@@ -118,11 +123,6 @@ def seed_demo(db: Session) -> None:
         ("Prof. J. Silva", "jsilva@kln.ac.lk", 12),
         ("Dr. K. Nandasena", "nandasena@kln.ac.lk", 10),
         ("Ms. A. Wickremesinghe", "awickremesinghe@kln.ac.lk", 10),
-        ("Dr. V. Perera", "vperera@kln.ac.lk", 8),
-        ("Prof. T. Bandaranaike", "bandaranaike@kln.ac.lk", 12),
-        ("Dr. R. Wijewardena", "wijewardena@kln.ac.lk", 10),
-        ("Ms. S. Fonseka", "sfonseka@kln.ac.lk", 10),
-        ("Dr. M. De Alwis", "dealwis@kln.ac.lk", 10),
         ("Prof. P. Udaphi", "udaphi@kln.ac.lk", 12),
         ("Dr. R. Munasinghe", "munasinghe@kln.ac.lk", 10),
         ("Dr. N. De Silva", "ndesilva@kln.ac.lk", 10),
@@ -136,9 +136,6 @@ def seed_demo(db: Session) -> None:
     db.add_all(lecturers)
     db.commit()
 
-    # Subject to lecturer mapping (index positions)
-    # PMAT: 0,1,24 | AMAT: 1,2,25 | STAT: 2,3,26 | PHYS: 3,4,27 | CHEM: 4,5,28 | ELEC: 5,6,29 | COSC: 6,7,30 | COST: 7,8,31
-    # BIOC: 9,10 | MIBI: 10,11 | PLBL: 11,12 | ZOOL: 12,13 | ENCM: 13,14 | APCH: 14,15 | BECS: 15,16 | MACS: 16,17 | MAPS: 17,18 | MGMT: 18,19 | CMSK: 19,20
     lect_map = {i: lecturers[i] for i in range(len(lecturers))}
 
     # === PATHWAYS ===
@@ -211,79 +208,13 @@ def seed_demo(db: Session) -> None:
     db.add_all(pathways)
     db.commit()
 
-    # Assign subjects to pathways
-    pathway_map = {}
+    # Assign subjects to pathways using proper code parsing
     for pathway in pathways:
-        name = pathway.name
-        if "PMAT" in name and "AMAT" in name:
-            pathway.subjects = [subject_map["PMAT"], subject_map["AMAT"]]
-        elif "PMAT" in name and "PHYS" in name:
-            pathway.subjects = [subject_map["PMAT"], subject_map["PHYS"]]
-        elif "PMAT" in name and "COSC" in name and "STAT" in name:
-            pathway.subjects = [subject_map["PMAT"], subject_map["COSC"], subject_map["STAT"]]
-        elif "PMAT" in name and "COST" in name and "STAT" in name:
-            pathway.subjects = [subject_map["PMAT"], subject_map["COST"], subject_map["STAT"]]
-        elif "PMAT" in name and "COSC" in name:
-            pathway.subjects = [subject_map["PMAT"], subject_map["COSC"]]
-        elif "PMAT" in name and "COST" in name:
-            pathway.subjects = [subject_map["PMAT"], subject_map["COST"]]
-        elif "PMAT" in name and "STAT" in name:
-            pathway.subjects = [subject_map["PMAT"], subject_map["STAT"]]
-        elif "PMAT" in name and "CHEM" in name:
-            pathway.subjects = [subject_map["PMAT"], subject_map["CHEM"]]
-        elif "AMAT" in name and "PMAT" in name:
-            pathway.subjects = [subject_map["AMAT"], subject_map["PMAT"]]
-        elif "PHYS" in name and "ELEC" in name and "COST" in name:
-            pathway.subjects = [subject_map["PHYS"], subject_map["ELEC"], subject_map["COST"]]
-            if "AMAT" in name:
-                pathway.subjects.append(subject_map["AMAT"])
-        elif "PHYS" in name and "CHEM" in name:
-            pathway.subjects = [subject_map["PHYS"], subject_map["CHEM"]]
-        elif "PHYS" in name and "COSC" in name:
-            pathway.subjects = [subject_map["PHYS"], subject_map["COSC"]]
-        elif "PHYS" in name and "ELEC" in name:
-            pathway.subjects = [subject_map["PHYS"], subject_map["ELEC"]]
-        elif "COSC" in name and "PMAT" in name and "PHYS" in name:
-            pathway.subjects = [subject_map["COSC"], subject_map["PMAT"], subject_map["PHYS"]]
-        elif "BIOC" in name and "MIBI" in name and "PLBL" in name and "ZOOL" in name:
-            pathway.subjects = [subject_map["BIOC"], subject_map["MIBI"], subject_map["PLBL"], subject_map["ZOOL"]]
-        elif "BIOC" in name and "MIBI" in name and "ZOOL" in name and "COST" in name:
-            pathway.subjects = [subject_map["BIOC"], subject_map["MIBI"], subject_map["ZOOL"], subject_map["COST"]]
-        elif "BIOC" in name and "PLBL" in name and "ZOOL" in name:
-            pathway.subjects = [subject_map["BIOC"], subject_map["PLBL"], subject_map["ZOOL"]]
-        elif "PLBL" in name and "ZOOL" in name and "COST" in name:
-            pathway.subjects = [subject_map["PLBL"], subject_map["ZOOL"], subject_map["COST"]]
-        elif "MIBI" in name and "PLBL" in name and "ZOOL" in name:
-            pathway.subjects = [subject_map["MIBI"], subject_map["PLBL"], subject_map["ZOOL"]]
-        elif "BIOC" in name and "MIBI" in name and "ZOOL" in name:
-            pathway.subjects = [subject_map["BIOC"], subject_map["MIBI"], subject_map["ZOOL"]]
-        elif "BIOC" in name and "MIBI" in name and "PLBL" in name:
-            pathway.subjects = [subject_map["BIOC"], subject_map["MIBI"], subject_map["PLBL"]]
-        elif "APCH" in name and "CHEM" in name and "MGMT" in name:
-            pathway.subjects = [subject_map["APCH"], subject_map["CHEM"], subject_map["MGMT"]]
-        elif "ENCM" in name and "PLBL" in name and "ZOOL" in name and "CHEM" in name and "MIBI" in name:
-            pathway.subjects = [subject_map["ENCM"], subject_map["PLBL"], subject_map["ZOOL"], subject_map["CHEM"], subject_map["MIBI"]]
-        elif "ELEC" in name and "COSC" in name and "MACS" in name:
-            pathway.subjects = [subject_map["ELEC"], subject_map["COSC"], subject_map["MACS"]]
-            if "PMAT" in name:
-                pathway.subjects.append(subject_map["PMAT"])
-        elif "BIOC" in name and "MIBI" in name and "PLBL":
-            pathway.subjects = [subject_map["BIOC"], subject_map["MIBI"], subject_map["PLBL"]]
-        elif "Hons" in name:
-            if "PMAT" in name:
-                pathway.subjects = [subject_map["PMAT"]]
-            elif "PHYS" in name:
-                pathway.subjects = [subject_map["PHYS"]]
-            elif "CHEM" in name:
-                pathway.subjects = [subject_map["CHEM"]]
-            elif "COSC" in name:
-                pathway.subjects = [subject_map["COSC"]]
-            elif "BIOC" in name:
-                pathway.subjects = [subject_map["BIOC"]]
-            elif "MIBI" in name:
-                pathway.subjects = [subject_map["MIBI"]]
-        pathway_map[pathway.name] = pathway
-
+        subject_codes = [code.strip() for code in pathway.name.split(" + ")]
+        pathway.subjects = []
+        for code in subject_codes:
+            if code in subject_map:
+                pathway.subjects.append(subject_map[code])
     db.commit()
 
     # === MODULES ===
@@ -395,7 +326,6 @@ def seed_demo(db: Session) -> None:
         ("MACS 22563", "Cost Accounting", subject_map["MACS"].id, 2, 2),
         ("MAPS 22603", "Business Statistics", subject_map["MAPS"].id, 2, 2),
         ("MGMT 22022", "Organizational Behavior", subject_map["MGMT"].id, 2, 2),
-        ("MGMT 32022", "Strategic Management", subject_map["MGMT"].id, 2, 2),
     ]
 
     modules = [Module(code=code, name=name, subject_id=subj_id, year=yr, semester=sem)
@@ -406,138 +336,174 @@ def seed_demo(db: Session) -> None:
     module_map = {m.code: m for m in modules}
 
     # === SESSIONS ===
-    sessions_data = []
+    # Session format: (module_code, session_type, duration_hours, frequency_per_week, lab_type, student_count, max_students_per_group, concurrent_split, [lecturer_indices])
 
+    # Lecturer assignment strategy: Each subject has 2-3 dedicated lecturers, 1 lecturer per session
     # Year 1 Sessions
-    sessions_data.extend([
-        (module_map["PMAT 12242"].id, "lecture", 1, 2, None, 180, None, False, [lect_map[0]]),
-        (module_map["PMAT 12253"].id, "lecture", 1, 2, None, 160, None, False, [lect_map[1]]),
-        (module_map["PMAT 12203"].id, "lecture", 1, 1, None, 200, None, False, [lect_map[0]]),
-        (module_map["AMAT 12242"].id, "lecture", 1, 2, None, 140, None, False, [lect_map[1]]),
-        (module_map["AMAT 12253"].id, "lecture", 1, 2, None, 120, None, False, [lect_map[2]]),
-        (module_map["STAT 12643"].id, "lecture", 1, 2, None, 100, None, False, [lect_map[2]]),
-        (module_map["STAT 12652"].id, "lecture", 1, 2, None, 80, None, False, [lect_map[3]]),
-        (module_map["STAT 14522"].id, "lecture", 1, 2, None, 150, None, False, [lect_map[2]]),
-        (module_map["PHYS 12542"].id, "lecture", 1, 2, None, 180, None, False, [lect_map[3]]),
-        (module_map["PHYS 12552"].id, "lecture", 1, 2, None, 180, None, False, [lect_map[4]]),
-        (module_map["PHYS 12561"].id, "practical", 3, 1, "physics_lab", 180, 45, True, [lect_map[3], lect_map[4]]),
-        (module_map["CHEM 12642"].id, "lecture", 1, 2, None, 160, None, False, [lect_map[4]]),
-        (module_map["CHEM 12652"].id, "lecture", 1, 2, None, 160, None, False, [lect_map[5]]),
-        (module_map["CHEM 12661"].id, "practical", 3, 1, "chemistry_lab", 160, 40, True, [lect_map[4], lect_map[5]]),
-        (module_map["ELEC 12534"].id, "lecture", 1, 2, None, 120, None, False, [lect_map[5]]),
-        (module_map["ELEC 12541"].id, "practical", 3, 1, "computer_lab", 60, 30, True, [lect_map[5], lect_map[6]]),
-        (module_map["COSC 12033"].id, "lecture", 1, 2, None, 200, None, False, [lect_map[6]]),
-        (module_map["COSC 12043"].id, "practical", 3, 1, "computer_lab", 200, 50, True, [lect_map[6], lect_map[7]]),
-        (module_map["COST 12032"].id, "lecture", 1, 2, None, 150, None, False, [lect_map[7]]),
-        (module_map["COST 12043"].id, "lecture", 1, 2, None, 150, None, False, [lect_map[8]]),
-        (module_map["COST 12043"].id, "practical", 3, 1, "computer_lab", 150, 40, True, [lect_map[7]]),
-        (module_map["BIOC 12612"].id, "lecture", 1, 2, None, 140, None, False, [lect_map[9]]),
-        (module_map["BIOC 12622"].id, "lecture", 1, 2, None, 140, None, False, [lect_map[10]]),
-        (module_map["BIOC 12632"].id, "practical", 3, 1, "chemistry_lab", 140, 35, True, [lect_map[9], lect_map[10]]),
-        (module_map["MIBI 12514"].id, "lecture", 1, 2, None, 120, None, False, [lect_map[10]]),
-        (module_map["MIBI 12522"].id, "practical", 3, 1, "em_lab", 60, 30, True, [lect_map[10], lect_map[11]]),
-        (module_map["MIBI 12532"].id, "lecture", 1, 2, None, 80, None, False, [lect_map[11]]),
-        (module_map["PLBL 12513"].id, "lecture", 1, 2, None, 100, None, False, [lect_map[11]]),
-        (module_map["PLBL 12523"].id, "lecture", 1, 2, None, 100, None, False, [lect_map[12]]),
-        (module_map["PLBL 12523"].id, "practical", 3, 1, "plant_bio_lab", 100, 50, True, [lect_map[11], lect_map[12]]),
-        (module_map["PLBL 12543"].id, "lecture", 1, 2, None, 80, None, False, [lect_map[12]]),
-        (module_map["ZOOL 12703"].id, "lecture", 1, 2, None, 140, None, False, [lect_map[12]]),
-        (module_map["ZOOL 12711"].id, "practical", 3, 1, "zoology_lab", 140, 35, True, [lect_map[12], lect_map[13]]),
-        (module_map["ZOOL 12722"].id, "lecture", 1, 2, None, 100, None, False, [lect_map[13]]),
-        (module_map["ZOOL 12733"].id, "practical", 3, 1, "em_lab", 70, 35, True, [lect_map[12], lect_map[13]]),
-        (module_map["ENCM 12732"].id, "lecture", 1, 2, None, 60, None, False, [lect_map[13]]),
-        (module_map["ENCM 12742"].id, "lecture", 1, 2, None, 60, None, False, [lect_map[14]]),
-        (module_map["ENCM 12752"].id, "lecture", 1, 2, None, 50, None, False, [lect_map[14]]),
-        (module_map["APCH 12622"].id, "lecture", 1, 2, None, 80, None, False, [lect_map[14]]),
-        (module_map["APCH 12632"].id, "lecture", 1, 2, None, 80, None, False, [lect_map[15]]),
-        (module_map["BECS 12233"].id, "lecture", 1, 2, None, 100, None, False, [lect_map[15]]),
-        (module_map["BECS 12243"].id, "lecture", 1, 2, None, 100, None, False, [lect_map[16]]),
-        (module_map["BECS 12443"].id, "lecture", 1, 2, None, 90, None, False, [lect_map[16]]),
-        (module_map["BECS 12443"].id, "practical", 3, 1, "computer_lab", 90, 45, True, [lect_map[16]]),
-        (module_map["BECS 12451"].id, "lecture", 1, 2, None, 90, None, False, [lect_map[17]]),
-        (module_map["BECS 12451"].id, "practical", 3, 1, "computer_lab", 90, 45, True, [lect_map[17]]),
-        (module_map["BECS 12462"].id, "lecture", 1, 2, None, 80, None, False, [lect_map[17]]),
-        (module_map["BECS 12623"].id, "lecture", 1, 2, None, 80, None, False, [lect_map[18]]),
-        (module_map["BECS 12712"].id, "lecture", 1, 2, None, 70, None, False, [lect_map[18]]),
-        (module_map["BECS 12742"].id, "lecture", 1, 2, None, 70, None, False, [lect_map[19]]),
-        (module_map["MACS 12532"].id, "lecture", 1, 2, None, 120, None, False, [lect_map[16]]),
-        (module_map["MGMT 12022"].id, "lecture", 1, 2, None, 180, None, False, [lect_map[18]]),
-        (module_map["ACLT 12022"].id, "lecture", 1, 1, None, 300, 150, True, [lect_map[19]]),
-        (module_map["CMSK 14012"].id, "practical", 2, 1, "gymnasium", 300, 150, True, [lect_map[19], lect_map[20]]),
-        (module_map["CMSK 14032"].id, "lecture", 2, 1, None, 300, 150, True, [lect_map[21]]),
-        (module_map["CMSK 14042"].id, "lecture", 1, 1, None, 250, None, False, [lect_map[22]]),
-    ])
+    sessions_data = [
+        # PMAT (lecturers 0-1)
+        (module_map["PMAT 12242"], "lecture", 1, 2, None, 180, None, False, [0]),
+        (module_map["PMAT 12253"], "lecture", 1, 2, None, 160, None, False, [1]),
+        (module_map["PMAT 12203"], "lecture", 1, 1, None, 200, None, False, [0]),
+        # AMAT (lecturers 1-2)
+        (module_map["AMAT 12242"], "lecture", 1, 2, None, 140, None, False, [1]),
+        (module_map["AMAT 12253"], "lecture", 1, 2, None, 120, None, False, [2]),
+        # STAT (lecturers 2-3)
+        (module_map["STAT 12643"], "lecture", 1, 2, None, 100, None, False, [2]),
+        (module_map["STAT 12652"], "lecture", 1, 2, None, 80, None, False, [3]),
+        (module_map["STAT 14522"], "lecture", 1, 2, None, 150, None, False, [2]),
+        # PHYS (lecturers 3-4)
+        (module_map["PHYS 12542"], "lecture", 1, 2, None, 180, None, False, [3]),
+        (module_map["PHYS 12552"], "lecture", 1, 1, None, 180, None, False, [4]),
+        (module_map["PHYS 12561"], "practical", 3, 1, "physics_lab", 180, 45, True, [4]),
+        # CHEM (lecturers 4-6)
+        (module_map["CHEM 12642"], "lecture", 1, 1, None, 160, None, False, [4]),
+        (module_map["CHEM 12652"], "lecture", 1, 2, None, 160, None, False, [5]),
+        (module_map["CHEM 12661"], "practical", 3, 1, "chemistry_lab", 160, 40, True, [6]),
+        # ELEC (lecturers 6-7)
+        (module_map["ELEC 12534"], "lecture", 1, 1, None, 120, None, False, [6]),
+        (module_map["ELEC 12541"], "practical", 3, 1, "computer_lab", 60, 30, True, [7]),
+        # COSC (lecturers 7-8)
+        (module_map["COSC 12033"], "lecture", 1, 1, None, 200, None, False, [7]),
+        (module_map["COSC 12043"], "practical", 3, 1, "computer_lab", 200, 50, True, [7]),
+        # COST (lecturers 8-9)
+        (module_map["COST 12032"], "lecture", 1, 1, None, 150, None, False, [9]),
+        (module_map["COST 12043"], "lecture", 1, 1, None, 150, None, False, [9]),
+        (module_map["COST 12043"], "practical", 3, 1, "computer_lab", 150, 40, True, [8]),
+        # BIOC (lecturers 10-11)
+        (module_map["BIOC 12612"], "lecture", 1, 1, None, 140, None, False, [10]),
+        (module_map["BIOC 12622"], "lecture", 1, 1, None, 140, None, False, [12]),
+        (module_map["BIOC 12632"], "practical", 3, 1, "chemistry_lab", 140, 35, True, [10]),
+        # MIBI (lecturers 11-12)
+        (module_map["MIBI 12514"], "lecture", 1, 1, None, 120, None, False, [11]),
+        (module_map["MIBI 12522"], "practical", 3, 1, "em_lab", 60, 30, True, [11]),
+        # PLBL (lecturers 12-13)
+        (module_map["PLBL 12513"], "lecture", 1, 1, None, 100, None, False, [12]),
+        (module_map["PLBL 12523"], "lecture", 1, 1, None, 100, None, False, [13]),
+        (module_map["PLBL 12523"], "practical", 3, 1, "plant_bio_lab", 100, 50, True, [13]),
+        (module_map["PLBL 12543"], "lecture", 1, 1, None, 80, None, False, [13]),
+        # ZOOL (lecturers 13-14)
+        (module_map["ZOOL 12703"], "lecture", 1, 1, None, 140, None, False, [13]),
+        (module_map["ZOOL 12711"], "practical", 3, 1, "zoology_lab", 140, 35, True, [14]),
+        (module_map["ZOOL 12722"], "lecture", 1, 1, None, 100, None, False, [14]),
+        (module_map["ZOOL 12733"], "practical", 3, 1, "em_lab", 70, 35, True, [13]),
+        # ENCM (lecturers 15-16)
+        (module_map["ENCM 12732"], "lecture", 1, 2, None, 60, None, False, [15]),
+        (module_map["ENCM 12742"], "lecture", 1, 2, None, 60, None, False, [16]),
+        (module_map["ENCM 12752"], "lecture", 1, 2, None, 50, None, False, [16]),
+        # APCH (lecturers 17-18)
+        (module_map["APCH 12622"], "lecture", 1, 2, None, 80, None, False, [17]),
+        (module_map["APCH 12632"], "lecture", 1, 2, None, 80, None, False, [18]),
+        # BECS Year 1 (lecturers 18-20, 25-26)
+        (module_map["BECS 12233"], "lecture", 1, 1, None, 100, None, False, [18]),
+        (module_map["BECS 12243"], "lecture", 1, 1, None, 100, None, False, [19]),
+        (module_map["BECS 12443"], "lecture", 1, 1, None, 90, None, False, [19]),
+        (module_map["BECS 12443"], "practical", 3, 1, "computer_lab", 90, 45, True, [20]),
+        (module_map["BECS 12451"], "lecture", 1, 1, None, 90, None, False, [20]),
+        (module_map["BECS 12451"], "practical", 3, 1, "computer_lab", 90, 45, True, [20]),
+        (module_map["BECS 12462"], "lecture", 1, 1, None, 80, None, False, [25]),
+        (module_map["BECS 12623"], "lecture", 1, 1, None, 80, None, False, [26]),
+        (module_map["BECS 12712"], "lecture", 1, 1, None, 70, None, False, [26]),
+        (module_map["BECS 12742"], "lecture", 1, 1, None, 70, None, False, [26]),
+        # MACS/MAPS (lecturer 26)
+        (module_map["MACS 12532"], "lecture", 1, 2, None, 120, None, False, [26]),
+        # MGMT (lecturer 29)
+        (module_map["MGMT 12022"], "lecture", 1, 2, None, 180, None, False, [29]),
+        # CMSK (lecturers 30-32, 33)
+        (module_map["ACLT 12022"], "lecture", 1, 1, None, 300, 150, True, [33]),
+        (module_map["CMSK 14012"], "practical", 2, 1, "gymnasium", 300, 150, True, [33]),
+        (module_map["CMSK 14032"], "lecture", 2, 1, None, 300, 150, True, [30]),
+        (module_map["CMSK 14042"], "lecture", 1, 1, None, 250, None, False, [31]),
+    ]
 
     # Year 2 Sessions
     sessions_data.extend([
-        (module_map["PMAT 22282"].id, "lecture", 1, 2, None, 140, None, False, [lect_map[0]]),
-        (module_map["PMAT 22293"].id, "lecture", 1, 2, None, 120, None, False, [lect_map[1]]),
-        (module_map["AMAT 22282"].id, "lecture", 1, 2, None, 100, None, False, [lect_map[1]]),
-        (module_map["AMAT 22292"].id, "lecture", 1, 2, None, 80, None, False, [lect_map[2]]),
-        (module_map["STAT 22632"].id, "lecture", 1, 2, None, 80, None, False, [lect_map[2]]),
-        (module_map["STAT 22642"].id, "lecture", 1, 2, None, 70, None, False, [lect_map[3]]),
-        (module_map["STAT 22651"].id, "practical", 2, 1, "computer_lab", 60, 30, True, [lect_map[3]]),
-        (module_map["PHYS 22533"].id, "lecture", 1, 2, None, 150, None, False, [lect_map[3]]),
-        (module_map["PHYS 22541"].id, "practical", 3, 1, "physics_lab", 150, 50, True, [lect_map[3], lect_map[4]]),
-        (module_map["PHYS 22553"].id, "lecture", 1, 2, None, 140, None, False, [lect_map[4]]),
-        (module_map["CHEM 22702"].id, "lecture", 1, 2, None, 140, None, False, [lect_map[4]]),
-        (module_map["CHEM 22712"].id, "lecture", 1, 2, None, 130, None, False, [lect_map[5]]),
-        (module_map["CHEM 22721"].id, "practical", 3, 1, "chemistry_lab", 140, 35, True, [lect_map[4], lect_map[5]]),
-        (module_map["ELEC 22534"].id, "lecture", 1, 2, None, 100, None, False, [lect_map[5]]),
-        (module_map["ELEC 22541"].id, "practical", 3, 1, "computer_lab", 50, 25, True, [lect_map[5], lect_map[6]]),
-        (module_map["COSC 22073"].id, "lecture", 1, 2, None, 120, None, False, [lect_map[6]]),
-        (module_map["COSC 22073"].id, "practical", 2, 1, "computer_lab", 120, 60, True, [lect_map[6]]),
-        (module_map["COSC 22083"].id, "lecture", 1, 2, None, 100, None, False, [lect_map[7]]),
-        (module_map["COSC 22083"].id, "practical", 3, 1, "computer_lab", 100, 50, True, [lect_map[7]]),
-        (module_map["COST 22073"].id, "lecture", 1, 2, None, 90, None, False, [lect_map[7]]),
-        (module_map["COST 22073"].id, "practical", 3, 1, "computer_lab", 90, 45, True, [lect_map[8]]),
-        (module_map["COST 22082"].id, "lecture", 1, 2, None, 80, None, False, [lect_map[8]]),
-        (module_map["BIOC 22642"].id, "lecture", 1, 2, None, 100, None, False, [lect_map[9]]),
-        (module_map["BIOC 22652"].id, "lecture", 1, 2, None, 100, None, False, [lect_map[10]]),
-        (module_map["BIOC 22661"].id, "practical", 2, 1, "chemistry_lab", 100, 50, True, [lect_map[9], lect_map[10]]),
-        (module_map["MIBI 22534"].id, "lecture", 1, 2, None, 80, None, False, [lect_map[10]]),
-        (module_map["MIBI 22542"].id, "practical", 3, 1, "em_lab", 80, 40, True, [lect_map[10], lect_map[11]]),
-        (module_map["MIBI 22554"].id, "lecture", 1, 2, None, 60, None, False, [lect_map[11]]),
-        (module_map["MIBI 22562"].id, "practical", 3, 1, "em_lab", 60, 30, True, [lect_map[11]]),
-        (module_map["PLBL 22541"].id, "lecture", 1, 2, None, 70, None, False, [lect_map[11]]),
-        (module_map["PLBL 22541"].id, "practical", 3, 1, "computer_lab", 70, 35, True, [lect_map[12]]),
-        (module_map["PLBL 22554"].id, "lecture", 1, 2, None, 60, None, False, [lect_map[12]]),
-        (module_map["PLBL 22561"].id, "practical", 3, 1, "plant_bio_lab", 70, 35, True, [lect_map[11], lect_map[12]]),
-        (module_map["ZOOL 22732"].id, "lecture", 1, 2, None, 100, None, False, [lect_map[12]]),
-        (module_map["ZOOL 22742"].id, "lecture", 1, 2, None, 80, None, False, [lect_map[13]]),
-        (module_map["ZOOL 22752"].id, "practical", 3, 1, "zoology_lab", 100, 50, True, [lect_map[12], lect_map[13]]),
-        (module_map["ENCM 22762"].id, "lecture", 1, 2, None, 50, None, False, [lect_map[13]]),
-        (module_map["ENCM 22773"].id, "lecture", 1, 2, None, 45, None, False, [lect_map[14]]),
-        (module_map["ENCM 22782"].id, "lecture", 1, 2, None, 40, None, False, [lect_map[14]]),
-        (module_map["ENCM 22791"].id, "lecture", 2, 1, None, 40, None, False, [lect_map[14]]),
-        (module_map["ENCM 22802"].id, "practical", 3, 1, "computer_lab", 40, 20, True, [lect_map[14]]),
-        (module_map["APCH 22692"].id, "lecture", 1, 2, None, 70, None, False, [lect_map[14]]),
-        (module_map["APCH 22712"].id, "lecture", 1, 2, None, 70, None, False, [lect_map[15]]),
-        (module_map["APCH 22721"].id, "practical", 3, 1, "chemistry_lab", 70, 35, True, [lect_map[14], lect_map[15]]),
-        (module_map["APCH 22732"].id, "lecture", 1, 2, None, 60, None, False, [lect_map[15]]),
-        (module_map["BECS 22233"].id, "lecture", 1, 2, None, 80, None, False, [lect_map[15]]),
-        (module_map["BECS 22233"].id, "practical", 2, 1, "computer_lab", 80, 40, True, [lect_map[16]]),
-        (module_map["BECS 22243"].id, "lecture", 1, 2, None, 70, None, False, [lect_map[16]]),
-        (module_map["BECS 22443"].id, "lecture", 1, 2, None, 80, None, False, [lect_map[16]]),
-        (module_map["BECS 22443"].id, "practical", 2, 1, "computer_lab", 80, 40, True, [lect_map[17]]),
-        (module_map["BECS 22451"].id, "lecture", 1, 2, None, 70, None, False, [lect_map[17]]),
-        (module_map["BECS 22451"].id, "practical", 3, 1, "computer_lab", 70, 35, True, [lect_map[17]]),
-        (module_map["BECS 22623"].id, "lecture", 1, 2, None, 60, None, False, [lect_map[18]]),
-        (module_map["BECS 22623"].id, "practical", 3, 1, "computer_lab", 60, 30, True, [lect_map[18]]),
-        (module_map["BECS 22711"].id, "lecture", 1, 2, None, 60, None, False, [lect_map[18]]),
-        (module_map["BECS 22712"].id, "lecture", 1, 2, None, 55, None, False, [lect_map[19]]),
-        (module_map["BECS 22732"].id, "lecture", 1, 2, None, 50, None, False, [lect_map[19]]),
-        (module_map["BECS 22811"].id, "lecture", 2, 1, None, 50, None, False, [lect_map[20]]),
-        (module_map["MACS 22563"].id, "lecture", 1, 2, None, 80, None, False, [lect_map[16]]),
-        (module_map["MAPS 22603"].id, "lecture", 1, 2, None, 70, None, False, [lect_map[17]]),
-        (module_map["MGMT 22022"].id, "lecture", 1, 2, None, 150, None, False, [lect_map[18]]),
-        (module_map["MGMT 32022"].id, "lecture", 1, 2, None, 100, None, False, [lect_map[19]]),
+        # PMAT (lecturers 0-1)
+        (module_map["PMAT 22282"], "lecture", 1, 2, None, 140, None, False, [0]),
+        (module_map["PMAT 22293"], "lecture", 1, 2, None, 120, None, False, [1]),
+        # AMAT (lecturers 1-2)
+        (module_map["AMAT 22282"], "lecture", 1, 2, None, 100, None, False, [1]),
+        (module_map["AMAT 22292"], "lecture", 1, 2, None, 80, None, False, [2]),
+        # STAT (lecturers 2-3, 5-6)
+        (module_map["STAT 22632"], "lecture", 1, 2, None, 80, None, False, [2]),
+        (module_map["STAT 22642"], "lecture", 1, 2, None, 70, None, False, [3]),
+        (module_map["STAT 22651"], "practical", 2, 1, "computer_lab", 60, 30, True, [5]),
+        # PHYS (lecturers 3-4)
+        (module_map["PHYS 22533"], "lecture", 1, 2, None, 150, None, False, [3]),
+        (module_map["PHYS 22541"], "practical", 3, 1, "physics_lab", 150, 50, True, [4]),
+        (module_map["PHYS 22553"], "lecture", 1, 2, None, 140, None, False, [4]),
+        # CHEM (lecturers 5-6)
+        (module_map["CHEM 22702"], "lecture", 1, 2, None, 140, None, False, [6]),
+        (module_map["CHEM 22712"], "lecture", 1, 2, None, 130, None, False, [5]),
+        (module_map["CHEM 22721"], "practical", 3, 1, "chemistry_lab", 140, 35, True, [6]),
+        # ELEC (lecturers 6-7)
+        (module_map["ELEC 22534"], "lecture", 1, 2, None, 100, None, False, [6]),
+        (module_map["ELEC 22541"], "practical", 3, 1, "computer_lab", 50, 25, True, [7]),
+        # COSC (lecturers 7-8)
+        (module_map["COSC 22073"], "lecture", 1, 1, None, 120, None, False, [8]),
+        (module_map["COSC 22073"], "practical", 2, 1, "computer_lab", 120, 60, True, [8]),
+        (module_map["COSC 22083"], "lecture", 1, 1, None, 100, None, False, [8]),
+        (module_map["COSC 22083"], "practical", 3, 1, "computer_lab", 100, 50, True, [8]),
+        # COST (lecturers 8-9, 33)
+        (module_map["COST 22073"], "lecture", 1, 1, None, 90, None, False, [9]),
+        (module_map["COST 22073"], "practical", 3, 1, "computer_lab", 90, 45, True, [9]),
+        (module_map["COST 22082"], "lecture", 1, 1, None, 80, None, False, [9]),
+        # BIOC (lecturers 10-11)
+        (module_map["BIOC 22642"], "lecture", 1, 2, None, 100, None, False, [10]),
+        (module_map["BIOC 22652"], "lecture", 1, 2, None, 100, None, False, [11]),
+        (module_map["BIOC 22661"], "practical", 2, 1, "chemistry_lab", 100, 50, True, [10]),
+        # MIBI (lecturers 11-12)
+        (module_map["MIBI 22534"], "lecture", 1, 1, None, 80, None, False, [11]),
+        (module_map["MIBI 22542"], "practical", 3, 1, "em_lab", 80, 40, True, [11]),
+        (module_map["MIBI 22554"], "lecture", 1, 1, None, 60, None, False, [12]),
+        (module_map["MIBI 22562"], "practical", 3, 1, "em_lab", 60, 30, True, [12]),
+        (module_map["MIBI 22554"], "lecture", 1, 1, None, 60, None, False, [12]),
+        (module_map["MIBI 22562"], "practical", 3, 1, "em_lab", 60, 30, True, [13]),
+        # PLBL (lecturers 12-13)
+        (module_map["PLBL 22541"], "lecture", 1, 1, None, 70, None, False, [12]),
+        (module_map["PLBL 22541"], "practical", 3, 1, "computer_lab", 70, 35, True, [13]),
+        (module_map["PLBL 22554"], "lecture", 1, 1, None, 60, None, False, [13]),
+        (module_map["PLBL 22561"], "practical", 3, 1, "plant_bio_lab", 70, 35, True, [13]),
+        # ZOOL (lecturers 13-14)
+        (module_map["ZOOL 22732"], "lecture", 1, 1, None, 100, None, False, [13]),
+        (module_map["ZOOL 22742"], "lecture", 1, 1, None, 80, None, False, [14]),
+        (module_map["ZOOL 22752"], "practical", 3, 1, "zoology_lab", 100, 50, True, [14]),
+        # ENCM (lecturers 15-16)
+        (module_map["ENCM 22762"], "lecture", 1, 1, None, 50, None, False, [15]),
+        (module_map["ENCM 22773"], "lecture", 1, 1, None, 45, None, False, [16]),
+        (module_map["ENCM 22782"], "lecture", 1, 1, None, 40, None, False, [16]),
+        (module_map["ENCM 22791"], "lecture", 1, 1, None, 40, None, False, [16]),
+        (module_map["ENCM 22802"], "practical", 3, 1, "computer_lab", 40, 20, True, [16]),
+        # APCH (lecturers 17-18)
+        (module_map["APCH 22692"], "lecture", 1, 1, None, 70, None, False, [17]),
+        (module_map["APCH 22712"], "lecture", 1, 1, None, 70, None, False, [18]),
+        (module_map["APCH 22721"], "practical", 3, 1, "chemistry_lab", 70, 35, True, [17]),
+        (module_map["APCH 22732"], "lecture", 1, 1, None, 60, None, False, [18]),
+        # BECS Year 2 (lecturers 18-20, 30-32, 25-26)
+        (module_map["BECS 22233"], "lecture", 1, 1, None, 80, None, False, [18]),
+        (module_map["BECS 22233"], "practical", 2, 1, "computer_lab", 80, 40, True, [30]),
+        (module_map["BECS 22243"], "lecture", 1, 1, None, 70, None, False, [19]),
+        (module_map["BECS 22443"], "lecture", 1, 1, None, 80, None, False, [19]),
+        (module_map["BECS 22443"], "practical", 2, 1, "computer_lab", 80, 40, True, [31]),
+        (module_map["BECS 22451"], "lecture", 1, 1, None, 70, None, False, [20]),
+        (module_map["BECS 22451"], "practical", 3, 1, "computer_lab", 70, 35, True, [32]),
+        (module_map["BECS 22623"], "lecture", 1, 1, None, 60, None, False, [26]),
+        (module_map["BECS 22623"], "practical", 3, 1, "computer_lab", 60, 30, True, [26]),
+        (module_map["BECS 22711"], "lecture", 1, 1, None, 60, None, False, [26]),
+        (module_map["BECS 22712"], "lecture", 1, 1, None, 55, None, False, [26]),
+        (module_map["BECS 22732"], "lecture", 1, 1, None, 50, None, False, [26]),
+        (module_map["BECS 22811"], "lecture", 1, 1, None, 50, None, False, [20]),
+        # MACS/MAPS (lecturers 20, 26)
+        (module_map["MACS 22563"], "lecture", 1, 1, None, 80, None, False, [26]),
+        (module_map["MAPS 22603"], "lecture", 1, 1, None, 70, None, False, [20]),
+        # MGMT (lecturer 29)
+        (module_map["MGMT 22022"], "lecture", 1, 1, None, 150, None, False, [29]),
     ])
 
     # Create sessions
-    for module_id, sess_type, dur, freq, lab_type, stu_count, max_grp, concurrent, lects in sessions_data:
+    for module_obj, sess_type, dur, freq, lab_type, stu_count, max_grp, concurrent, lect_indices in sessions_data:
         session = SessionModel(
-            module_id=module_id,
+            module_id=module_obj.id,
             session_type=sess_type,
             duration_hours=dur,
             frequency_per_week=freq,
@@ -545,12 +511,53 @@ def seed_demo(db: Session) -> None:
             student_count=stu_count,
             max_students_per_group=max_grp,
             concurrent_split=concurrent,
-            lecturers=lects
+            lecturers=[lect_map[i] for i in lect_indices]
         )
         db.add(session)
 
     db.commit()
     print(f"Seeded {len(sessions_data)} sessions")
+
+    # === WORKLOAD VERIFICATION ===
+    print("\n=== LECTURER WORKLOAD VERIFICATION ===")
+    from math import ceil
+    sessions = db.query(SessionModel).all()
+    
+    workload = {}
+    for session in sessions:
+        module = session.module
+        hours_per_occurrence = session.duration_hours * session.frequency_per_week
+        
+        if session.concurrent_split and session.max_students_per_group:
+            num_groups = ceil(session.student_count / session.max_students_per_group)
+            lecturer_hours = hours_per_occurrence
+        else:
+            num_groups = 1
+            lecturer_hours = hours_per_occurrence
+        
+        for lecturer in session.lecturers:
+            lecturer_id = lecturer.id
+            if lecturer_id not in workload:
+                workload[lecturer_id] = {"name": lecturer.name, "max_hours": lecturer.max_hours_per_week, "total": 0, "sessions": []}
+            workload[lecturer_id]["total"] += lecturer_hours
+            workload[lecturer_id]["sessions"].append(f"{module.code} ({session.session_type}, {lecturer_hours}h)")
+    
+    print(f"\n{'ID':<3} {'Name':<25} {'Hours':<6} {'Max':<6} {'Status':<10} {'Sessions'}")
+    print("-" * 100)
+    over_limit_count = 0
+    for lecturer in lecturers:
+        if lecturer.id in workload:
+            data = workload[lecturer.id]
+            hours = data["total"]
+            max_h = data["max_hours"]
+            status = "OVER" if hours > max_h else "OK"
+            if hours > max_h:
+                over_limit_count += 1
+            print(f"{lecturer.id:<3} {lecturer.name:<25} {hours:<6.1f} {max_h:<6} {status:<10} {', '.join(data['sessions'][:5])}")
+        else:
+            print(f"{lecturer.id:<3} {lecturer.name:<25} 0.0     {lecturer.max_hours_per_week:<6} OK         (no sessions)")
+    
+    print(f"\nTotal lecturers over limit: {over_limit_count}/{len(lecturers)}")
 
 
 if __name__ == "__main__":
@@ -558,6 +565,6 @@ if __name__ == "__main__":
     try:
         reset_tables(db)
         seed_demo(db)
-        print("Realistic UOK timetable data seeded successfully!")
+        print("\nRealistic UOK timetable data seeded successfully!")
     finally:
         db.close()

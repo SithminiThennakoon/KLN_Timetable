@@ -11,4 +11,6 @@ class TimetableEntry(Base):
     room_id = Column(Integer, ForeignKey("room.id"), nullable=False)
     timeslot_id = Column(Integer, ForeignKey("timeslot.id"), nullable=False)
     group_number = Column(Integer, nullable=False, default=1)
+    duration_hours = Column(Integer, nullable=False, default=1)
     is_manual = Column(Boolean, default=False)
+

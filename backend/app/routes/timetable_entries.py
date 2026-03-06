@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.timetable_entry import TimetableEntry
@@ -8,8 +8,14 @@ router = APIRouter(prefix="/api/timetable/entries", tags=["timetable"])
 
 
 @router.get("/", response_model=list[TimetableEntryRead])
-def list_entries(db: Session = Depends(get_db)):
-    return db.query(TimetableEntry).order_by(TimetableEntry.id).all()
+def list_entries(
+    version: str | None = Query(None, description="Filter by version"),
+    db: Session = Depends(get_db)
+):
+    query = db.query(TimetableEntry)
+    if version:
+        query = query.filter(TimetableEntry.version == version)
+    return query.order_by(TimetableEntry.id).all()
 
 
 @router.post("/", response_model=TimetableEntryRead, status_code=status.HTTP_201_CREATED)
