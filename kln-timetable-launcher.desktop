@@ -1,0 +1,11 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=KLN Timetable Launcher
+Comment=Start and stop the KLN Timetable frontend, backend, and local database
+Exec=sh -c "/home/sasindu/Documents/Projects/UOK\\ Sithu\\ Timetable/KLN_Timetable/Launch\\ KLN\\ Timetable.sh"
+Path=/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable
+Terminal=false
+Categories=Education;
+StartupNotify=true

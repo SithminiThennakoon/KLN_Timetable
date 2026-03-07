@@ -5,7 +5,17 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-SoftConstraint = Literal["spread_sessions_across_days"]
+SoftConstraint = Literal[
+    "spread_sessions_across_days",
+    "prefer_morning_theory",
+    "prefer_afternoon_practicals",
+    "avoid_late_afternoon_starts",
+    "avoid_friday_sessions",
+    "prefer_standard_block_starts",
+    "balance_teaching_load_across_week",
+    "avoid_monday_overload",
+]
+PerformancePreset = Literal["balanced", "thorough", "fast_diagnostics"]
 ViewMode = Literal["admin", "lecturer", "student"]
 
 
@@ -63,6 +73,7 @@ class ModuleInput(BaseModel):
 class SessionInput(BaseModel):
     client_key: str = Field(..., min_length=1)
     module_client_key: str = Field(..., min_length=1)
+    linked_module_client_keys: list[str] = Field(default_factory=list)
     name: str = Field(..., min_length=1)
     session_type: str = Field(..., min_length=1)
     duration_minutes: int = Field(..., gt=0, multiple_of=30)
@@ -101,14 +112,26 @@ class DatasetResponse(BaseModel):
     summary: DatasetSummary
 
 
+class FullDatasetResponse(DatasetUpsertRequest):
+    pass
+
+
 class LookupItem(BaseModel):
     id: int
     label: str
 
 
+class StudentPathLookupItem(BaseModel):
+    id: int | None = None
+    degree_id: int
+    year: int
+    label: str
+
+
 class LookupResponse(BaseModel):
     lecturers: list[LookupItem]
-    student_groups: list[LookupItem]
+    degrees: list[LookupItem]
+    student_paths: list[StudentPathLookupItem]
 
 
 class SoftConstraintOption(BaseModel):
@@ -119,6 +142,7 @@ class SoftConstraintOption(BaseModel):
 
 class GenerationRequest(BaseModel):
     soft_constraints: list[SoftConstraint] = Field(default_factory=list)
+    performance_preset: PerformancePreset = "balanced"
     max_solutions: int = Field(default=1000, ge=1, le=5000)
     preview_limit: int = Field(default=5, ge=1, le=100)
     time_limit_seconds: int = Field(default=60, ge=1, le=300)
@@ -128,6 +152,25 @@ class GenerationCounts(BaseModel):
     total_solutions_found: int
     preview_solution_count: int
     truncated: bool
+
+
+class PerformanceTimingResponse(BaseModel):
+    precheck_ms: int = 0
+    model_build_ms: int = 0
+    solve_ms: int = 0
+    fallback_search_ms: int = 0
+    total_ms: int = 0
+
+
+class GenerationStatsResponse(BaseModel):
+    task_count: int = 0
+    assignment_variable_count: int = 0
+    candidate_option_count: int = 0
+    feasible_combo_count: int = 0
+    fallback_combo_evaluated_count: int = 0
+    fallback_combo_truncated: bool = False
+    exact_enumeration_single_worker: bool = True
+    machine_cpu_count: int = 1
 
 
 class SolutionEntryResponse(BaseModel):
@@ -156,14 +199,23 @@ class SolutionResponse(BaseModel):
     entries: list[SolutionEntryResponse]
 
 
+class SoftConstraintCombinationSuggestion(BaseModel):
+    constraints: list[SoftConstraint] = Field(default_factory=list)
+    solution_count: int = 0
+    solution_count_capped: bool = False
+
+
 class GenerationResponse(BaseModel):
     generation_run_id: int
     status: str
     message: str
     counts: GenerationCounts
+    performance_preset: PerformancePreset
+    timing: PerformanceTimingResponse
+    stats: GenerationStatsResponse
     selected_soft_constraints: list[SoftConstraint]
     available_soft_constraints: list[SoftConstraintOption]
-    possible_soft_constraint_combinations: list[list[SoftConstraint]] = Field(
+    possible_soft_constraint_combinations: list[SoftConstraintCombinationSuggestion] = Field(
         default_factory=list
     )
     solutions: list[SolutionResponse]

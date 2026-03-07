@@ -50,6 +50,23 @@ v2_session_student_group_table = Table(
     ),
 )
 
+v2_session_module_table = Table(
+    "v2_session_module",
+    Base.metadata,
+    Column(
+        "session_id",
+        Integer,
+        ForeignKey("v2_session.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "module_id",
+        Integer,
+        ForeignKey("v2_module.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
+
 
 class V2Degree(Base):
     __tablename__ = "v2_degree"
@@ -174,6 +191,11 @@ class V2Module(Base):
     sessions = relationship(
         "V2Session", back_populates="module", cascade="all, delete-orphan"
     )
+    linked_sessions = relationship(
+        "V2Session",
+        secondary=v2_session_module_table,
+        back_populates="linked_modules",
+    )
 
 
 class V2Session(Base):
@@ -201,6 +223,11 @@ class V2Session(Base):
     )
 
     module = relationship("V2Module", back_populates="sessions")
+    linked_modules = relationship(
+        "V2Module",
+        secondary=v2_session_module_table,
+        back_populates="linked_sessions",
+    )
     specific_room = relationship("V2Room")
     lecturers = relationship(
         "V2Lecturer", secondary=v2_session_lecturer_table, back_populates="sessions"
@@ -257,6 +284,7 @@ class V2TimetableSolution(Base):
 
 class V2SolutionEntry(Base):
     __tablename__ = "v2_solution_entry"
+    __mapper_args__ = {"eager_defaults": False}
 
     id = Column(Integer, primary_key=True, index=True)
     solution_id = Column(

@@ -1,263 +1,201 @@
 # KLN Timetable System
 
-A comprehensive web-based timetable generator and management system for the Faculty of Science, University of Kelaniya.
+Web app for building and generating Faculty of Science timetables for the University of Kelaniya.
 
-## Project Overview
+The active product is the rebuilt `v2` timetable flow. Legacy auth, dashboard, and CRUD codepaths have been removed from the running app and the repo now centers on:
 
-This system generates optimized timetables considering:
-- Lecturer availability and preferences
-- Classroom capacity and availability
-- Student class sizes
-- Minimizing gaps and consecutive classes for both students and lecturers
-- CP-SAT constraint solver for optimization
+- guided manual dataset entry
+- full timetable generation with hard constraints
+- optional nice-to-have constraints
+- default timetable selection
+- admin, lecturer, and student timetable views
+- PDF, CSV, XLSX, and PNG exports
 
-## Tech Stack
+## Active Workflow
 
-- **Frontend**: React.js 18
-- **Backend**: FastAPI
-- **Database**: MySQL
-- **Optimization**: Google OR-Tools (CP-SAT)
-- **Authentication**: JWT
+1. Open `Setup` and enter the timetable dataset manually.
+2. Define degrees, paths, lecturers, rooms, student cohorts, modules, and sessions.
+3. Generate timetables in `Generate`.
+4. Review the number of valid solutions and pick a default timetable.
+5. Open `Views` to inspect the default timetable in admin, lecturer, or student mode.
+6. Export the current view if needed.
 
-## Project Structure
+## Product Rules
 
-```
-KLN_Timetable/
-├── frontend/               # React.js application
-│   ├── public/
-│   ├── src/
-│   │   ├── pages/         # Login, Dashboard pages
-│   │   ├── components/    # Reusable components
-│   │   ├── services/      # API services
-│   │   └── styles/        # CSS styles
-│   ├── package.json
-│   └── .env
-├── backend/               # FastAPI application
-│   ├── app/
-│   │   ├── models/        # SQLAlchemy models
-│   │   ├── schemas/       # Pydantic schemas
-│   │   ├── routes/        # API routes
-│   │   ├── core/          # Config, security, database
-│   │   └── main.py       # FastAPI app
-│   ├── requirements.txt
-│   ├── .env
-│   └── main.py           # Entry point
-└── README.md
-```
+- No authentication or login flow.
+- Weekly timetable only.
+- Working hours are `08:00` to `18:00`, Monday to Friday.
+- Lunch break is `12:00` to `13:00` with no sessions.
+- Session durations must be multiples of `30` minutes.
+- Hard constraints include:
+  - room capacity
+  - room/session compatibility
+  - specific-room restrictions
+  - room clash prevention
+  - lecturer clash prevention
+  - student-group clash prevention
+- Nice-to-have constraints currently include:
+  - spreading repeated weekly sessions across different days
 
-## Features
+## Current Implementation
 
-### User Roles
-1. **Admin**: Manage all departments, lecturers, classrooms, students, and generate timetables
-2. **Department Head**: Manage department's timetable and view faculty timetable
-3. **Lecturer**: View personal timetable and update availability
-4. **Student**: View personal timetable and faculty timetable
+### Frontend
 
-### Current Features
-- ✅ User authentication and authorization
-- ✅ JWT-based token authentication
-- ✅ Role-based access control
-- ✅ Login/Dashboard UI
-- ✅ MySQL database integration
+Active pages:
 
-### Upcoming Features
-- Timetable generation with constraint solving
-- Department management
-- Classroom management
-- Lecturer and Student management
-- Availability management
-- Timetable optimization using OR-Tools CP-SAT
+- [frontend/src/pages/SetupStudio.jsx](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/frontend/src/pages/SetupStudio.jsx)
+- [frontend/src/pages/GenerateStudio.jsx](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/frontend/src/pages/GenerateStudio.jsx)
+- [frontend/src/pages/ViewStudio.jsx](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/frontend/src/pages/ViewStudio.jsx)
 
-## Installation & Setup
+Active service layer:
 
-### Prerequisites
-- Node.js (v14 or higher)
-- Python 3.8+
-- MySQL Server
-- Git
+- [frontend/src/services/timetableStudioService.js](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/frontend/src/services/timetableStudioService.js)
+- [frontend/src/services/apiClient.js](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/frontend/src/services/apiClient.js)
 
-### Backend Setup
+### Backend
 
-1. Navigate to the backend directory:
-```bash
-cd backend
-```
+Active backend entrypoints:
 
-2. Create a virtual environment:
-```bash
-# Windows
-python -m venv venv
-venv\Scripts\activate
+- [backend/app/main.py](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/backend/app/main.py)
+- [backend/app/routes/timetable_v2.py](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/backend/app/routes/timetable_v2.py)
+- [backend/app/services/timetable_v2.py](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/backend/app/services/timetable_v2.py)
+- [backend/app/models/v2.py](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/backend/app/models/v2.py)
+- [backend/app/schemas/v2.py](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/backend/app/schemas/v2.py)
 
-# Mac/Linux
-python3 -m venv venv
-source venv/bin/activate
-```
+## API Surface
 
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+Mounted API prefix: `/api/v2`
 
-4. Configure database connection:
-   - Edit `.env` file with your MySQL credentials
-   - Default: `mysql://root:password@localhost:3306/kln_timetable`
+- `GET /dataset`
+- `GET /dataset/full`
+- `POST /dataset`
+- `POST /dataset/demo`
+- `GET /lookups`
+- `POST /generate`
+- `GET /generate/latest`
+- `POST /solutions/default`
+- `GET /views`
+- `GET /exports`
 
-5. Create the database:
-```sql
-CREATE DATABASE kln_timetable;
-```
+## Setup
 
-6. Run the backend server:
-```bash
-python main.py
-```
+### Backend
 
-The backend will start at `http://localhost:8000`
+Requirements:
 
-### Frontend Setup
+- Python 3.11+ is recommended
+- MySQL is the intended database
 
-1. Navigate to the frontend directory:
-```bash
-cd frontend
-```
+Environment:
 
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Configure API endpoint:
-   - Edit `.env` file
-   - Default: `REACT_APP_API_URL=http://localhost:8000`
-
-4. Start the development server:
-```bash
-npm start
-```
-
-The frontend will open at `http://localhost:3000`
-
-## Database Schema
-
-### Users Table
-```sql
-CREATE TABLE users (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    hashed_password VARCHAR(255) NOT NULL,
-    role ENUM('admin', 'department_head', 'lecturer', 'student') DEFAULT 'student',
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
-```
-
-## API Endpoints
-
-### Authentication
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - Login and get JWT token
-- `GET /api/auth/me` - Get current user info
-
-## Test Credentials
-
-After database setup, you can create test users:
-
-```bash
-# Admin user
-Email: admin@kln.edu.lk
-Password: admin123
-
-# Lecturer user
-Email: lecturer@kln.edu.lk
-Password: lecturer123
-
-# Student user
-Email: student@kln.edu.lk
-Password: student123
-```
-
-## Running the Application
-
-### Terminal 1 - Backend:
-```bash
-cd backend
-venv\Scripts\activate  # or source venv/bin/activate
-python main.py
-```
-
-### Terminal 2 - Frontend:
-```bash
-cd frontend
-npm start
-```
-
-Access the application at `http://localhost:3000`
-
-## Development
-
-### Adding New Routes (Backend)
-1. Create a new route file in `backend/app/routes/`
-2. Import and include the router in `app/main.py`
-
-### Adding New Pages (Frontend)
-1. Create a new component in `frontend/src/pages/`
-2. Add route in `frontend/src/App.js`
-
-## Environment Variables
-
-### Backend (.env)
-```
+```env
 DATABASE_URL=mysql+pymysql://user:password@localhost:3306/kln_timetable
-SECRET_KEY=your-secret-key-for-jwt
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
+RESET_DB=false
 ```
 
-### Frontend (.env)
-```
-REACT_APP_API_URL=http://localhost:8000
-```
-
-## Git Workflow
-
-- **Main Branch**: Production-ready code (Admin only)
-- **Dev Branch**: Development branch for all developers
-- **Feature Branches**: Create from dev for new features
+Run:
 
 ```bash
-# Create feature branch
-git checkout -b feature/feature-name
-
-# Commit changes
-git add .
-git commit -m "Add feature description"
-
-# Push to dev
-git push origin dev
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python main.py
 ```
 
-## Troubleshooting
+Backend runs on `http://localhost:8000` by default.
 
-### MySQL Connection Error
-- Verify MySQL service is running
-- Check DATABASE_URL in .env matches your MySQL setup
-- Ensure database exists: `CREATE DATABASE kln_timetable;`
+### Frontend
 
-### CORS Error
-- Backend CORS is configured to accept all origins
-- For production, update CORS origins in `backend/app/main.py`
+Requirements:
 
-### Port Already in Use
-- Backend: Change port in `main.py` (default 8000)
-- Frontend: Change port in package.json (default 3000)
+- Node.js 18+
 
-## Support
+Run:
 
-For issues or questions, contact the development team or create an issue in the repository.
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-## License
+Frontend runs through Vite.
 
-© 2026 Faculty of Science, University of Kelaniya
+## Desktop Launcher
+
+A repo-local desktop launcher GUI is available at [launcher_gui.py](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/launcher_gui.py).
+
+Run it from the repo root:
+
+```bash
+.venv/bin/python launcher_gui.py
+```
+
+For a non-technical Linux user, use one of these instead:
+
+- double-click [Launch KLN Timetable.sh](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/Launch%20KLN%20Timetable.sh)
+- or place [kln-timetable-launcher.desktop](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/kln-timetable-launcher.desktop) on the desktop/app launcher and run it like a normal Linux app
+
+The launcher can:
+
+- start the repo-local MariaDB, backend, and frontend together
+- stop them cleanly
+- restart the full stack
+- show separate backend and frontend log panes
+- copy backend and frontend logs independently
+
+Cleanup behavior is safe by default:
+
+- stops repo-local launcher-managed services
+- clears stale MariaDB pid/socket state when no live DB process owns it
+- reports external port conflicts instead of killing unrelated processes
+
+## Verification
+
+Backend:
+
+```bash
+python -m compileall backend/app
+.venv/bin/python -m unittest backend.tests.test_timetable_v2
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm test
+npm run build
+```
+
+## Test Coverage
+
+Backend regression coverage currently includes:
+
+- infeasibility diagnostics
+- internal cohort splitting
+- parallel-room scheduling success and failure
+- truncation behavior
+- default solution switching
+- degree/path student filtering
+- soft-constraint fallback behavior
+- CSV and XLS export payload shaping
+
+Frontend coverage currently includes:
+
+- setup wizard hydration, validation, and save shaping
+- generation request and threshold messaging
+- student view filtering
+- export path selection and local export payload shaping
+
+## Known Limits
+
+- Export tests validate branching and payload shaping, not binary document fidelity.
+- PDF and PNG exports are generated client-side, so document rendering depends on browser capabilities.
+- XLS backend export still exists only as a basic tabular payload for API completeness; the active UI downloads real `.xlsx` files client-side.
+- The solver supports internal splitting and same-time parallel-room sessions, but very specialized teaching patterns may still need future extension.
+
+## Branch
+
+Current development branch for the rebuild:
+
+- `feature/v2-timetable-rebuild`

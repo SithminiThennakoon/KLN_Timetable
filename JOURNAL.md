@@ -19,3 +19,10 @@
 ## 23:58
 
 - Created feature branch `feature/v2-timetable-rebuild` for the complete v2 timetable system rebuild
+
+## 2026-03-07T01:35:00+05:30
+
+- Added backend and frontend automated coverage for the active v2 export flows, including local PDF/XLSX/PNG branching and backend CSV/XLS payload checks
+- Removed inactive legacy frontend pages, styles, services, and alternate entry files, keeping only the v2 studio flow and its minimal API client
+- Removed inactive legacy backend routes, schemas, models, old solver code, auth/security remnants, and the old timeslot startup seeding path
+- Updated README files so the repository documentation now matches the active v2 timetable product and current verification commands

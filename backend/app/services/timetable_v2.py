@@ -5,13 +5,17 @@ import csv
 import io
 import itertools
 import json
+import os
+import time
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Iterable
 
 from ortools.sat.python import cp_model
+from sqlalchemy import insert
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.database import engine
 from app.models.v2 import (
     V2Degree,
     V2GenerationRun,
@@ -25,6 +29,9 @@ from app.models.v2 import (
     V2TimetableSolution,
 )
 from app.schemas.v2 import ExportResponse, SoftConstraintOption
+from app.services.enrollment_inference import (
+    build_realistic_demo_dataset_from_enrollment_csv,
+)
 
 DAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 DAY_INDEX = {day: idx for idx, day in enumerate(DAY_ORDER)}
@@ -37,7 +44,60 @@ SOFT_CONSTRAINTS = {
         key="spread_sessions_across_days",
         label="Spread repeated sessions across different days",
         description="Modules with multiple weekly sessions should be spread across different days when possible.",
-    )
+    ),
+    "prefer_morning_theory": SoftConstraintOption(
+        key="prefer_morning_theory",
+        label="Keep theory sessions in the morning",
+        description="Prefer lectures and tutorials to finish before lunch when possible.",
+    ),
+    "prefer_afternoon_practicals": SoftConstraintOption(
+        key="prefer_afternoon_practicals",
+        label="Keep practicals in the afternoon",
+        description="Prefer practical and lab sessions to start after lunch so morning halls stay free for theory.",
+    ),
+    "avoid_late_afternoon_starts": SoftConstraintOption(
+        key="avoid_late_afternoon_starts",
+        label="Avoid late-afternoon starts",
+        description="Prefer sessions to start by 3:00 PM so the timetable does not bunch up near the end of the day.",
+    ),
+    "avoid_friday_sessions": SoftConstraintOption(
+        key="avoid_friday_sessions",
+        label="Avoid Friday sessions",
+        description="Prefer teaching to stay within Monday to Thursday when possible so Friday remains lighter.",
+    ),
+    "prefer_standard_block_starts": SoftConstraintOption(
+        key="prefer_standard_block_starts",
+        label="Use standard block starts",
+        description="Prefer sessions to begin on the faculty's common block boundaries instead of arbitrary half-hour placements.",
+    ),
+    "balance_teaching_load_across_week": SoftConstraintOption(
+        key="balance_teaching_load_across_week",
+        label="Balance teaching load across the week",
+        description="Prefer the weekly teaching load to stay spread across weekdays instead of bunching heavily at the start.",
+    ),
+    "avoid_monday_overload": SoftConstraintOption(
+        key="avoid_monday_overload",
+        label="Avoid Monday overload",
+        description="Prefer Monday to carry no more scheduled teaching events than the other weekdays.",
+    ),
+}
+
+PERFORMANCE_PRESETS = {
+    "balanced": {
+        "fallback_combo_limit": 10,
+        "fallback_time_limit_seconds": 8,
+        "probe_num_workers": max(1, min((os.cpu_count() or 1) - 1, 4)),
+    },
+    "thorough": {
+        "fallback_combo_limit": 20,
+        "fallback_time_limit_seconds": 15,
+        "probe_num_workers": max(1, min(os.cpu_count() or 1, 6)),
+    },
+    "fast_diagnostics": {
+        "fallback_combo_limit": 6,
+        "fallback_time_limit_seconds": 5,
+        "probe_num_workers": max(1, min((os.cpu_count() or 1) - 1, 3)),
+    },
 }
 
 
@@ -46,12 +106,14 @@ class SplitAssignment:
     split_index: int
     student_group_ids: tuple[int, ...]
     student_count: int
+    fragments: tuple[tuple[int, int, str], ...]
 
 
 @dataclass(frozen=True)
 class SessionTask:
     session_id: int
     session_name: str
+    session_type: str
     module_id: int
     module_code: str
     module_name: str
@@ -65,10 +127,51 @@ class SessionTask:
     student_group_ids: tuple[int, ...]
     student_count: int
     root_session_id: int
+    bundle_key: tuple[int, int] | None
+
+
+@dataclass(frozen=True)
+class SolveProfile:
+    performance_preset: str
+    fallback_combo_limit: int
+    fallback_time_limit_seconds: int
+    probe_num_workers: int
+    fallback_combo_count_cap: int
+
+
+def _partition_lecturers(
+    lecturer_ids: tuple[int, ...], chunk_count: int
+) -> list[tuple[int, ...]]:
+    if chunk_count <= 0:
+        return []
+    if not lecturer_ids:
+        return [tuple() for _ in range(chunk_count)]
+    if len(lecturer_ids) < chunk_count:
+        raise ValueError(
+            "Parallel-room sessions need at least one lecturer per room assignment."
+        )
+
+    assignments: list[list[int]] = [[] for _ in range(chunk_count)]
+    for index, lecturer_id in enumerate(lecturer_ids):
+        assignments[index % chunk_count].append(lecturer_id)
+    return [tuple(items) for items in assignments]
 
 
 def list_soft_constraint_options() -> list[SoftConstraintOption]:
     return list(SOFT_CONSTRAINTS.values())
+
+
+def _resolve_solve_profile(performance_preset: str) -> SolveProfile:
+    config = PERFORMANCE_PRESETS.get(performance_preset, PERFORMANCE_PRESETS["balanced"])
+    return SolveProfile(
+        performance_preset=performance_preset
+        if performance_preset in PERFORMANCE_PRESETS
+        else "balanced",
+        fallback_combo_limit=int(config["fallback_combo_limit"]),
+        fallback_time_limit_seconds=int(config["fallback_time_limit_seconds"]),
+        probe_num_workers=int(config["probe_num_workers"]),
+        fallback_combo_count_cap=101,
+    )
 
 
 def _is_timeslot_valid(start_minute: int, duration_minutes: int) -> bool:
@@ -84,7 +187,12 @@ def _build_split_assignments(session: V2Session) -> list[SplitAssignment]:
     groups = sorted(session.student_groups, key=lambda item: item.id)
     if not groups:
         return [
-            SplitAssignment(split_index=1, student_group_ids=tuple(), student_count=0)
+            SplitAssignment(
+                split_index=1,
+                student_group_ids=tuple(),
+                student_count=0,
+                fragments=tuple(),
+            )
         ]
 
     total = sum(int(group.size) for group in groups)
@@ -95,35 +203,70 @@ def _build_split_assignments(session: V2Session) -> list[SplitAssignment]:
                 split_index=1,
                 student_group_ids=tuple(int(group.id) for group in groups),
                 student_count=total,
+                fragments=tuple(
+                    (int(group.id), int(group.size), group.name) for group in groups
+                ),
             )
         ]
 
     assignments: list[SplitAssignment] = []
-    current_ids: list[int] = []
+    current_ids: set[int] = set()
+    current_fragments: list[tuple[int, int, str]] = []
     current_total = 0
     split_index = 1
     for group in groups:
-        size = int(group.size)
-        if current_ids and current_total + size > limit:
-            assignments.append(
-                SplitAssignment(
-                    split_index=split_index,
-                    student_group_ids=tuple(current_ids),
-                    student_count=current_total,
+        remaining = int(group.size)
+        part_index = 1
+        while remaining > 0:
+            available = limit - current_total
+            if current_total > 0 and available == 0:
+                assignments.append(
+                    SplitAssignment(
+                        split_index=split_index,
+                        student_group_ids=tuple(sorted(current_ids)),
+                        student_count=current_total,
+                        fragments=tuple(current_fragments),
+                    )
                 )
-            )
-            split_index += 1
-            current_ids = []
-            current_total = 0
-        current_ids.append(int(group.id))
-        current_total += size
+                split_index += 1
+                current_ids = set()
+                current_fragments = []
+                current_total = 0
+                available = limit
 
-    if current_ids:
+            fragment_size = min(remaining, available)
+            fragment_label = (
+                group.name
+                if fragment_size == int(group.size) and part_index == 1
+                else f"{group.name} (Part {part_index})"
+            )
+            current_ids.add(int(group.id))
+            current_fragments.append((int(group.id), fragment_size, fragment_label))
+            current_total += fragment_size
+            remaining -= fragment_size
+            part_index += 1
+
+            if current_total >= limit:
+                assignments.append(
+                    SplitAssignment(
+                        split_index=split_index,
+                        student_group_ids=tuple(sorted(current_ids)),
+                        student_count=current_total,
+                        fragments=tuple(current_fragments),
+                    )
+                )
+                split_index += 1
+                current_ids = set()
+                current_fragments = []
+                current_total = 0
+
+    if current_fragments:
         assignments.append(
             SplitAssignment(
                 split_index=split_index,
-                student_group_ids=tuple(current_ids),
+                student_group_ids=tuple(sorted(current_ids)),
                 student_count=current_total,
+                fragments=tuple(current_fragments),
             )
         )
     return assignments
@@ -146,12 +289,20 @@ def _build_tasks(db: Session) -> list[SessionTask]:
     for session in sessions:
         lecturer_ids = tuple(sorted(int(item.id) for item in session.lecturers))
         split_assignments = _build_split_assignments(session)
+        lecturer_chunks = (
+            _partition_lecturers(lecturer_ids, len(split_assignments))
+            if session.allow_parallel_rooms
+            else [lecturer_ids for _ in split_assignments]
+        )
         for occurrence_index in range(1, int(session.occurrences_per_week) + 1):
-            for split in split_assignments:
+            for split, assigned_lecturers in zip(
+                split_assignments, lecturer_chunks, strict=True
+            ):
                 tasks.append(
                     SessionTask(
                         session_id=int(session.id),
                         session_name=session.name,
+                        session_type=session.session_type,
                         module_id=int(session.module_id),
                         module_code=session.module.code,
                         module_name=session.module.name,
@@ -163,13 +314,46 @@ def _build_tasks(db: Session) -> list[SessionTask]:
                         specific_room_id=int(session.specific_room_id)
                         if session.specific_room_id
                         else None,
-                        lecturer_ids=lecturer_ids,
+                        lecturer_ids=assigned_lecturers,
                         student_group_ids=split.student_group_ids,
                         student_count=split.student_count,
                         root_session_id=int(session.id),
+                        bundle_key=(int(session.id), occurrence_index)
+                        if session.allow_parallel_rooms and len(split_assignments) > 1
+                        else None,
                     )
                 )
     return tasks
+
+
+def _session_modules(session: V2Session) -> list[V2Module]:
+    ordered: list[V2Module] = []
+    seen: set[int] = set()
+    primary_id = int(session.module_id)
+    if session.module is not None:
+        ordered.append(session.module)
+        seen.add(primary_id)
+    for module in sorted(session.linked_modules, key=lambda item: int(item.id)):
+        module_id = int(module.id)
+        if module_id in seen:
+            continue
+        ordered.append(module)
+        seen.add(module_id)
+    return ordered
+
+
+def _format_session_module_code(session: V2Session) -> str:
+    modules = _session_modules(session)
+    if not modules:
+        return session.module.code
+    return " / ".join(module.code for module in modules)
+
+
+def _format_session_module_name(session: V2Session) -> str:
+    modules = _session_modules(session)
+    if not modules:
+        return session.module.name
+    return " / ".join(module.name for module in modules)
 
 
 def _room_matches(room: V2Room, task: SessionTask) -> bool:
@@ -186,6 +370,14 @@ def _room_matches(room: V2Room, task: SessionTask) -> bool:
 
 def _candidate_starts(task: SessionTask) -> list[tuple[str, int]]:
     starts: list[tuple[str, int]] = []
+    if _is_lab_task(task):
+        if task.duration_minutes != 180:
+            return starts
+        for day in DAY_ORDER:
+            for minute in (9 * 60, 13 * 60):
+                if _is_timeslot_valid(minute, task.duration_minutes):
+                    starts.append((day, minute))
+        return starts
     for day in DAY_ORDER:
         minute = START_MINUTE
         while minute + task.duration_minutes <= END_MINUTE:
@@ -193,6 +385,64 @@ def _candidate_starts(task: SessionTask) -> list[tuple[str, int]]:
                 starts.append((day, minute))
             minute += 30
     return starts
+
+
+def _is_theory_task(task: SessionTask) -> bool:
+    session_type = (task.session_type or "").lower()
+    return session_type in {"lecture", "tutorial", "seminar"}
+
+
+def _is_practical_task(task: SessionTask) -> bool:
+    session_type = (task.session_type or "").lower()
+    if session_type in {"practical", "lab", "laboratory"}:
+        return True
+    return bool(task.required_lab_type) or task.required_room_type == "lab"
+
+
+def _is_lab_task(task: SessionTask) -> bool:
+    session_type = (task.session_type or "").lower()
+    return (
+        session_type in {"lab", "laboratory"}
+        or bool(task.required_lab_type)
+        or task.required_room_type == "lab"
+    )
+
+
+def _soft_constraint_allows_start(
+    task: SessionTask, day: str, start_minute: int, selected_soft_constraints: list[str]
+) -> bool:
+    end_minute = start_minute + task.duration_minutes
+    if (
+        "avoid_friday_sessions" in selected_soft_constraints
+        and day == "Friday"
+        and _is_theory_task(task)
+    ):
+        return False
+    if "prefer_standard_block_starts" in selected_soft_constraints:
+        if task.duration_minutes >= 180 and start_minute not in {9 * 60, 13 * 60}:
+            return False
+        if task.duration_minutes == 120 and start_minute not in {8 * 60, 10 * 60, 13 * 60}:
+            return False
+        if task.duration_minutes == 90 and start_minute not in {8 * 60, 13 * 60}:
+            return False
+        if task.duration_minutes == 60 and start_minute not in {8 * 60, 10 * 60, 13 * 60, 15 * 60}:
+            return False
+    if "prefer_morning_theory" in selected_soft_constraints and _is_theory_task(task):
+        if end_minute > LUNCH_START:
+            return False
+    if (
+        "prefer_afternoon_practicals" in selected_soft_constraints
+        and _is_practical_task(task)
+    ):
+        if task.duration_minutes >= 180:
+            return start_minute == LUNCH_END
+        if task.duration_minutes >= 120:
+            return start_minute in {LUNCH_END, 14 * 60}
+        if start_minute < LUNCH_END:
+            return False
+    if "avoid_late_afternoon_starts" in selected_soft_constraints and start_minute > 14 * 60:
+        return False
+    return True
 
 
 def _overlap(start_a: int, duration_a: int, start_b: int, duration_b: int) -> bool:
@@ -204,10 +454,102 @@ def _overlap(start_a: int, duration_a: int, start_b: int, duration_b: int) -> bo
 def _all_soft_constraint_combinations() -> list[list[str]]:
     keys = sorted(SOFT_CONSTRAINTS.keys())
     combinations: list[list[str]] = []
-    for length in range(1, len(keys) + 1):
+    for length in range(len(keys), 0, -1):
         for combo in itertools.combinations(keys, length):
             combinations.append(list(combo))
     return combinations
+
+
+def _selected_soft_constraint_subsets(selected_soft_constraints: Iterable[str]) -> list[list[str]]:
+    keys = sorted({key for key in selected_soft_constraints if key in SOFT_CONSTRAINTS})
+    combinations: list[list[str]] = []
+    for length in range(len(keys) - 1, 0, -1):
+        for combo in itertools.combinations(keys, length):
+            combinations.append(list(combo))
+    return combinations
+
+
+def _sorted_soft_constraint_combinations(combinations: list[list[str]]) -> list[list[str]]:
+    return sorted(
+        combinations,
+        key=lambda combo: (-len(combo), ",".join(combo)),
+    )
+
+
+def _format_diagnostic_message(summary: str, issues: list[str]) -> str:
+    if not issues:
+        return summary
+    lines = [summary, "", "Diagnostics:"]
+    lines.extend(f"- {issue}" for issue in issues[:8])
+    if len(issues) > 8:
+        lines.append(f"- ...and {len(issues) - 8} more issue(s)")
+    return "\n".join(lines)
+
+
+def _precheck_diagnostics(
+    tasks: list[SessionTask],
+    sessions: list[V2Session],
+    rooms: list[V2Room],
+) -> list[str]:
+    issues: list[str] = []
+    room_lookup = {int(room.id): room for room in rooms}
+    session_lookup = {int(session.id): session for session in sessions}
+
+    if not rooms:
+        issues.append("No rooms are available in the current dataset.")
+        return issues
+
+    tasks_by_bundle: dict[tuple[int, int], list[SessionTask]] = defaultdict(list)
+
+    for task in tasks:
+        session = session_lookup.get(task.session_id)
+        if _is_lab_task(task) and task.duration_minutes != 180:
+            issues.append(
+                f"{task.module_code} / {task.session_name} must be scheduled as one 3-hour lab block (180 minutes)."
+            )
+            continue
+        matching_rooms = [room for room in rooms if _room_matches(room, task)]
+        if not matching_rooms:
+            issue = (
+                f'{task.module_code} / {task.session_name} has no room that can host '
+                f"split {task.split_index} with {task.student_count} students"
+            )
+            if task.specific_room_id:
+                room = room_lookup.get(task.specific_room_id)
+                room_name = room.name if room else f"room #{task.specific_room_id}"
+                issue += f" in required room {room_name}"
+            elif task.required_lab_type:
+                issue += f" requiring lab type {task.required_lab_type}"
+            elif task.required_room_type:
+                issue += f" requiring room type {task.required_room_type}"
+            issues.append(issue + ".")
+            continue
+
+        if task.bundle_key is not None:
+            tasks_by_bundle[task.bundle_key].append(task)
+
+        if session and session.allow_parallel_rooms and len(task.lecturer_ids) == 0:
+            issues.append(
+                f"{task.module_code} / {task.session_name} is marked for parallel rooms but has no lecturer assigned to split {task.split_index}."
+            )
+
+    for bundle_key, bundle_tasks in tasks_by_bundle.items():
+        shared_slots: set[tuple[str, int]] | None = None
+        for task in bundle_tasks:
+            task_slots = {
+                (day, start_minute)
+                for day, start_minute in _candidate_starts(task)
+                for room in rooms
+                if _room_matches(room, task)
+            }
+            shared_slots = task_slots if shared_slots is None else shared_slots & task_slots
+        if not shared_slots:
+            sample = bundle_tasks[0]
+            issues.append(
+                f"{sample.module_code} / {sample.session_name} cannot place all same-time parallel room parts into a shared slot for occurrence {sample.occurrence_index}."
+            )
+
+    return issues
 
 
 class _SolutionCollector(cp_model.CpSolverSolutionCallback):
@@ -238,9 +580,55 @@ def _solve_internal(
     selected_soft_constraints: list[str],
     max_solutions: int,
     time_limit_seconds: int,
+    *,
+    enumerate_all_solutions: bool = True,
+    num_search_workers: int = 1,
 ) -> dict:
-    tasks = _build_tasks(db)
+    started_at = time.perf_counter()
+    precheck_ms = 0
+    model_build_ms = 0
+    solve_ms = 0
+
+    sessions = (
+        db.query(V2Session)
+        .options(
+            joinedload(V2Session.module),
+            joinedload(V2Session.linked_modules),
+            joinedload(V2Session.lecturers),
+            joinedload(V2Session.student_groups).joinedload(V2StudentGroup.degree),
+            joinedload(V2Session.student_groups).joinedload(V2StudentGroup.path),
+        )
+        .order_by(V2Session.id)
+        .all()
+    )
     rooms = db.query(V2Room).order_by(V2Room.id).all()
+    try:
+        tasks = _build_tasks(db)
+    except ValueError as exc:
+        return {
+            "status": "infeasible",
+            "message": str(exc),
+            "solutions": [],
+            "truncated": False,
+            "tasks": [],
+            "timing": {
+                "precheck_ms": precheck_ms,
+                "model_build_ms": model_build_ms,
+                "solve_ms": solve_ms,
+                "fallback_search_ms": 0,
+                "total_ms": int((time.perf_counter() - started_at) * 1000),
+            },
+            "stats": {
+                "task_count": 0,
+                "assignment_variable_count": 0,
+                "candidate_option_count": 0,
+                "feasible_combo_count": 0,
+                "fallback_combo_evaluated_count": 0,
+                "fallback_combo_truncated": False,
+                "exact_enumeration_single_worker": enumerate_all_solutions,
+                "machine_cpu_count": os.cpu_count() or 1,
+            },
+        }
     if not tasks:
         return {
             "status": "empty",
@@ -248,6 +636,23 @@ def _solve_internal(
             "solutions": [],
             "truncated": False,
             "tasks": tasks,
+            "timing": {
+                "precheck_ms": precheck_ms,
+                "model_build_ms": model_build_ms,
+                "solve_ms": solve_ms,
+                "fallback_search_ms": 0,
+                "total_ms": int((time.perf_counter() - started_at) * 1000),
+            },
+            "stats": {
+                "task_count": len(tasks),
+                "assignment_variable_count": 0,
+                "candidate_option_count": 0,
+                "feasible_combo_count": 0,
+                "fallback_combo_evaluated_count": 0,
+                "fallback_combo_truncated": False,
+                "exact_enumeration_single_worker": enumerate_all_solutions,
+                "machine_cpu_count": os.cpu_count() or 1,
+            },
         }
     if not rooms:
         return {
@@ -256,8 +661,58 @@ def _solve_internal(
             "solutions": [],
             "truncated": False,
             "tasks": tasks,
+            "timing": {
+                "precheck_ms": precheck_ms,
+                "model_build_ms": model_build_ms,
+                "solve_ms": solve_ms,
+                "fallback_search_ms": 0,
+                "total_ms": int((time.perf_counter() - started_at) * 1000),
+            },
+            "stats": {
+                "task_count": len(tasks),
+                "assignment_variable_count": 0,
+                "candidate_option_count": 0,
+                "feasible_combo_count": 0,
+                "fallback_combo_evaluated_count": 0,
+                "fallback_combo_truncated": False,
+                "exact_enumeration_single_worker": enumerate_all_solutions,
+                "machine_cpu_count": os.cpu_count() or 1,
+            },
         }
 
+    precheck_started_at = time.perf_counter()
+    diagnostics = _precheck_diagnostics(tasks, sessions, rooms)
+    precheck_ms = int((time.perf_counter() - precheck_started_at) * 1000)
+    if diagnostics:
+        return {
+            "status": "infeasible",
+            "message": _format_diagnostic_message(
+                "No possible timetables satisfy the current hard constraints.",
+                diagnostics,
+            ),
+            "solutions": [],
+            "truncated": False,
+            "tasks": tasks,
+            "timing": {
+                "precheck_ms": precheck_ms,
+                "model_build_ms": model_build_ms,
+                "solve_ms": solve_ms,
+                "fallback_search_ms": 0,
+                "total_ms": int((time.perf_counter() - started_at) * 1000),
+            },
+            "stats": {
+                "task_count": len(tasks),
+                "assignment_variable_count": 0,
+                "candidate_option_count": 0,
+                "feasible_combo_count": 0,
+                "fallback_combo_evaluated_count": 0,
+                "fallback_combo_truncated": False,
+                "exact_enumeration_single_worker": enumerate_all_solutions,
+                "machine_cpu_count": os.cpu_count() or 1,
+            },
+        }
+
+    model_build_started_at = time.perf_counter()
     model = cp_model.CpModel()
     assignment_vars: dict[tuple[int, int, str, int], cp_model.IntVar] = {}
     room_lookup = {int(room.id): room for room in rooms}
@@ -265,7 +720,13 @@ def _solve_internal(
 
     candidates_by_task: dict[int, list[tuple[int, str, int]]] = defaultdict(list)
     for task_index, task in enumerate(tasks):
-        starts = _candidate_starts(task)
+        starts = [
+            (day, start_minute)
+            for day, start_minute in _candidate_starts(task)
+            if _soft_constraint_allows_start(
+                task, day, start_minute, selected_soft_constraints
+            )
+        ]
         for room_id in room_ids:
             room = room_lookup[room_id]
             if not _room_matches(room, task):
@@ -286,14 +747,126 @@ def _solve_internal(
             "solutions": [],
             "truncated": False,
             "tasks": tasks,
+            "timing": {
+                "precheck_ms": precheck_ms,
+                "model_build_ms": int((time.perf_counter() - model_build_started_at) * 1000),
+                "solve_ms": solve_ms,
+                "fallback_search_ms": 0,
+                "total_ms": int((time.perf_counter() - started_at) * 1000),
+            },
+            "stats": {
+                "task_count": len(tasks),
+                "assignment_variable_count": len(assignment_vars),
+                "candidate_option_count": sum(
+                    len(candidates) for candidates in candidates_by_task.values()
+                ),
+                "feasible_combo_count": 0,
+                "fallback_combo_evaluated_count": 0,
+                "fallback_combo_truncated": False,
+                "exact_enumeration_single_worker": enumerate_all_solutions,
+                "machine_cpu_count": os.cpu_count() or 1,
+            },
         }
 
     for task_index in range(len(tasks)):
+        if tasks[task_index].bundle_key is not None:
+            continue
         vars_for_task = [
             assignment_vars[(task_index, room_id, day, start_minute)]
             for room_id, day, start_minute in candidates_by_task[task_index]
         ]
         model.Add(sum(vars_for_task) == 1)
+
+    bundle_tasks: dict[tuple[int, int], list[int]] = defaultdict(list)
+    for task_index, task in enumerate(tasks):
+        if task.bundle_key is not None:
+            bundle_tasks[task.bundle_key].append(task_index)
+
+    bundle_slot_vars: dict[tuple[tuple[int, int], str, int], cp_model.IntVar] = {}
+    for bundle_key, task_indexes in bundle_tasks.items():
+        shared_slots: set[tuple[str, int]] | None = None
+        for task_index in task_indexes:
+            task_slots = {
+                (day, start_minute)
+                for _, day, start_minute in candidates_by_task[task_index]
+            }
+            shared_slots = task_slots if shared_slots is None else shared_slots & task_slots
+
+        if not shared_slots:
+            return {
+                "status": "infeasible",
+                "message": "Some parallel-room sessions have no shared time options across required rooms.",
+                "solutions": [],
+                "truncated": False,
+                "tasks": tasks,
+                "timing": {
+                    "precheck_ms": precheck_ms,
+                    "model_build_ms": int((time.perf_counter() - model_build_started_at) * 1000),
+                    "solve_ms": solve_ms,
+                    "fallback_search_ms": 0,
+                    "total_ms": int((time.perf_counter() - started_at) * 1000),
+                },
+                "stats": {
+                    "task_count": len(tasks),
+                    "assignment_variable_count": len(assignment_vars),
+                    "candidate_option_count": sum(
+                        len(candidates) for candidates in candidates_by_task.values()
+                    ),
+                    "feasible_combo_count": 0,
+                    "fallback_combo_evaluated_count": 0,
+                    "fallback_combo_truncated": False,
+                    "exact_enumeration_single_worker": enumerate_all_solutions,
+                    "machine_cpu_count": os.cpu_count() or 1,
+                },
+            }
+
+        shared_slot_vars = []
+        for day, start_minute in sorted(shared_slots, key=lambda item: (DAY_INDEX[item[0]], item[1])):
+            slot_var = model.NewBoolVar(
+                f"bundle_{bundle_key[0]}_{bundle_key[1]}_{day}_{start_minute}"
+            )
+            bundle_slot_vars[(bundle_key, day, start_minute)] = slot_var
+            shared_slot_vars.append(slot_var)
+        model.Add(sum(shared_slot_vars) == 1)
+
+        for task_index in task_indexes:
+            vars_for_task = []
+            for day, start_minute in sorted(shared_slots, key=lambda item: (DAY_INDEX[item[0]], item[1])):
+                matching_room_vars = [
+                    assignment_vars[(task_index, room_id, candidate_day, candidate_start)]
+                    for room_id, candidate_day, candidate_start in candidates_by_task[task_index]
+                    if candidate_day == day and candidate_start == start_minute
+                ]
+                if not matching_room_vars:
+                    return {
+                        "status": "infeasible",
+                        "message": "A parallel-room session could not be aligned to the same time across all room assignments.",
+                        "solutions": [],
+                        "truncated": False,
+                        "tasks": tasks,
+                        "timing": {
+                            "precheck_ms": precheck_ms,
+                            "model_build_ms": int((time.perf_counter() - model_build_started_at) * 1000),
+                            "solve_ms": solve_ms,
+                            "fallback_search_ms": 0,
+                            "total_ms": int((time.perf_counter() - started_at) * 1000),
+                        },
+                        "stats": {
+                            "task_count": len(tasks),
+                            "assignment_variable_count": len(assignment_vars),
+                            "candidate_option_count": sum(
+                                len(candidates) for candidates in candidates_by_task.values()
+                            ),
+                            "feasible_combo_count": 0,
+                            "fallback_combo_evaluated_count": 0,
+                            "fallback_combo_truncated": False,
+                            "exact_enumeration_single_worker": enumerate_all_solutions,
+                            "machine_cpu_count": os.cpu_count() or 1,
+                        },
+                    }
+                model.Add(sum(matching_room_vars) == bundle_slot_vars[(bundle_key, day, start_minute)])
+                vars_for_task.extend(matching_room_vars)
+            model.Add(sum(vars_for_task) == 1)
 
     for room_id in room_ids:
         for day in DAY_ORDER:
@@ -319,7 +892,7 @@ def _solve_internal(
     for day in DAY_ORDER:
         for minute in range(START_MINUTE, END_MINUTE, 30):
             lecturer_blockers: dict[int, list[cp_model.IntVar]] = defaultdict(list)
-            student_blockers: dict[int, list[cp_model.IntVar]] = defaultdict(list)
+            student_blockers: dict[int, list[tuple[cp_model.IntVar, SessionTask]]] = defaultdict(list)
             for task_index, task in enumerate(tasks):
                 for room_id, candidate_day, candidate_start in candidates_by_task[
                     task_index
@@ -334,43 +907,115 @@ def _solve_internal(
                     for lecturer_id in task.lecturer_ids:
                         lecturer_blockers[lecturer_id].append(var)
                     for student_group_id in task.student_group_ids:
-                        student_blockers[student_group_id].append(var)
+                        student_blockers[student_group_id].append((var, task))
             for vars_for_lecturer in lecturer_blockers.values():
                 if vars_for_lecturer:
                     model.Add(sum(vars_for_lecturer) <= 1)
-            for vars_for_group in student_blockers.values():
-                if vars_for_group:
-                    model.Add(sum(vars_for_group) <= 1)
+            for blockers_for_group in student_blockers.values():
+                for left_index in range(len(blockers_for_group)):
+                    left_var, left_task = blockers_for_group[left_index]
+                    for right_index in range(left_index + 1, len(blockers_for_group)):
+                        right_var, right_task = blockers_for_group[right_index]
+                        if (
+                            left_task.bundle_key is not None
+                            and left_task.bundle_key == right_task.bundle_key
+                        ):
+                            continue
+                        model.Add(left_var + right_var <= 1)
+
+    occurrence_day_vars: dict[tuple[int, int], dict[str, list[cp_model.IntVar]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    for task_index, task in enumerate(tasks):
+        for room_id, day, start_minute in candidates_by_task[task_index]:
+            bundle_var = None
+            if task.bundle_key is not None:
+                bundle_var = bundle_slot_vars.get((task.bundle_key, day, start_minute))
+            occurrence_day_vars[(task.root_session_id, task.occurrence_index)][day].append(
+                bundle_var
+                if bundle_var is not None
+                else assignment_vars[(task_index, room_id, day, start_minute)]
+            )
+
+    occurrence_day_flags: dict[tuple[int, int], dict[str, cp_model.IntVar]] = defaultdict(dict)
+    grouped_by_root: dict[int, dict[int, dict[str, list[cp_model.IntVar]]]] = defaultdict(dict)
+    for (root_session_id, occurrence_index), by_day in occurrence_day_vars.items():
+        grouped_by_root[root_session_id][occurrence_index] = by_day
+        for day, vars_for_day in by_day.items():
+            unique_vars = list(dict.fromkeys(vars_for_day))
+            day_flag = model.NewBoolVar(
+                f"occ_{root_session_id}_{occurrence_index}_{day}"
+            )
+            model.AddMaxEquality(day_flag, unique_vars)
+            occurrence_day_flags[(root_session_id, occurrence_index)][day] = day_flag
 
     if "spread_sessions_across_days" in selected_soft_constraints:
-        grouped_occurrences: dict[int, dict[str, list[cp_model.IntVar]]] = defaultdict(
-            lambda: defaultdict(list)
-        )
-        for task_index, task in enumerate(tasks):
-            for room_id, day, start_minute in candidates_by_task[task_index]:
-                grouped_occurrences[task.root_session_id][day].append(
-                    assignment_vars[(task_index, room_id, day, start_minute)]
-                )
-        for root_session_id, by_day in grouped_occurrences.items():
-            tasks_for_root = [
-                task for task in tasks if task.root_session_id == root_session_id
-            ]
+        for root_session_id, occurrences in grouped_by_root.items():
+            tasks_for_root = [task for task in tasks if task.root_session_id == root_session_id]
             occurrence_count = max(
                 (task.occurrence_index for task in tasks_for_root), default=1
             )
             if occurrence_count <= 1:
                 continue
-            for vars_for_day in by_day.values():
-                if vars_for_day:
-                    model.Add(sum(vars_for_day) <= 1)
+            for day in DAY_ORDER:
+                day_flags = []
+                for occurrence_index in occurrences:
+                    day_flag = occurrence_day_flags[(root_session_id, occurrence_index)].get(day)
+                    if day_flag is not None:
+                        day_flags.append(day_flag)
+                if day_flags:
+                    model.Add(sum(day_flags) <= 1)
 
+    if (
+        "balance_teaching_load_across_week" in selected_soft_constraints
+        or "avoid_monday_overload" in selected_soft_constraints
+    ):
+        daily_load_vars: dict[str, cp_model.IntVar] = {}
+        all_occurrences = sorted(occurrence_day_flags.keys())
+        for day in DAY_ORDER:
+            day_flags = [
+                occurrence_day_flags[occurrence].get(day)
+                for occurrence in all_occurrences
+                if occurrence_day_flags[occurrence].get(day) is not None
+            ]
+            if day_flags:
+                load_var = model.NewIntVar(0, len(all_occurrences), f"daily_load_{day}")
+                model.Add(load_var == sum(day_flags))
+            else:
+                load_var = model.NewIntVar(0, 0, f"daily_load_{day}")
+            daily_load_vars[day] = load_var
+
+        if "balance_teaching_load_across_week" in selected_soft_constraints:
+            max_load = model.NewIntVar(0, len(all_occurrences), "max_daily_load")
+            min_load = model.NewIntVar(0, len(all_occurrences), "min_daily_load")
+            model.AddMaxEquality(max_load, list(daily_load_vars.values()))
+            model.AddMinEquality(min_load, list(daily_load_vars.values()))
+            model.Add(max_load - min_load <= 2)
+
+        if "avoid_monday_overload" in selected_soft_constraints:
+            monday_load = daily_load_vars["Monday"]
+            for day in DAY_ORDER[1:]:
+                model.Add(monday_load <= daily_load_vars[day] + 1)
+
+    model_build_ms = int((time.perf_counter() - model_build_started_at) * 1000)
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = float(time_limit_seconds)
-    solver.parameters.enumerate_all_solutions = True
-    solver.parameters.num_search_workers = 1
+    solver.parameters.enumerate_all_solutions = enumerate_all_solutions
+    solver.parameters.num_search_workers = max(1, int(num_search_workers))
 
     collector = _SolutionCollector(assignment_vars, max_solutions)
-    status = solver.SearchForAllSolutions(model, collector)
+    solve_started_at = time.perf_counter()
+    if enumerate_all_solutions:
+        status = solver.SearchForAllSolutions(model, collector)
+    else:
+        status = solver.Solve(model)
+        if status in {cp_model.OPTIMAL, cp_model.FEASIBLE}:
+            current: list[tuple[int, int, str, int]] = []
+            for key, var in assignment_vars.items():
+                if solver.Value(var):
+                    current.append(key)
+            collector.solutions.append(current)
+    solve_ms = int((time.perf_counter() - solve_started_at) * 1000)
 
     status_name = "feasible" if collector.solutions else "infeasible"
     if status == cp_model.OPTIMAL and collector.solutions:
@@ -380,7 +1025,14 @@ def _solve_internal(
 
     message = "Generated timetable solutions."
     if not collector.solutions:
-        message = "No possible timetables satisfy the selected constraints."
+        message = _format_diagnostic_message(
+            "No possible timetables satisfy the selected constraints.",
+            [
+                "Check whether high-frequency sessions are competing for the same lecturers, rooms, or cohorts.",
+                "Check whether split limits or specific-room requirements are too restrictive for the available rooms.",
+                "If you selected nice-to-have constraints, try generating once without them to confirm hard-constraint feasibility.",
+            ],
+        )
     elif collector.truncated:
         message = "Too many possible timetables to enumerate fully within the configured limit."
 
@@ -390,6 +1042,27 @@ def _solve_internal(
         "solutions": collector.solutions,
         "truncated": collector.truncated,
         "tasks": tasks,
+        "timing": {
+            "precheck_ms": precheck_ms,
+            "model_build_ms": model_build_ms,
+            "solve_ms": solve_ms,
+            "fallback_search_ms": 0,
+            "total_ms": int((time.perf_counter() - started_at) * 1000),
+        },
+        "stats": {
+            "task_count": len(tasks),
+            "assignment_variable_count": len(assignment_vars),
+            "candidate_option_count": sum(
+                len(candidates) for candidates in candidates_by_task.values()
+            ),
+            "feasible_combo_count": 0,
+            "fallback_combo_evaluated_count": 0,
+            "fallback_combo_truncated": False,
+            "exact_enumeration_single_worker": bool(
+                enumerate_all_solutions and max(1, int(num_search_workers)) == 1
+            ),
+            "machine_cpu_count": os.cpu_count() or 1,
+        },
     }
 
 
@@ -413,10 +1086,17 @@ def generate_timetables(
     max_solutions: int,
     preview_limit: int,
     time_limit_seconds: int,
+    performance_preset: str = "balanced",
 ) -> V2GenerationRun:
     selected_soft_constraints = list(selected_soft_constraints)
+    solve_profile = _resolve_solve_profile(performance_preset)
     result = _solve_internal(
-        db, selected_soft_constraints, max_solutions, time_limit_seconds
+        db,
+        selected_soft_constraints,
+        max_solutions,
+        time_limit_seconds,
+        enumerate_all_solutions=True,
+        num_search_workers=1,
     )
 
     run = V2GenerationRun(
@@ -433,6 +1113,7 @@ def generate_timetables(
 
     room_lookup = {int(room.id): room for room in db.query(V2Room).all()}
     tasks: list[SessionTask] = result["tasks"]
+    solution_entry_rows: list[dict] = []
     for ordinal, solution in enumerate(result["solutions"][:preview_limit], start=1):
         solution_row = V2TimetableSolution(
             generation_run_id=int(run.id),
@@ -448,35 +1129,90 @@ def generate_timetables(
             entry = _entry_from_assignment(
                 task, room_lookup[room_id], day, start_minute
             )
-            db.add(
-                V2SolutionEntry(
-                    solution_id=int(solution_row.id),
-                    session_id=entry["session_id"],
-                    occurrence_index=entry["occurrence_index"],
-                    split_index=entry["split_index"],
-                    room_id=entry["room_id"],
-                    day=entry["day"],
-                    start_minute=entry["start_minute"],
-                    duration_minutes=entry["duration_minutes"],
-                )
+            solution_entry_rows.append(
+                {
+                    "solution_id": int(solution_row.id),
+                    "session_id": entry["session_id"],
+                    "occurrence_index": entry["occurrence_index"],
+                    "split_index": entry["split_index"],
+                    "room_id": entry["room_id"],
+                    "day": entry["day"],
+                    "start_minute": entry["start_minute"],
+                    "duration_minutes": entry["duration_minutes"],
+                }
             )
 
+    fallback_started_at = time.perf_counter()
+    possible_combinations: list[dict] = []
+    fallback_combo_evaluated_count = 0
+    fallback_combo_truncated = False
     if result["status"] == "infeasible" and selected_soft_constraints:
-        possible_combinations = []
-        for combo in _all_soft_constraint_combinations():
-            combo_result = _solve_internal(db, combo, 1, min(time_limit_seconds, 15))
+        for combo in _selected_soft_constraint_subsets(selected_soft_constraints):
+            if len(possible_combinations) >= solve_profile.fallback_combo_limit:
+                fallback_combo_truncated = True
+                break
+            combo_result = _solve_internal(
+                db,
+                combo,
+                solve_profile.fallback_combo_count_cap,
+                min(time_limit_seconds, solve_profile.fallback_time_limit_seconds),
+                enumerate_all_solutions=True,
+                num_search_workers=1,
+            )
+            fallback_combo_evaluated_count += 1
             if combo_result["solutions"]:
-                possible_combinations.append(combo)
+                solution_count = int(len(combo_result["solutions"]))
+                count_capped = bool(
+                    combo_result["truncated"]
+                    or solution_count >= solve_profile.fallback_combo_count_cap
+                )
+                possible_combinations.append(
+                    {
+                        "constraints": combo,
+                        "solution_count": min(solution_count, 100),
+                        "solution_count_capped": count_capped,
+                    }
+                )
         if possible_combinations:
+            possible_combinations = sorted(
+                possible_combinations,
+                key=lambda item: (
+                    -len(item["constraints"]),
+                    item["constraints"],
+                ),
+            )
             run.message = (
                 "Selected nice-to-have constraints cannot be satisfied together."
             )
             run.possible_soft_constraint_combinations = json.dumps(
                 possible_combinations
             )
+            if fallback_combo_truncated:
+                run.message += " Showing the first feasible alternatives found within the fallback search budget."
 
     db.commit()
+
+    if solution_entry_rows:
+        with engine.begin() as connection:
+            for row in solution_entry_rows:
+                connection.execute(insert(V2SolutionEntry).values(**row))
+
     db.refresh(run)
+    result["timing"]["fallback_search_ms"] = int(
+        (time.perf_counter() - fallback_started_at) * 1000
+    )
+    result["timing"]["total_ms"] = (
+        result["timing"]["precheck_ms"]
+        + result["timing"]["model_build_ms"]
+        + result["timing"]["solve_ms"]
+        + result["timing"]["fallback_search_ms"]
+    )
+    result["stats"]["feasible_combo_count"] = len(possible_combinations)
+    result["stats"]["fallback_combo_evaluated_count"] = fallback_combo_evaluated_count
+    result["stats"]["fallback_combo_truncated"] = fallback_combo_truncated
+    run._performance_preset = solve_profile.performance_preset
+    run._timing = result["timing"]
+    run._stats = result["stats"]
     return run
 
 
@@ -510,21 +1246,49 @@ def _solution_entry_payload(solution: V2TimetableSolution) -> list[dict]:
     ):
         session = entry.session
         module = session.module
+        split_map = {
+            item.split_index: item for item in _build_split_assignments(session)
+        }
+        split_assignment = split_map.get(
+            int(entry.split_index),
+            SplitAssignment(
+                split_index=int(entry.split_index),
+                student_group_ids=tuple(),
+                student_count=0,
+                fragments=tuple(),
+            ),
+        )
         degree_path_labels = []
-        total_students = 0
+        total_students = int(split_assignment.student_count)
         group_names = []
+        fragment_count_by_group = defaultdict(int)
+        fragment_labels_by_group: dict[int, list[str]] = defaultdict(list)
+        for group_id, fragment_size, fragment_label in split_assignment.fragments:
+            fragment_count_by_group[group_id] += 1
+            fragment_labels_by_group[group_id].append(fragment_label)
+        allowed_group_ids = set(split_assignment.student_group_ids)
         for group in session.student_groups:
+            if split_assignment.student_group_ids and int(group.id) not in allowed_group_ids:
+                continue
             degree_name = group.degree.code
             path_name = group.path.code if group.path else "General"
             degree_path_labels.append(f"{degree_name} Y{group.year} {path_name}")
-            total_students += int(group.size)
-            group_names.append(group.name)
+            group_id = int(group.id)
+            if fragment_count_by_group.get(group_id, 0) <= 1:
+                label = (
+                    fragment_labels_by_group[group_id][0]
+                    if fragment_labels_by_group.get(group_id)
+                    else group.name
+                )
+                group_names.append(label)
+            else:
+                group_names.extend(fragment_labels_by_group[group_id])
         payload.append(
             {
                 "session_id": int(entry.session_id),
                 "session_name": session.name,
-                "module_code": module.code,
-                "module_name": module.name,
+                "module_code": _format_session_module_code(session),
+                "module_name": _format_session_module_name(session),
                 "room_name": entry.room.name,
                 "room_location": entry.room.location,
                 "day": entry.day,
@@ -552,8 +1316,45 @@ def serialize_solution(solution: V2TimetableSolution) -> dict:
 
 
 def serialize_generation_run(run: V2GenerationRun) -> dict:
-    combos = json.loads(run.possible_soft_constraint_combinations or "[]")
+    raw_combos = json.loads(run.possible_soft_constraint_combinations or "[]")
+    combos = []
+    for item in raw_combos:
+        if isinstance(item, list):
+            combos.append(
+                {
+                    "constraints": item,
+                    "solution_count": 0,
+                    "solution_count_capped": False,
+                }
+            )
+        else:
+            combos.append(item)
     selected = [item for item in run.selected_soft_constraints.split(",") if item]
+    timing = getattr(
+        run,
+        "_timing",
+        {
+            "precheck_ms": 0,
+            "model_build_ms": 0,
+            "solve_ms": 0,
+            "fallback_search_ms": 0,
+            "total_ms": 0,
+        },
+    )
+    stats = getattr(
+        run,
+        "_stats",
+        {
+            "task_count": 0,
+            "assignment_variable_count": 0,
+            "candidate_option_count": 0,
+            "feasible_combo_count": len(combos),
+            "fallback_combo_evaluated_count": 0,
+            "fallback_combo_truncated": False,
+            "exact_enumeration_single_worker": True,
+            "machine_cpu_count": os.cpu_count() or 1,
+        },
+    )
     return {
         "generation_run_id": int(run.id),
         "status": run.status,
@@ -563,6 +1364,9 @@ def serialize_generation_run(run: V2GenerationRun) -> dict:
             "preview_solution_count": len(run.solutions),
             "truncated": bool(run.truncated),
         },
+        "performance_preset": getattr(run, "_performance_preset", "balanced"),
+        "timing": timing,
+        "stats": stats,
         "selected_soft_constraints": selected,
         "available_soft_constraints": list_soft_constraint_options(),
         "possible_soft_constraint_combinations": combos,
@@ -584,6 +1388,10 @@ def get_latest_run(db: Session) -> V2GenerationRun | None:
             .joinedload(V2TimetableSolution.entries)
             .joinedload(V2SolutionEntry.session)
             .joinedload(V2Session.module),
+            joinedload(V2GenerationRun.solutions)
+            .joinedload(V2TimetableSolution.entries)
+            .joinedload(V2SolutionEntry.session)
+            .joinedload(V2Session.linked_modules),
             joinedload(V2GenerationRun.solutions)
             .joinedload(V2TimetableSolution.entries)
             .joinedload(V2SolutionEntry.session)
@@ -614,6 +1422,9 @@ def get_solution(db: Session, solution_id: int) -> V2TimetableSolution | None:
             .joinedload(V2Session.module),
             joinedload(V2TimetableSolution.entries)
             .joinedload(V2SolutionEntry.session)
+            .joinedload(V2Session.linked_modules),
+            joinedload(V2TimetableSolution.entries)
+            .joinedload(V2SolutionEntry.session)
             .joinedload(V2Session.lecturers),
             joinedload(V2TimetableSolution.entries)
             .joinedload(V2SolutionEntry.session)
@@ -634,6 +1445,8 @@ def build_view_payload(
     mode: str,
     lecturer_id: int | None = None,
     student_group_id: int | None = None,
+    degree_id: int | None = None,
+    path_id: int | None = None,
 ) -> dict:
     run = get_latest_run(db)
     if not run or not run.solutions:
@@ -655,18 +1468,50 @@ def build_view_payload(
         title = f"Lecturer Timetable - {lecturer.name}"
         subtitle = "Sessions taught by the selected lecturer."
     elif mode == "student":
-        group = (
-            db.query(V2StudentGroup)
-            .filter(V2StudentGroup.id == student_group_id)
-            .first()
-        )
-        if not group:
-            raise ValueError("Student group not found")
+        if not degree_id:
+            raise ValueError("Degree not found")
+        degree = db.query(V2Degree).filter(V2Degree.id == degree_id).first()
+        if not degree:
+            raise ValueError("Degree not found")
+        path = None
+        if path_id:
+            path = db.query(V2Path).filter(V2Path.id == path_id).first()
+            if not path:
+                raise ValueError("Path not found")
+            groups = (
+                db.query(V2StudentGroup)
+                .filter(
+                    V2StudentGroup.degree_id == degree_id,
+                    V2StudentGroup.path_id == path_id,
+                    V2StudentGroup.year == path.year,
+                )
+                .all()
+            )
+            if not groups:
+                raise ValueError("Student path has no matching groups")
+            target_group_names = {group.name for group in groups}
+            target_label = f"{degree.code} - {path.code}"
+            subtitle = "Sessions attended by the selected degree and path."
+        else:
+            groups = (
+                db.query(V2StudentGroup)
+                .filter(
+                    V2StudentGroup.degree_id == degree_id,
+                    V2StudentGroup.path_id.is_(None),
+                )
+                .all()
+            )
+            if not groups:
+                raise ValueError("General student group not found for the selected degree")
+            target_group_names = {group.name for group in groups}
+            target_label = f"{degree.code} - General"
+            subtitle = "Sessions attended by the selected degree cohort."
         entries = [
-            entry for entry in entries if group.name in entry["student_group_names"]
+            entry
+            for entry in entries
+            if any(name in target_group_names for name in entry["student_group_names"])
         ]
-        title = f"Student Timetable - {group.name}"
-        subtitle = "Sessions attended by the selected degree/path group."
+        title = f"Student Timetable - {target_label}"
     else:
         title = "Faculty Timetable"
         subtitle = "Default faculty timetable with all session details."
@@ -782,14 +1627,163 @@ def dataset_summary(db: Session) -> dict:
     }
 
 
+def read_dataset(db: Session) -> dict:
+    degrees = db.query(V2Degree).order_by(V2Degree.id).all()
+    paths = db.query(V2Path).order_by(V2Path.id).all()
+    lecturers = db.query(V2Lecturer).order_by(V2Lecturer.id).all()
+    rooms = db.query(V2Room).order_by(V2Room.id).all()
+    student_groups = db.query(V2StudentGroup).order_by(V2StudentGroup.id).all()
+    modules = db.query(V2Module).order_by(V2Module.id).all()
+    sessions = (
+        db.query(V2Session)
+        .options(
+            joinedload(V2Session.lecturers),
+            joinedload(V2Session.student_groups),
+        )
+        .order_by(V2Session.id)
+        .all()
+    )
+
+    degree_key_by_id = {int(item.id): item.client_key for item in degrees}
+    path_key_by_id = {int(item.id): item.client_key for item in paths}
+    room_key_by_id = {int(item.id): item.client_key for item in rooms}
+    module_key_by_id = {int(item.id): item.client_key for item in modules}
+
+    return {
+        "degrees": [
+            {
+                "client_key": item.client_key,
+                "code": item.code,
+                "name": item.name,
+                "duration_years": int(item.duration_years),
+                "intake_label": item.intake_label,
+            }
+            for item in degrees
+        ],
+        "paths": [
+            {
+                "client_key": item.client_key,
+                "degree_client_key": degree_key_by_id[int(item.degree_id)],
+                "year": int(item.year),
+                "code": item.code,
+                "name": item.name,
+            }
+            for item in paths
+        ],
+        "lecturers": [
+            {
+                "client_key": item.client_key,
+                "name": item.name,
+                "email": item.email,
+            }
+            for item in lecturers
+        ],
+        "rooms": [
+            {
+                "client_key": item.client_key,
+                "name": item.name,
+                "capacity": int(item.capacity),
+                "room_type": item.room_type,
+                "lab_type": item.lab_type,
+                "location": item.location,
+                "year_restriction": item.year_restriction,
+            }
+            for item in rooms
+        ],
+        "student_groups": [
+            {
+                "client_key": item.client_key,
+                "degree_client_key": degree_key_by_id[int(item.degree_id)],
+                "path_client_key": path_key_by_id.get(int(item.path_id))
+                if item.path_id
+                else None,
+                "year": int(item.year),
+                "name": item.name,
+                "size": int(item.size),
+            }
+            for item in student_groups
+        ],
+        "modules": [
+            {
+                "client_key": item.client_key,
+                "code": item.code,
+                "name": item.name,
+                "subject_name": item.subject_name,
+                "year": int(item.year),
+                "semester": int(item.semester),
+                "is_full_year": bool(item.is_full_year),
+            }
+            for item in modules
+        ],
+        "sessions": [
+            {
+                "client_key": item.client_key,
+                "module_client_key": module_key_by_id[int(item.module_id)],
+                "linked_module_client_keys": [
+                    module_key_by_id[int(module.id)]
+                    for module in _session_modules(item)[1:]
+                    if int(module.id) in module_key_by_id
+                ],
+                "name": item.name,
+                "session_type": item.session_type,
+                "duration_minutes": int(item.duration_minutes),
+                "occurrences_per_week": int(item.occurrences_per_week),
+                "required_room_type": item.required_room_type,
+                "required_lab_type": item.required_lab_type,
+                "specific_room_client_key": room_key_by_id.get(int(item.specific_room_id))
+                if item.specific_room_id
+                else None,
+                "max_students_per_group": item.max_students_per_group,
+                "allow_parallel_rooms": bool(item.allow_parallel_rooms),
+                "notes": item.notes,
+                "lecturer_client_keys": [
+                    lecturer.client_key
+                    for lecturer in sorted(item.lecturers, key=lambda row: row.id)
+                ],
+                "student_group_client_keys": [
+                    group.client_key
+                    for group in sorted(item.student_groups, key=lambda row: row.id)
+                ],
+            }
+            for item in sessions
+        ],
+    }
+
+
 def lookup_options(db: Session) -> dict:
     lecturers = db.query(V2Lecturer).order_by(V2Lecturer.name).all()
-    student_groups = db.query(V2StudentGroup).order_by(V2StudentGroup.name).all()
+    degrees = db.query(V2Degree).order_by(V2Degree.code).all()
+    paths = db.query(V2Path).order_by(V2Path.degree_id, V2Path.year, V2Path.code).all()
+    student_paths = [
+        {
+            "id": int(item.id),
+            "degree_id": int(item.degree_id),
+            "year": int(item.year),
+            "label": f"Year {int(item.year)} - {item.code}",
+        }
+        for item in paths
+    ]
+    path_keys = {
+        (int(item.degree_id), int(item.year))
+        for item in paths
+    }
+    for degree in degrees:
+        for year in range(1, int(degree.duration_years) + 1):
+            if (int(degree.id), year) in path_keys:
+                continue
+            student_paths.append(
+                {
+                    "id": None,
+                    "degree_id": int(degree.id),
+                    "year": year,
+                    "label": f"Year {year} - General",
+                }
+            )
+    student_paths.sort(key=lambda item: (item["degree_id"], item["year"], item["label"]))
     return {
         "lecturers": [{"id": int(item.id), "label": item.name} for item in lecturers],
-        "student_groups": [
-            {"id": int(item.id), "label": item.name} for item in student_groups
-        ],
+        "degrees": [{"id": int(item.id), "label": f"{item.code} - {item.name}"} for item in degrees],
+        "student_paths": student_paths,
     }
 
 
@@ -881,6 +1875,14 @@ def replace_dataset(db: Session, payload) -> dict:
             allow_parallel_rooms=item.allow_parallel_rooms,
             notes=item.notes,
         )
+        linked_modules = []
+        seen_module_keys = {item.module_client_key}
+        for key in item.linked_module_client_keys:
+            if key in seen_module_keys or key not in module_map:
+                continue
+            linked_modules.append(module_map[key])
+            seen_module_keys.add(key)
+        row.linked_modules = [module_map[item.module_client_key], *linked_modules]
         row.lecturers = [
             lecturer_map[key]
             for key in item.lecturer_client_keys
@@ -895,7 +1897,7 @@ def replace_dataset(db: Session, payload) -> dict:
     return dataset_summary(db)
 
 
-def build_demo_dataset() -> dict:
+def build_legacy_realistic_demo_dataset() -> dict:
     return {
         "degrees": [
             {
@@ -912,180 +1914,1574 @@ def build_demo_dataset() -> dict:
                 "duration_years": 3,
                 "intake_label": "BS Intake",
             },
+            {
+                "client_key": "degree_encm",
+                "code": "ENCM",
+                "name": "Environmental Conservation and Management",
+                "duration_years": 3,
+                "intake_label": "ENCM Intake",
+            },
+            {
+                "client_key": "degree_apch",
+                "code": "APCH",
+                "name": "Applied Chemistry",
+                "duration_years": 4,
+                "intake_label": "APCH Intake",
+            },
+            {
+                "client_key": "degree_becs",
+                "code": "BECS",
+                "name": "Electronics and Computer Science",
+                "duration_years": 4,
+                "intake_label": "BECS Intake",
+            },
+            {
+                "client_key": "degree_pe",
+                "code": "PE",
+                "name": "Physics and Electronics",
+                "duration_years": 3,
+                "intake_label": "PE Intake",
+            },
         ],
         "paths": [
             {
-                "client_key": "path_ps_phy_math_stat",
+                "client_key": "path_ps_y1_general",
                 "degree_client_key": "degree_ps",
                 "year": 1,
-                "code": "PHY-MATH-STAT",
-                "name": "Physics, Mathematics, Statistics",
+                "code": "PS-G1",
+                "name": "Physical Science General",
             },
             {
-                "client_key": "path_bs_zoo_chem_micro",
+                "client_key": "path_bs_y1_general",
                 "degree_client_key": "degree_bs",
                 "year": 1,
-                "code": "ZOO-CHEM-MICRO",
-                "name": "Zoology, Chemistry, Microbiology",
+                "code": "BS-G1",
+                "name": "Biological Science General",
+            },
+            {
+                "client_key": "path_ps_elec",
+                "degree_client_key": "degree_ps",
+                "year": 2,
+                "code": "PS-ELEC",
+                "name": "Physical Science Electronics Focus",
+            },
+            {
+                "client_key": "path_ps_stat",
+                "degree_client_key": "degree_ps",
+                "year": 2,
+                "code": "PS-STAT",
+                "name": "Physical Science Statistics Focus",
+            },
+            {
+                "client_key": "path_bs_mibi",
+                "degree_client_key": "degree_bs",
+                "year": 2,
+                "code": "BS-MIBI",
+                "name": "Biological Science Microbiology Focus",
+            },
+            {
+                "client_key": "path_bs_bioc",
+                "degree_client_key": "degree_bs",
+                "year": 2,
+                "code": "BS-BIOC",
+                "name": "Biological Science Biochemistry Focus",
             },
         ],
         "lecturers": [
             {
                 "client_key": "lect_fernando",
                 "name": "Dr Fernando",
-                "email": "fernando@example.com",
+                "email": "fernando@science.kln.ac.lk",
             },
             {
                 "client_key": "lect_perera",
                 "name": "Dr Perera",
-                "email": "perera@example.com",
+                "email": "perera@science.kln.ac.lk",
             },
             {
                 "client_key": "lect_silva",
                 "name": "Dr Silva",
-                "email": "silva@example.com",
+                "email": "silva@science.kln.ac.lk",
+            },
+            {
+                "client_key": "lect_jayasinghe",
+                "name": "Ms Jayasinghe",
+                "email": "jayasinghe@science.kln.ac.lk",
+            },
+            {
+                "client_key": "lect_wijesinghe",
+                "name": "Dr Wijesinghe",
+                "email": "wijesinghe@science.kln.ac.lk",
+            },
+            {
+                "client_key": "lect_gunawardena",
+                "name": "Dr Gunawardena",
+                "email": "gunawardena@science.kln.ac.lk",
+            },
+            {
+                "client_key": "lect_abeysinghe",
+                "name": "Dr Abeysinghe",
+                "email": "abeysinghe@science.kln.ac.lk",
+            },
+            {
+                "client_key": "lect_ranasinghe",
+                "name": "Prof Ranasinghe",
+                "email": "ranasinghe@science.kln.ac.lk",
+            },
+            {
+                "client_key": "lect_kumari",
+                "name": "Ms Kumari",
+                "email": "kumari@science.kln.ac.lk",
+            },
+            {
+                "client_key": "lect_de_silva",
+                "name": "Dr De Silva",
+                "email": "desilva@science.kln.ac.lk",
             },
         ],
         "rooms": [
+            {
+                "client_key": "room_auditorium",
+                "name": "Auditorium",
+                "capacity": 650,
+                "room_type": "lecture",
+                "lab_type": None,
+                "location": "Faculty Central",
+                "year_restriction": None,
+            },
+            {
+                "client_key": "room_a11201",
+                "name": "A11 201",
+                "capacity": 150,
+                "room_type": "lecture",
+                "lab_type": None,
+                "location": "A11 Complex",
+                "year_restriction": None,
+            },
+            {
+                "client_key": "room_a11207",
+                "name": "A11 207",
+                "capacity": 100,
+                "room_type": "lecture",
+                "lab_type": None,
+                "location": "A11 Complex",
+                "year_restriction": None,
+            },
+            {
+                "client_key": "room_a11307",
+                "name": "A11 307",
+                "capacity": 90,
+                "room_type": "lecture",
+                "lab_type": None,
+                "location": "A11 Complex",
+                "year_restriction": None,
+            },
+            {
+                "client_key": "room_a7201",
+                "name": "A7 201",
+                "capacity": 200,
+                "room_type": "lecture",
+                "lab_type": None,
+                "location": "A7 Complex",
+                "year_restriction": None,
+            },
             {
                 "client_key": "room_a7301",
                 "name": "A7 301",
                 "capacity": 120,
                 "room_type": "lecture",
                 "lab_type": None,
-                "location": "A7 Building",
+                "location": "A7 Complex",
                 "year_restriction": None,
             },
             {
-                "client_key": "room_phy_lab_1",
-                "name": "Physics Lab 1",
+                "client_key": "room_a7303",
+                "name": "A7 303",
+                "capacity": 80,
+                "room_type": "lecture",
+                "lab_type": None,
+                "location": "A7 Complex",
+                "year_restriction": None,
+            },
+            {
+                "client_key": "room_a7406",
+                "name": "A7 406",
+                "capacity": 70,
+                "room_type": "seminar",
+                "lab_type": None,
+                "location": "A7 Complex",
+                "year_restriction": None,
+            },
+            {
+                "client_key": "room_b1212",
+                "name": "B1 212",
+                "capacity": 80,
+                "room_type": "lecture",
+                "lab_type": None,
+                "location": "B1 Complex",
+                "year_restriction": None,
+            },
+            {
+                "client_key": "room_b1343",
+                "name": "B1 343",
+                "capacity": 60,
+                "room_type": "seminar",
+                "lab_type": None,
+                "location": "B1 Complex",
+                "year_restriction": None,
+            },
+            {
+                "client_key": "room_computer_lab",
+                "name": "Computer LAB",
+                "capacity": 50,
+                "room_type": "lab",
+                "lab_type": "computer",
+                "location": "Statistics and Computer Science",
+                "year_restriction": None,
+            },
+            {
+                "client_key": "room_electronics_lab",
+                "name": "Electronics Lab",
                 "capacity": 40,
                 "room_type": "lab",
-                "lab_type": "physics_lab",
-                "location": "Physics Wing",
+                "lab_type": "electronics",
+                "location": "Physics and Electronics",
                 "year_restriction": 1,
             },
             {
-                "client_key": "room_chem_lab_1",
-                "name": "Chemistry Lab 1",
+                "client_key": "room_chemistry_lab",
+                "name": "Chemistry Lab",
+                "capacity": 60,
+                "room_type": "lab",
+                "lab_type": "chemistry",
+                "location": "Chemistry Department",
+                "year_restriction": None,
+            },
+            {
+                "client_key": "room_physics_lab",
+                "name": "Physics Lab 1",
                 "capacity": 40,
                 "room_type": "lab",
-                "lab_type": "chemistry_lab",
-                "location": "Chemistry Wing",
+                "lab_type": "physics",
+                "location": "Physics Department",
+                "year_restriction": None,
+            },
+            {
+                "client_key": "room_em_lab",
+                "name": "EM Labs",
+                "capacity": 40,
+                "room_type": "lab",
+                "lab_type": "environmental",
+                "location": "Zoology and Environmental Management",
+                "year_restriction": None,
+            },
+            {
+                "client_key": "room_gym",
+                "name": "Gymnasium/Ground",
+                "capacity": 120,
+                "room_type": "lab",
+                "lab_type": "sports",
+                "location": "Sports Unit",
                 "year_restriction": None,
             },
         ],
         "student_groups": [
             {
-                "client_key": "group_ps_y1_main",
+                "client_key": "group_ps_y1",
                 "degree_client_key": "degree_ps",
-                "path_client_key": "path_ps_phy_math_stat",
+                "path_client_key": "path_ps_y1_general",
                 "year": 1,
-                "name": "PS Y1 Physics-Mathematics-Statistics",
-                "size": 80,
+                "name": "PS Y1 General",
+                "size": 60,
             },
             {
-                "client_key": "group_bs_y1_main",
+                "client_key": "group_bs_y1",
                 "degree_client_key": "degree_bs",
-                "path_client_key": "path_bs_zoo_chem_micro",
+                "path_client_key": "path_bs_y1_general",
                 "year": 1,
-                "name": "BS Y1 Zoology-Chemistry-Microbiology",
+                "name": "BS Y1 General",
                 "size": 60,
+            },
+            {
+                "client_key": "group_encm_y1",
+                "degree_client_key": "degree_encm",
+                "path_client_key": None,
+                "year": 1,
+                "name": "ENCM Y1 Direct",
+                "size": 30,
+            },
+            {
+                "client_key": "group_apch_y1",
+                "degree_client_key": "degree_apch",
+                "path_client_key": None,
+                "year": 1,
+                "name": "APCH Y1 Direct",
+                "size": 30,
+            },
+            {
+                "client_key": "group_becs_y1",
+                "degree_client_key": "degree_becs",
+                "path_client_key": None,
+                "year": 1,
+                "name": "BECS Y1 Direct",
+                "size": 40,
+            },
+            {
+                "client_key": "group_pe_y1",
+                "degree_client_key": "degree_pe",
+                "path_client_key": None,
+                "year": 1,
+                "name": "PE Y1 Direct",
+                "size": 30,
+            },
+            {
+                "client_key": "group_ps_y2_elec",
+                "degree_client_key": "degree_ps",
+                "path_client_key": "path_ps_elec",
+                "year": 2,
+                "name": "PS Y2 Electronics Focus",
+                "size": 30,
+            },
+            {
+                "client_key": "group_ps_y2_stat",
+                "degree_client_key": "degree_ps",
+                "path_client_key": "path_ps_stat",
+                "year": 2,
+                "name": "PS Y2 Statistics Focus",
+                "size": 25,
+            },
+            {
+                "client_key": "group_bs_y2_mibi",
+                "degree_client_key": "degree_bs",
+                "path_client_key": "path_bs_mibi",
+                "year": 2,
+                "name": "BS Y2 Microbiology Focus",
+                "size": 24,
+            },
+            {
+                "client_key": "group_bs_y2_bioc",
+                "degree_client_key": "degree_bs",
+                "path_client_key": "path_bs_bioc",
+                "year": 2,
+                "name": "BS Y2 Biochemistry Focus",
+                "size": 24,
+            },
+            {
+                "client_key": "group_ps_y3",
+                "degree_client_key": "degree_ps",
+                "path_client_key": None,
+                "year": 3,
+                "name": "PS Y3 General",
+                "size": 22,
+            },
+            {
+                "client_key": "group_bs_y3",
+                "degree_client_key": "degree_bs",
+                "path_client_key": None,
+                "year": 3,
+                "name": "BS Y3 General",
+                "size": 22,
+            },
+            {
+                "client_key": "group_encm_y2",
+                "degree_client_key": "degree_encm",
+                "path_client_key": None,
+                "year": 2,
+                "name": "ENCM Y2 Direct",
+                "size": 28,
+            },
+            {
+                "client_key": "group_encm_y3",
+                "degree_client_key": "degree_encm",
+                "path_client_key": None,
+                "year": 3,
+                "name": "ENCM Y3 Direct",
+                "size": 24,
+            },
+            {
+                "client_key": "group_pe_y2",
+                "degree_client_key": "degree_pe",
+                "path_client_key": None,
+                "year": 2,
+                "name": "PE Y2 Direct",
+                "size": 28,
+            },
+            {
+                "client_key": "group_pe_y3",
+                "degree_client_key": "degree_pe",
+                "path_client_key": None,
+                "year": 3,
+                "name": "PE Y3 Direct",
+                "size": 24,
+            },
+            {
+                "client_key": "group_apch_y2",
+                "degree_client_key": "degree_apch",
+                "path_client_key": None,
+                "year": 2,
+                "name": "APCH Y2 Direct",
+                "size": 28,
+            },
+            {
+                "client_key": "group_apch_y3",
+                "degree_client_key": "degree_apch",
+                "path_client_key": None,
+                "year": 3,
+                "name": "APCH Y3 Direct",
+                "size": 24,
+            },
+            {
+                "client_key": "group_apch_y4",
+                "degree_client_key": "degree_apch",
+                "path_client_key": None,
+                "year": 4,
+                "name": "APCH Y4 Direct",
+                "size": 20,
+            },
+            {
+                "client_key": "group_becs_y2",
+                "degree_client_key": "degree_becs",
+                "path_client_key": None,
+                "year": 2,
+                "name": "BECS Y2 Direct",
+                "size": 34,
+            },
+            {
+                "client_key": "group_becs_y3",
+                "degree_client_key": "degree_becs",
+                "path_client_key": None,
+                "year": 3,
+                "name": "BECS Y3 Direct",
+                "size": 30,
+            },
+            {
+                "client_key": "group_becs_y4",
+                "degree_client_key": "degree_becs",
+                "path_client_key": None,
+                "year": 4,
+                "name": "BECS Y4 Direct",
+                "size": 24,
             },
         ],
         "modules": [
             {
-                "client_key": "mod_phys101",
-                "code": "PHYS101",
-                "name": "Mechanics",
-                "subject_name": "Physics",
+                "client_key": "mod_aclt11012",
+                "code": "ACLT 11012",
+                "name": "Academic Literacy",
+                "subject_name": "Literacy",
                 "year": 1,
                 "semester": 1,
                 "is_full_year": False,
             },
             {
-                "client_key": "mod_chem101",
-                "code": "CHEM101",
-                "name": "Foundations of Chemistry",
+                "client_key": "mod_cmsk11012",
+                "code": "CMSK 11012",
+                "name": "Complementary Skill Development",
+                "subject_name": "Skills",
+                "year": 1,
+                "semester": 1,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_macs11012",
+                "code": "MACS 11012",
+                "name": "Management and Computer Studies",
+                "subject_name": "Management and IT",
+                "year": 1,
+                "semester": 1,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_amat11012",
+                "code": "AMAT 11012",
+                "name": "Foundations in Applied Maths",
+                "subject_name": "Mathematics",
+                "year": 1,
+                "semester": 1,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_stat11613",
+                "code": "STAT 11613",
+                "name": "Fundamentals of Statistics",
+                "subject_name": "Statistics",
+                "year": 1,
+                "semester": 1,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_stat11621",
+                "code": "STAT 11621",
+                "name": "Statistical Laboratory",
+                "subject_name": "Statistics",
+                "year": 1,
+                "semester": 1,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_chem11612",
+                "code": "CHEM 11612",
+                "name": "Atomic Structure and Periodic Table",
                 "subject_name": "Chemistry",
                 "year": 1,
                 "semester": 1,
                 "is_full_year": False,
             },
             {
-                "client_key": "mod_stat101",
-                "code": "STAT101",
-                "name": "Statistics I",
-                "subject_name": "Statistics",
+                "client_key": "mod_chem11631",
+                "code": "CHEM 11631",
+                "name": "Basic Chemical Analysis Laboratory",
+                "subject_name": "Chemistry",
                 "year": 1,
                 "semester": 1,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_phys11512",
+                "code": "PHYS 11512",
+                "name": "Mechanics and Properties of Matter",
+                "subject_name": "Physics",
+                "year": 1,
+                "semester": 1,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_phys11521",
+                "code": "PHYS 11521",
+                "name": "Elementary Physics Laboratory I",
+                "subject_name": "Physics",
+                "year": 1,
+                "semester": 1,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_elec11534",
+                "code": "ELEC 11534",
+                "name": "Basic Electronics",
+                "subject_name": "Electronics",
+                "year": 1,
+                "semester": 1,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_elec11541",
+                "code": "ELEC 11541",
+                "name": "Basic Electronics Laboratory",
+                "subject_name": "Electronics",
+                "year": 1,
+                "semester": 1,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_biol11512",
+                "code": "BIOL 11512",
+                "name": "Scope and Fundamentals of Microbiology",
+                "subject_name": "Microbiology",
+                "year": 1,
+                "semester": 1,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_biol11542",
+                "code": "BIOL 11542",
+                "name": "Animal Form and Function",
+                "subject_name": "Zoology",
+                "year": 1,
+                "semester": 1,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_encm11702",
+                "code": "ENCM 11702",
+                "name": "Evolution of Earth and Biogeography",
+                "subject_name": "Environmental Management",
+                "year": 1,
+                "semester": 1,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_encm11713",
+                "code": "ENCM 11713",
+                "name": "Basic Geology",
+                "subject_name": "Environmental Management",
+                "year": 1,
+                "semester": 1,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_apch11612",
+                "code": "APCH 11612",
+                "name": "Computer Skills for Chemists",
+                "subject_name": "Applied Chemistry",
+                "year": 1,
+                "semester": 1,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_becs11212",
+                "code": "BECS 11212",
+                "name": "Foundations in Computer Science",
+                "subject_name": "Computer Science",
+                "year": 1,
+                "semester": 1,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_becs11223",
+                "code": "BECS 11223",
+                "name": "Fundamentals of Programming",
+                "subject_name": "Computer Science",
+                "year": 1,
+                "semester": 1,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_chem22702",
+                "code": "CHEM 22702",
+                "name": "Inorganic Chemistry",
+                "subject_name": "Chemistry",
+                "year": 2,
+                "semester": 2,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_chem22721",
+                "code": "CHEM 22721",
+                "name": "Analytical Chemistry Laboratory",
+                "subject_name": "Chemistry",
+                "year": 2,
+                "semester": 2,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_elec22534",
+                "code": "ELEC 22534",
+                "name": "Analogue Electronics",
+                "subject_name": "Electronics",
+                "year": 2,
+                "semester": 2,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_mibi22554",
+                "code": "MIBI 22554",
+                "name": "Microbial Genetics",
+                "subject_name": "Microbiology",
+                "year": 2,
+                "semester": 2,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_bioc22642",
+                "code": "BIOC 22642",
+                "name": "Biochemical Regulation",
+                "subject_name": "Biochemistry",
+                "year": 2,
+                "semester": 2,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_phys33612",
+                "code": "PHYS 33612",
+                "name": "Modern Physics",
+                "subject_name": "Physics",
+                "year": 3,
+                "semester": 1,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_encm32712",
+                "code": "ENCM 32712",
+                "name": "Environmental Pollution",
+                "subject_name": "Environmental Management",
+                "year": 3,
+                "semester": 1,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_apch34612",
+                "code": "APCH 34612",
+                "name": "Advanced Analytical Chemistry",
+                "subject_name": "Applied Chemistry",
+                "year": 3,
+                "semester": 1,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_apch44812",
+                "code": "APCH 44812",
+                "name": "Industrial Chemistry Project",
+                "subject_name": "Applied Chemistry",
+                "year": 4,
+                "semester": 2,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_becs22421",
+                "code": "BECS 22421",
+                "name": "Data Structures",
+                "subject_name": "Computer Science",
+                "year": 2,
+                "semester": 2,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_becs33431",
+                "code": "BECS 33431",
+                "name": "Computer Architecture",
+                "subject_name": "Computer Engineering",
+                "year": 3,
+                "semester": 1,
+                "is_full_year": False,
+            },
+            {
+                "client_key": "mod_becs44641",
+                "code": "BECS 44641",
+                "name": "Embedded Systems Project",
+                "subject_name": "Computer Engineering",
+                "year": 4,
+                "semester": 2,
                 "is_full_year": False,
             },
         ],
         "sessions": [
             {
-                "client_key": "sess_phys101_lec",
-                "module_client_key": "mod_phys101",
-                "name": "Mechanics Lecture",
+                "client_key": "sess_aclt11012_lecture",
+                "module_client_key": "mod_aclt11012",
+                "name": "Academic Literacy Lecture",
                 "session_type": "lecture",
-                "duration_minutes": 60,
-                "occurrences_per_week": 2,
-                "required_room_type": "lecture",
-                "required_lab_type": None,
-                "specific_room_client_key": None,
-                "max_students_per_group": None,
-                "allow_parallel_rooms": False,
-                "notes": None,
-                "lecturer_client_keys": ["lect_fernando"],
-                "student_group_client_keys": ["group_ps_y1_main"],
-            },
-            {
-                "client_key": "sess_chem101_lec",
-                "module_client_key": "mod_chem101",
-                "name": "Chemistry Lecture",
-                "session_type": "lecture",
-                "duration_minutes": 60,
-                "occurrences_per_week": 2,
-                "required_room_type": "lecture",
-                "required_lab_type": None,
-                "specific_room_client_key": None,
-                "max_students_per_group": None,
-                "allow_parallel_rooms": False,
-                "notes": "Shared chemistry lecture across degrees.",
-                "lecturer_client_keys": ["lect_perera"],
-                "student_group_client_keys": ["group_ps_y1_main", "group_bs_y1_main"],
-            },
-            {
-                "client_key": "sess_chem101_lab",
-                "module_client_key": "mod_chem101",
-                "name": "Chemistry Lab",
-                "session_type": "practical",
-                "duration_minutes": 180,
+                "duration_minutes": 120,
                 "occurrences_per_week": 1,
-                "required_room_type": "lab",
-                "required_lab_type": "chemistry_lab",
-                "specific_room_client_key": "room_chem_lab_1",
-                "max_students_per_group": 40,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_auditorium",
+                "max_students_per_group": None,
                 "allow_parallel_rooms": False,
                 "notes": None,
-                "lecturer_client_keys": ["lect_perera", "lect_silva"],
-                "student_group_client_keys": ["group_bs_y1_main"],
+                "lecturer_client_keys": ["lect_jayasinghe"],
+                "student_group_client_keys": [
+                    "group_ps_y1",
+                    "group_bs_y1",
+                    "group_encm_y1",
+                    "group_apch_y1",
+                    "group_becs_y1",
+                    "group_pe_y1",
+                ],
             },
             {
-                "client_key": "sess_stat101_lec",
-                "module_client_key": "mod_stat101",
-                "name": "Statistics Lecture",
+                "client_key": "sess_macs11012_lecture",
+                "module_client_key": "mod_macs11012",
+                "name": "Management and Computer Studies Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 120,
+                "occurrences_per_week": 1,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_auditorium",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": "Shared common module for most first-year cohorts.",
+                "lecturer_client_keys": ["lect_ranasinghe"],
+                "student_group_client_keys": [
+                    "group_ps_y1",
+                    "group_bs_y1",
+                    "group_becs_y1",
+                    "group_pe_y1",
+                ],
+            },
+            {
+                "client_key": "sess_amat11012_lecture",
+                "module_client_key": "mod_amat11012",
+                "name": "Applied Maths Lecture",
                 "session_type": "lecture",
                 "duration_minutes": 60,
                 "occurrences_per_week": 2,
                 "required_room_type": "lecture",
                 "required_lab_type": None,
-                "specific_room_client_key": None,
+                "specific_room_client_key": "room_auditorium",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_wijesinghe"],
+                "student_group_client_keys": ["group_ps_y1", "group_pe_y1"],
+            },
+            {
+                "client_key": "sess_stat11613_lecture",
+                "module_client_key": "mod_stat11613",
+                "name": "Fundamentals of Statistics Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 60,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_auditorium",
                 "max_students_per_group": None,
                 "allow_parallel_rooms": False,
                 "notes": None,
                 "lecturer_client_keys": ["lect_silva"],
-                "student_group_client_keys": ["group_ps_y1_main"],
+                "student_group_client_keys": ["group_ps_y1", "group_ps_y2_stat"],
+            },
+            {
+                "client_key": "sess_chem11612_lecture",
+                "module_client_key": "mod_chem11612",
+                "name": "Atomic Structure Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 60,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_auditorium",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": "Shared chemistry theory across biological and applied chemistry groups.",
+                "lecturer_client_keys": ["lect_perera"],
+                "student_group_client_keys": ["group_bs_y1", "group_apch_y1"],
+            },
+            {
+                "client_key": "sess_chem11631_lab",
+                "module_client_key": "mod_chem11631",
+                "name": "Basic Chemical Analysis Lab",
+                "session_type": "lab",
+                "duration_minutes": 180,
+                "occurrences_per_week": 1,
+                "required_room_type": "lab",
+                "required_lab_type": "chemistry",
+                "specific_room_client_key": "room_chemistry_lab",
+                "max_students_per_group": 60,
+                "allow_parallel_rooms": False,
+                "notes": "Year 1 chemistry practical in split groups.",
+                "lecturer_client_keys": ["lect_perera", "lect_gunawardena"],
+                "student_group_client_keys": ["group_bs_y1", "group_apch_y1"],
+            },
+            {
+                "client_key": "sess_phys11512_lecture",
+                "module_client_key": "mod_phys11512",
+                "name": "Mechanics and Matter Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 60,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_auditorium",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_fernando"],
+                "student_group_client_keys": ["group_ps_y1", "group_pe_y1"],
+            },
+            {
+                "client_key": "sess_phys11521_lab",
+                "module_client_key": "mod_phys11521",
+                "name": "Elementary Physics Lab",
+                "session_type": "lab",
+                "duration_minutes": 180,
+                "occurrences_per_week": 1,
+                "required_room_type": "lab",
+                "required_lab_type": "physics",
+                "specific_room_client_key": "room_physics_lab",
+                "max_students_per_group": 40,
+                "allow_parallel_rooms": False,
+                "notes": "Large first-year physics cohorts rotate in lab groups.",
+                "lecturer_client_keys": ["lect_fernando", "lect_abeysinghe"],
+                "student_group_client_keys": ["group_ps_y1", "group_pe_y1"],
+            },
+            {
+                "client_key": "sess_elec11534_lecture",
+                "module_client_key": "mod_elec11534",
+                "name": "Basic Electronics Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 60,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_auditorium",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": "Heavy theory load observed for electronics foundation units.",
+                "lecturer_client_keys": ["lect_abeysinghe"],
+                "student_group_client_keys": ["group_ps_y1", "group_becs_y1", "group_pe_y1"],
+            },
+            {
+                "client_key": "sess_elec11541_lab",
+                "module_client_key": "mod_elec11541",
+                "name": "Basic Electronics Lab",
+                "session_type": "lab",
+                "duration_minutes": 180,
+                "occurrences_per_week": 1,
+                "required_room_type": "lab",
+                "required_lab_type": "electronics",
+                "specific_room_client_key": "room_electronics_lab",
+                "max_students_per_group": 40,
+                "allow_parallel_rooms": False,
+                "notes": "Electronics practical delivered in rotating lab groups.",
+                "lecturer_client_keys": ["lect_abeysinghe", "lect_de_silva"],
+                "student_group_client_keys": ["group_becs_y1", "group_pe_y1"],
+            },
+            {
+                "client_key": "sess_biol11512_lecture",
+                "module_client_key": "mod_biol11512",
+                "name": "Microbiology Foundations Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 60,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_a11201",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_gunawardena"],
+                "student_group_client_keys": ["group_bs_y1", "group_bs_y2_mibi"],
+            },
+            {
+                "client_key": "sess_biol11542_lecture",
+                "module_client_key": "mod_biol11542",
+                "name": "Animal Form and Function Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 60,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_a11201",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_kumari"],
+                "student_group_client_keys": ["group_bs_y1"],
+            },
+            {
+                "client_key": "sess_encm11702_lecture",
+                "module_client_key": "mod_encm11702",
+                "name": "Earth and Biogeography Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 60,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_a11207",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_ranasinghe"],
+                "student_group_client_keys": ["group_encm_y1"],
+            },
+            {
+                "client_key": "sess_encm11713_lecture",
+                "module_client_key": "mod_encm11713",
+                "name": "Basic Geology Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 60,
+                "occurrences_per_week": 3,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_a11207",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_ranasinghe"],
+                "student_group_client_keys": ["group_encm_y1"],
+            },
+            {
+                "client_key": "sess_apch11612_lab",
+                "module_client_key": "mod_apch11612",
+                "name": "Computer Skills for Chemists Lab",
+                "session_type": "lab",
+                "duration_minutes": 180,
+                "occurrences_per_week": 1,
+                "required_room_type": "lab",
+                "required_lab_type": "computer",
+                "specific_room_client_key": "room_computer_lab",
+                "max_students_per_group": 50,
+                "allow_parallel_rooms": False,
+                "notes": "Computer skills practical for applied chemistry intake.",
+                "lecturer_client_keys": ["lect_jayasinghe"],
+                "student_group_client_keys": ["group_apch_y1"],
+            },
+            {
+                "client_key": "sess_becs11212_lecture",
+                "module_client_key": "mod_becs11212",
+                "name": "Foundations in Computer Science Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 60,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_b1212",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_de_silva"],
+                "student_group_client_keys": ["group_becs_y1"],
+            },
+            {
+                "client_key": "sess_becs11223_lecture",
+                "module_client_key": "mod_becs11223",
+                "name": "Fundamentals of Programming Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 90,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_b1212",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_de_silva"],
+                "student_group_client_keys": ["group_becs_y1"],
+            },
+            {
+                "client_key": "sess_becs11223_lab",
+                "module_client_key": "mod_becs11223",
+                "name": "Fundamentals of Programming Lab",
+                "session_type": "lab",
+                "duration_minutes": 180,
+                "occurrences_per_week": 1,
+                "required_room_type": "lab",
+                "required_lab_type": "computer",
+                "specific_room_client_key": "room_computer_lab",
+                "max_students_per_group": 50,
+                "allow_parallel_rooms": False,
+                "notes": "Programming practical in split groups.",
+                "lecturer_client_keys": ["lect_de_silva", "lect_jayasinghe"],
+                "student_group_client_keys": ["group_becs_y1"],
+            },
+            {
+                "client_key": "sess_chem22702_lecture",
+                "module_client_key": "mod_chem22702",
+                "name": "Inorganic Chemistry Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 90,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_a11201",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": "Higher-year chemistry shared by BS biochemistry and APCH cohorts.",
+                "lecturer_client_keys": ["lect_perera"],
+                "student_group_client_keys": ["group_bs_y2_bioc", "group_apch_y2"],
+            },
+            {
+                "client_key": "sess_chem22721_lab",
+                "module_client_key": "mod_chem22721",
+                "name": "Analytical Chemistry Laboratory",
+                "session_type": "lab",
+                "duration_minutes": 180,
+                "occurrences_per_week": 1,
+                "required_room_type": "lab",
+                "required_lab_type": "chemistry",
+                "specific_room_client_key": "room_chemistry_lab",
+                "max_students_per_group": 30,
+                "allow_parallel_rooms": False,
+                "notes": "Shared analytical lab block.",
+                "lecturer_client_keys": ["lect_perera", "lect_gunawardena"],
+                "student_group_client_keys": ["group_bs_y2_bioc", "group_apch_y2"],
+            },
+            {
+                "client_key": "sess_elec22534_lecture",
+                "module_client_key": "mod_elec22534",
+                "name": "Analogue Electronics Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 90,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_a7301",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": "Shared electronics theory for PS-ELEC, BECS and PE Year 2.",
+                "lecturer_client_keys": ["lect_abeysinghe"],
+                "student_group_client_keys": ["group_ps_y2_elec", "group_becs_y2", "group_pe_y2"],
+            },
+            {
+                "client_key": "sess_mibi22554_lecture",
+                "module_client_key": "mod_mibi22554",
+                "name": "Microbial Genetics Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 60,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_a11207",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_gunawardena"],
+                "student_group_client_keys": ["group_bs_y2_mibi"],
+            },
+            {
+                "client_key": "sess_bioc22642_lecture",
+                "module_client_key": "mod_bioc22642",
+                "name": "Biochemical Regulation Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 60,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_a11307",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_kumari"],
+                "student_group_client_keys": ["group_bs_y2_bioc"],
+            },
+            {
+                "client_key": "sess_becs22421_lecture",
+                "module_client_key": "mod_becs22421",
+                "name": "Data Structures Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 90,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_b1212",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_de_silva"],
+                "student_group_client_keys": ["group_becs_y2"],
+            },
+            {
+                "client_key": "sess_phys33612_lecture",
+                "module_client_key": "mod_phys33612",
+                "name": "Modern Physics Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 90,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_a7201",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": "Shared advanced physics theory.",
+                "lecturer_client_keys": ["lect_fernando"],
+                "student_group_client_keys": ["group_ps_y3", "group_pe_y3"],
+            },
+            {
+                "client_key": "sess_encm32712_lecture",
+                "module_client_key": "mod_encm32712",
+                "name": "Environmental Pollution Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 60,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_a11207",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_ranasinghe"],
+                "student_group_client_keys": ["group_encm_y3"],
+            },
+            {
+                "client_key": "sess_apch34612_lecture",
+                "module_client_key": "mod_apch34612",
+                "name": "Advanced Analytical Chemistry Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 90,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_a11201",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_perera"],
+                "student_group_client_keys": ["group_apch_y3"],
+            },
+            {
+                "client_key": "sess_becs33431_lecture",
+                "module_client_key": "mod_becs33431",
+                "name": "Computer Architecture Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 90,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_b1212",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_de_silva"],
+                "student_group_client_keys": ["group_becs_y3"],
+            },
+            {
+                "client_key": "sess_apch44812_project",
+                "module_client_key": "mod_apch44812",
+                "name": "Industrial Chemistry Project Seminar",
+                "session_type": "seminar",
+                "duration_minutes": 120,
+                "occurrences_per_week": 1,
+                "required_room_type": "seminar",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_b1343",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": "Final-year project supervision block.",
+                "lecturer_client_keys": ["lect_perera", "lect_jayasinghe"],
+                "student_group_client_keys": ["group_apch_y4"],
+            },
+            {
+                "client_key": "sess_becs44641_project",
+                "module_client_key": "mod_becs44641",
+                "name": "Embedded Systems Project Lab",
+                "session_type": "lab",
+                "duration_minutes": 180,
+                "occurrences_per_week": 1,
+                "required_room_type": "lab",
+                "required_lab_type": "computer",
+                "specific_room_client_key": "room_computer_lab",
+                "max_students_per_group": 24,
+                "allow_parallel_rooms": False,
+                "notes": "Final-year BECS project lab block.",
+                "lecturer_client_keys": ["lect_de_silva", "lect_abeysinghe"],
+                "student_group_client_keys": ["group_becs_y4"],
             },
         ],
     }
+
+
+def build_tuned_demo_dataset() -> dict:
+    return {
+        "degrees": [
+            {
+                "client_key": "degree_ps",
+                "code": "PS",
+                "name": "Physical Science",
+                "duration_years": 1,
+                "intake_label": "PS Intake",
+            },
+            {
+                "client_key": "degree_bs",
+                "code": "BS",
+                "name": "Biological Science",
+                "duration_years": 1,
+                "intake_label": "BS Intake",
+            },
+            {
+                "client_key": "degree_encm",
+                "code": "ENCM",
+                "name": "Environmental Conservation and Management",
+                "duration_years": 1,
+                "intake_label": "ENCM Intake",
+            },
+            {
+                "client_key": "degree_apch",
+                "code": "APCH",
+                "name": "Applied Chemistry",
+                "duration_years": 1,
+                "intake_label": "APCH Intake",
+            },
+            {
+                "client_key": "degree_becs",
+                "code": "BECS",
+                "name": "Electronics and Computer Science",
+                "duration_years": 1,
+                "intake_label": "BECS Intake",
+            },
+            {
+                "client_key": "degree_pe",
+                "code": "PE",
+                "name": "Physics and Electronics",
+                "duration_years": 1,
+                "intake_label": "PE Intake",
+            },
+        ],
+        "paths": [
+            {
+                "client_key": "path_ps_y1_general",
+                "degree_client_key": "degree_ps",
+                "year": 1,
+                "code": "PS-G1",
+                "name": "Physical Science General",
+            },
+            {
+                "client_key": "path_bs_y1_general",
+                "degree_client_key": "degree_bs",
+                "year": 1,
+                "code": "BS-G1",
+                "name": "Biological Science General",
+            },
+        ],
+        "lecturers": [
+            {"client_key": "lect_jayasinghe", "name": "Ms Jayasinghe", "email": "jayasinghe@science.kln.ac.lk"},
+            {"client_key": "lect_ranasinghe", "name": "Prof Ranasinghe", "email": "ranasinghe@science.kln.ac.lk"},
+            {"client_key": "lect_wijesinghe", "name": "Dr Wijesinghe", "email": "wijesinghe@science.kln.ac.lk"},
+            {"client_key": "lect_fernando", "name": "Dr Fernando", "email": "fernando@science.kln.ac.lk"},
+            {"client_key": "lect_perera", "name": "Dr Perera", "email": "perera@science.kln.ac.lk"},
+            {"client_key": "lect_abeysinghe", "name": "Dr Abeysinghe", "email": "abeysinghe@science.kln.ac.lk"},
+            {"client_key": "lect_de_silva", "name": "Dr De Silva", "email": "desilva@science.kln.ac.lk"},
+        ],
+        "rooms": [
+            {
+                "client_key": "room_auditorium",
+                "name": "Auditorium",
+                "capacity": 260,
+                "room_type": "lecture",
+                "lab_type": None,
+                "location": "Faculty Central",
+                "year_restriction": None,
+            },
+            {
+                "client_key": "room_a11201",
+                "name": "A11 201",
+                "capacity": 120,
+                "room_type": "lecture",
+                "lab_type": None,
+                "location": "A11 Complex",
+                "year_restriction": None,
+            },
+            {
+                "client_key": "room_b1212",
+                "name": "B1 212",
+                "capacity": 80,
+                "room_type": "lecture",
+                "lab_type": None,
+                "location": "B1 Complex",
+                "year_restriction": None,
+            },
+            {
+                "client_key": "room_chemistry_lab",
+                "name": "Chemistry Lab",
+                "capacity": 60,
+                "room_type": "lab",
+                "lab_type": "chemistry",
+                "location": "Chemistry Department",
+                "year_restriction": None,
+            },
+            {
+                "client_key": "room_physics_lab",
+                "name": "Physics Lab 1",
+                "capacity": 40,
+                "room_type": "lab",
+                "lab_type": "physics",
+                "location": "Physics Department",
+                "year_restriction": 1,
+            },
+            {
+                "client_key": "room_computer_lab",
+                "name": "Computer LAB",
+                "capacity": 40,
+                "room_type": "lab",
+                "lab_type": "computer",
+                "location": "Statistics and Computer Science",
+                "year_restriction": None,
+            },
+        ],
+        "student_groups": [
+            {
+                "client_key": "group_ps_y1",
+                "degree_client_key": "degree_ps",
+                "path_client_key": "path_ps_y1_general",
+                "year": 1,
+                "name": "PS Y1 General",
+                "size": 60,
+            },
+            {
+                "client_key": "group_bs_y1",
+                "degree_client_key": "degree_bs",
+                "path_client_key": "path_bs_y1_general",
+                "year": 1,
+                "name": "BS Y1 General",
+                "size": 60,
+            },
+            {
+                "client_key": "group_encm_y1",
+                "degree_client_key": "degree_encm",
+                "path_client_key": None,
+                "year": 1,
+                "name": "ENCM Y1 Direct",
+                "size": 30,
+            },
+            {
+                "client_key": "group_apch_y1",
+                "degree_client_key": "degree_apch",
+                "path_client_key": None,
+                "year": 1,
+                "name": "APCH Y1 Direct",
+                "size": 30,
+            },
+            {
+                "client_key": "group_becs_y1",
+                "degree_client_key": "degree_becs",
+                "path_client_key": None,
+                "year": 1,
+                "name": "BECS Y1 Direct",
+                "size": 40,
+            },
+            {
+                "client_key": "group_pe_y1",
+                "degree_client_key": "degree_pe",
+                "path_client_key": None,
+                "year": 1,
+                "name": "PE Y1 Direct",
+                "size": 30,
+            },
+        ],
+        "modules": [
+            {"client_key": "mod_aclt11012", "code": "ACLT 11012", "name": "Academic Literacy", "subject_name": "Literacy", "year": 1, "semester": 1, "is_full_year": False},
+            {"client_key": "mod_macs11012", "code": "MACS 11012", "name": "Management and Computer Studies", "subject_name": "Management and IT", "year": 1, "semester": 1, "is_full_year": False},
+            {"client_key": "mod_amat11012", "code": "AMAT 11012", "name": "Foundations in Applied Maths", "subject_name": "Mathematics", "year": 1, "semester": 1, "is_full_year": False},
+            {"client_key": "mod_phys11512", "code": "PHYS 11512", "name": "Mechanics and Properties of Matter", "subject_name": "Physics", "year": 1, "semester": 1, "is_full_year": False},
+            {"client_key": "mod_phys11521", "code": "PHYS 11521", "name": "Elementary Physics Laboratory I", "subject_name": "Physics", "year": 1, "semester": 1, "is_full_year": False},
+            {"client_key": "mod_chem11612", "code": "CHEM 11612", "name": "Atomic Structure and Periodic Table", "subject_name": "Chemistry", "year": 1, "semester": 1, "is_full_year": False},
+            {"client_key": "mod_chem11631", "code": "CHEM 11631", "name": "Basic Chemical Analysis Laboratory", "subject_name": "Chemistry", "year": 1, "semester": 1, "is_full_year": False},
+            {"client_key": "mod_becs11223", "code": "BECS 11223", "name": "Fundamentals of Programming", "subject_name": "Computer Science", "year": 1, "semester": 1, "is_full_year": False},
+            {"client_key": "mod_becs11224", "code": "BECS 11224", "name": "Programming Laboratory", "subject_name": "Computer Science", "year": 1, "semester": 1, "is_full_year": False},
+        ],
+        "sessions": [
+            {
+                "client_key": "sess_aclt11012_lecture",
+                "module_client_key": "mod_aclt11012",
+                "name": "Academic Literacy Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 120,
+                "occurrences_per_week": 1,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_auditorium",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_jayasinghe"],
+                "student_group_client_keys": ["group_ps_y1", "group_bs_y1", "group_encm_y1", "group_apch_y1", "group_becs_y1", "group_pe_y1"],
+            },
+            {
+                "client_key": "sess_macs11012_lecture",
+                "module_client_key": "mod_macs11012",
+                "name": "Management and Computer Studies Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 120,
+                "occurrences_per_week": 1,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_auditorium",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_ranasinghe"],
+                "student_group_client_keys": ["group_ps_y1", "group_bs_y1", "group_becs_y1", "group_pe_y1"],
+            },
+            {
+                "client_key": "sess_amat11012_lecture",
+                "module_client_key": "mod_amat11012",
+                "name": "Applied Maths Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 120,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_auditorium",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_wijesinghe"],
+                "student_group_client_keys": ["group_ps_y1", "group_pe_y1"],
+            },
+            {
+                "client_key": "sess_phys11512_lecture",
+                "module_client_key": "mod_phys11512",
+                "name": "Mechanics and Matter Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 120,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_auditorium",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_fernando"],
+                "student_group_client_keys": ["group_ps_y1", "group_pe_y1"],
+            },
+            {
+                "client_key": "sess_phys11521_lab",
+                "module_client_key": "mod_phys11521",
+                "name": "Elementary Physics Lab",
+                "session_type": "lab",
+                "duration_minutes": 180,
+                "occurrences_per_week": 1,
+                "required_room_type": "lab",
+                "required_lab_type": "physics",
+                "specific_room_client_key": "room_physics_lab",
+                "max_students_per_group": 40,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_fernando", "lect_abeysinghe"],
+                "student_group_client_keys": ["group_ps_y1", "group_pe_y1"],
+            },
+            {
+                "client_key": "sess_chem11612_lecture",
+                "module_client_key": "mod_chem11612",
+                "name": "Atomic Structure Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 120,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_a11201",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_perera"],
+                "student_group_client_keys": ["group_bs_y1", "group_apch_y1", "group_encm_y1"],
+            },
+            {
+                "client_key": "sess_chem11631_lab",
+                "module_client_key": "mod_chem11631",
+                "name": "Basic Chemical Analysis Lab",
+                "session_type": "lab",
+                "duration_minutes": 180,
+                "occurrences_per_week": 1,
+                "required_room_type": "lab",
+                "required_lab_type": "chemistry",
+                "specific_room_client_key": "room_chemistry_lab",
+                "max_students_per_group": 60,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_perera"],
+                "student_group_client_keys": ["group_bs_y1", "group_apch_y1"],
+            },
+            {
+                "client_key": "sess_becs11223_lecture",
+                "module_client_key": "mod_becs11223",
+                "name": "Fundamentals of Programming Lecture",
+                "session_type": "lecture",
+                "duration_minutes": 120,
+                "occurrences_per_week": 2,
+                "required_room_type": "lecture",
+                "required_lab_type": None,
+                "specific_room_client_key": "room_b1212",
+                "max_students_per_group": None,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_de_silva"],
+                "student_group_client_keys": ["group_becs_y1"],
+            },
+            {
+                "client_key": "sess_becs11224_lab",
+                "module_client_key": "mod_becs11224",
+                "name": "Programming Lab",
+                "session_type": "lab",
+                "duration_minutes": 180,
+                "occurrences_per_week": 1,
+                "required_room_type": "lab",
+                "required_lab_type": "computer",
+                "specific_room_client_key": "room_computer_lab",
+                "max_students_per_group": 40,
+                "allow_parallel_rooms": False,
+                "notes": None,
+                "lecturer_client_keys": ["lect_de_silva"],
+                "student_group_client_keys": ["group_becs_y1"],
+            },
+        ],
+    }
+
+
+def build_demo_dataset(profile: str = "realistic") -> dict:
+    if profile == "tuned":
+        return build_tuned_demo_dataset()
+    try:
+        return build_realistic_demo_dataset_from_enrollment_csv()
+    except Exception:
+        return build_legacy_realistic_demo_dataset()

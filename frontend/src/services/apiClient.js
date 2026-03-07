@@ -1,33 +1,57 @@
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const API_BASE_URL = "/api";
+
+function formatDetail(detail) {
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (typeof item === "string") {
+          return item;
+        }
+        if (item && typeof item === "object") {
+          const location = Array.isArray(item.loc) ? item.loc.join(" -> ") : "request";
+          return `${location}: ${item.msg || "Invalid value"}`;
+        }
+        return "Invalid request";
+      })
+      .join("; ");
+  }
+
+  if (detail && typeof detail === "object") {
+    return detail.message || JSON.stringify(detail);
+  }
+
+  return typeof detail === "string" ? detail : "";
+}
 
 async function request(path, options = {}) {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     headers: {
       "Content-Type": "application/json",
-      ...options.headers,
+      ...(options.headers || {}),
     },
     ...options,
   });
 
+  const isJson = response.headers.get("content-type")?.includes("application/json");
+  const payload = isJson ? await response.json() : await response.text();
+
   if (!response.ok) {
-    const text = await response.text();
-    let message = text || "Request failed";
-    try {
-      const json = JSON.parse(text);
-      message = json.detail || JSON.stringify(json);
-    } catch {
-      // ignore JSON parse errors
-    }
+    const message =
+      (typeof payload === "object" && formatDetail(payload?.detail)) ||
+      (typeof payload === "object" && payload?.message) ||
+      (typeof payload === "string" && payload) ||
+      "Request failed";
     throw new Error(message);
   }
 
-  const text = await response.text();
-  return text ? JSON.parse(text) : null;
+  return payload;
 }
 
 export const apiClient = {
   get: (path) => request(path),
-  post: (path, body) => request(path, { method: "POST", body: JSON.stringify(body) }),
-  put: (path, body) => request(path, { method: "PUT", body: JSON.stringify(body) }),
-  del: (path) => request(path, { method: "DELETE" }),
+  post: (path, body) =>
+    request(path, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 };

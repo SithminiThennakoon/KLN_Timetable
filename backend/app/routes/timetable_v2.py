@@ -10,6 +10,7 @@ from app.schemas.v2 import (
     DatasetUpsertRequest,
     DefaultSelectionRequest,
     ExportResponse,
+    FullDatasetResponse,
     GenerationRequest,
     GenerationResponse,
     LookupResponse,
@@ -23,6 +24,7 @@ from app.services.timetable_v2 import (
     generate_timetables,
     get_latest_run,
     lookup_options,
+    read_dataset,
     replace_dataset,
     serialize_generation_run,
     set_default_solution,
@@ -36,6 +38,11 @@ def get_dataset_summary(db: Session = Depends(get_db)):
     return {"summary": DatasetSummary(**dataset_summary(db))}
 
 
+@router.get("/dataset/full", response_model=FullDatasetResponse)
+def get_full_dataset(db: Session = Depends(get_db)):
+    return FullDatasetResponse(**read_dataset(db))
+
+
 @router.post("/dataset", response_model=DatasetResponse)
 def upsert_dataset(payload: DatasetUpsertRequest, db: Session = Depends(get_db)):
     summary = replace_dataset(db, payload)
@@ -43,8 +50,11 @@ def upsert_dataset(payload: DatasetUpsertRequest, db: Session = Depends(get_db))
 
 
 @router.post("/dataset/demo", response_model=DatasetResponse)
-def load_demo_dataset(db: Session = Depends(get_db)):
-    summary = replace_dataset(db, DatasetUpsertRequest(**build_demo_dataset()))
+def load_demo_dataset(
+    profile: str = Query(default="realistic", pattern="^(realistic|tuned)$"),
+    db: Session = Depends(get_db),
+):
+    summary = replace_dataset(db, DatasetUpsertRequest(**build_demo_dataset(profile)))
     return {"summary": DatasetSummary(**summary)}
 
 
@@ -58,13 +68,11 @@ def generate(payload: GenerationRequest, db: Session = Depends(get_db)):
     run = generate_timetables(
         db,
         selected_soft_constraints=payload.soft_constraints,
+        performance_preset=payload.performance_preset,
         max_solutions=payload.max_solutions,
         preview_limit=payload.preview_limit,
         time_limit_seconds=payload.time_limit_seconds,
     )
-    run = get_latest_run(db)
-    if not run:
-        raise HTTPException(status_code=500, detail="Failed to read generation result")
     return serialize_generation_run(run)
 
 
@@ -93,11 +101,18 @@ def view_timetable(
     mode: str = Query(default="admin"),
     lecturer_id: int | None = Query(default=None),
     student_group_id: int | None = Query(default=None),
+    degree_id: int | None = Query(default=None),
+    path_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     try:
         return build_view_payload(
-            db, mode=mode, lecturer_id=lecturer_id, student_group_id=student_group_id
+            db,
+            mode=mode,
+            lecturer_id=lecturer_id,
+            student_group_id=student_group_id,
+            degree_id=degree_id,
+            path_id=path_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -109,11 +124,18 @@ def export_timetable(
     export_format: str = Query(default="csv"),
     lecturer_id: int | None = Query(default=None),
     student_group_id: int | None = Query(default=None),
+    degree_id: int | None = Query(default=None),
+    path_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     try:
         view_payload = build_view_payload(
-            db, mode=mode, lecturer_id=lecturer_id, student_group_id=student_group_id
+            db,
+            mode=mode,
+            lecturer_id=lecturer_id,
+            student_group_id=student_group_id,
+            degree_id=degree_id,
+            path_id=path_id,
         )
         return export_view(view_payload, export_format)
     except ValueError as exc:

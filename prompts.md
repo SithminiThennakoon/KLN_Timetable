@@ -75,6 +75,20 @@ but some modules span over a whole year
 
 under a module there can be single or multiple sessions per week and they can have different durations. 
 
+also there are situations where the same real teaching event is recognized as different modules for different degrees or pathways. our data model and algorithms should support that.
+
+that means a single shared lecture or shared lab session can belong to multiple curriculum modules at the same time.
+
+for example one common lecture may be followed by students from several physical science pathways under one module identity, by another pathway under a different module identity, and by a completely different degree under yet another module identity.
+
+so we should not assume that one scheduled session always maps to exactly one module for all attending students.
+
+instead we should support one scheduled teaching session being linked to one or more modules while still keeping the actual attending student groups, lecturers, room requirements and conflict logic attached to the shared session itself.
+
+student overlap and clash detection should be based on the actual student groups attending the session, not only on a single module code.
+
+the data collection flow should therefore allow the user to define a shared teaching session once and then associate that session with one or more module identities where needed.
+
 
 so we should think of constraints as having two levels
 
@@ -98,6 +112,20 @@ for the most basic constraints we have to consider
 for the nice to have constraints we can consider
 
 1. for modules that have multiple sessions per week, those sessions should be scheduled on different days. for example if a module has two sessions per week those sessions should not be scheduled on the same day.
+
+in addition to that base nice to have rule, it is also okay to support extra optional preferences as explicit extensions if they help reduce the search space and still preserve a realistic faculty timetable.
+
+explicit nice to have extension examples:
+
+2. prefer theory sessions such as lectures and tutorials to be scheduled in the morning and to finish before lunch when possible.
+3. prefer practical and laboratory sessions to be scheduled after lunch when possible, so the morning can be used more for large shared theory sessions.
+4. avoid late afternoon starts when possible, so the timetable does not become too compressed near the end of the day.
+5. avoid Friday sessions when possible, so the faculty week stays lighter and more of the teaching load is concentrated from Monday to Thursday.
+6. prefer standard faculty block starts when possible, so sessions begin on common timetable boundaries instead of arbitrary half-hour placements.
+7. balance the teaching load across the week when possible, so the full timetable does not bunch heavily at the start of the week.
+8. avoid overloading Monday when possible, so Monday does not carry significantly more teaching than the rest of the week.
+
+these extension constraints are optional and should be clearly presented as nice to have preferences, not as mandatory functional rules.
 
 the shape of the timetable i have in mind is this 
 
@@ -210,4 +238,3 @@ but this seeder script should be able to generate data that that matches the sys
 even though year + degree + path combination is good at identifying a group of students it is not sufficient because of elective modules. 
 
 therefore when importing data we will have to use that year + degree + path combination as a base but when storing the data we will have to think about better data storing structure that can handle elective modules as well. 
-
