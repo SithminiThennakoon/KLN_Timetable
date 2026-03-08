@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.database import Base, SessionLocal, engine  # noqa: E402
 from app.services.timetable_v2 import (  # noqa: E402
+    SessionTask,
     build_view_payload,
     export_view,
     generate_timetables,
@@ -120,6 +121,28 @@ def build_dataset(
             }
         ],
     }
+
+
+def build_mock_task() -> SessionTask:
+    return SessionTask(
+        session_id=1,
+        session_name="Chemistry Lab",
+        session_type="lab",
+        module_id=1,
+        module_code="CHEM101",
+        module_name="Foundations of Chemistry",
+        occurrence_index=1,
+        split_index=1,
+        duration_minutes=180,
+        required_room_type="lab",
+        required_lab_type="chem_lab",
+        specific_room_id=1,
+        lecturer_ids=(1,),
+        student_group_ids=(1,),
+        student_count=40,
+        root_session_id=1,
+        bundle_key=None,
+    )
 
 
 class TimetableV2Tests(unittest.TestCase):
@@ -365,7 +388,7 @@ class TimetableV2Tests(unittest.TestCase):
                         "module_client_key": "module_chem",
                         "name": "Chemistry Lab",
                         "session_type": "practical",
-                        "duration_minutes": 60,
+                        "duration_minutes": 180,
                         "occurrences_per_week": 1,
                         "required_room_type": "lab",
                         "required_lab_type": "chem_lab",
@@ -381,7 +404,7 @@ class TimetableV2Tests(unittest.TestCase):
                         "module_client_key": "module_phys",
                         "name": "Physics Lab",
                         "session_type": "practical",
-                        "duration_minutes": 60,
+                        "duration_minutes": 180,
                         "occurrences_per_week": 1,
                         "required_room_type": "lab",
                         "required_lab_type": "chem_lab",
@@ -473,7 +496,10 @@ class TimetableV2Tests(unittest.TestCase):
         ):
             run = generate_timetables(
                 self.db,
-                selected_soft_constraints=["spread_sessions_across_days"],
+                selected_soft_constraints=[
+                    "avoid_friday_sessions",
+                    "spread_sessions_across_days",
+                ],
                 max_solutions=10,
                 preview_limit=2,
                 time_limit_seconds=10,
@@ -487,7 +513,8 @@ class TimetableV2Tests(unittest.TestCase):
         self.assertTrue(serialized["possible_soft_constraint_combinations"])
         self.assertTrue(
             any(
-                "spread_sessions_across_days" in combo["constraints"]
+                combo["constraints"] == ["avoid_friday_sessions"]
+                or combo["constraints"] == ["spread_sessions_across_days"]
                 for combo in serialized["possible_soft_constraint_combinations"]
             )
         )
@@ -548,6 +575,7 @@ class TimetableV2Tests(unittest.TestCase):
             "status": "feasible",
             "message": "Generated timetable solutions.",
             "solutions": [[(0, 1, "Monday", 480)]],
+            "tasks": [build_mock_task()],
         }
 
         seen_combos: list[list[str]] = []
@@ -569,8 +597,8 @@ class TimetableV2Tests(unittest.TestCase):
             generate_timetables(
                 self.db,
                 selected_soft_constraints=[
-                    "spread_sessions_across_days",
                     "avoid_friday_sessions",
+                    "spread_sessions_across_days",
                 ],
                 max_solutions=10,
                 preview_limit=2,
@@ -580,7 +608,7 @@ class TimetableV2Tests(unittest.TestCase):
         self.assertEqual(
             seen_combos,
             [
-                ["spread_sessions_across_days", "avoid_friday_sessions"],
+                ["avoid_friday_sessions", "spread_sessions_across_days"],
                 ["avoid_friday_sessions"],
                 ["spread_sessions_across_days"],
             ],

@@ -3,11 +3,22 @@ import { timetableStudioService } from "../services/timetableStudioService";
 
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 const startMinutes = [480, 540, 600, 660, 780, 840, 900, 960, 1020];
+const calendarStartMinute = 8 * 60;
+const calendarEndMinute = 18 * 60;
+const minuteHeight = 1.05;
+const calendarTopInset = 12;
+const maxCalendarLanes = 6;
 
 function formatMinute(minute) {
   const hour = Math.floor(minute / 60);
   const mins = String(minute % 60).padStart(2, "0");
   return `${String(hour).padStart(2, "0")}:${mins}`;
+}
+
+function formatCalendarHour(minute) {
+  const hour = Math.floor(minute / 60);
+  const mins = String(minute % 60).padStart(2, "0");
+  return { hour: String(hour), mins: `:${mins}` };
 }
 
 function compactSessionName(moduleCode, sessionName) {
@@ -36,24 +47,25 @@ function compactAudienceLabels(labels = []) {
   return `${labels.slice(0, 2).join(" | ")} +${labels.length - 2} more`;
 }
 
-function entryCardStyle(placement) {
-  const laneWidth = 100 / placement.laneCount;
-  return {
-    gridColumn: placement.dayColumn,
-    gridRow: `${placement.rowStart} / span ${placement.rowSpan}`,
-    marginLeft: `calc(${laneWidth * placement.lane}% + ${placement.lane * 6}px)`,
-    width: `calc(${laneWidth}% - ${Math.max(placement.laneCount - 1, 0) * 6 / placement.laneCount}px)`,
-  };
+function getEntryToneClass(entry) {
+  const label = `${entry.session_name || ""} ${entry.module_name || ""}`.toLowerCase();
+  if (label.includes("lab") || label.includes("laboratory")) {
+    return "is-lab";
+  }
+  return "is-lecture";
 }
 
-function buildEntryPlacements(entries = []) {
-  const startIndexByMinute = new Map(startMinutes.map((minute, index) => [minute, index]));
-  const dayColumnByName = new Map(days.map((day, index) => [day, index + 2]));
+function buildCalendarPlacements(entries = []) {
   const placements = new Map();
 
   days.forEach((day) => {
     const dayEntries = entries
-      .filter((entry) => entry.day === day && startIndexByMinute.has(entry.start_minute))
+      .filter(
+        (entry) =>
+          entry.day === day &&
+          entry.start_minute >= calendarStartMinute &&
+          entry.start_minute < calendarEndMinute
+      )
       .slice()
       .sort((left, right) => {
         if (left.start_minute !== right.start_minute) {
@@ -68,29 +80,79 @@ function buildEntryPlacements(entries = []) {
       const endMinute = entry.start_minute + entry.duration_minutes;
       let lane = laneEnds.findIndex((laneEnd) => entry.start_minute >= laneEnd);
       if (lane === -1) {
-        lane = laneEnds.length;
-        laneEnds.push(endMinute);
+        if (laneEnds.length < maxCalendarLanes) {
+          lane = laneEnds.length;
+          laneEnds.push(endMinute);
+        } else {
+          let earliestLane = 0;
+          for (let index = 1; index < laneEnds.length; index += 1) {
+            if (laneEnds[index] < laneEnds[earliestLane]) {
+              earliestLane = index;
+            }
+          }
+          lane = earliestLane;
+          laneEnds[lane] = endMinute;
+        }
       } else {
         laneEnds[lane] = endMinute;
       }
       laneByEntry.set(entry, lane);
     });
 
-    const laneCount = Math.max(laneEnds.length, 1);
+    const laneCount = maxCalendarLanes;
     dayEntries.forEach((entry) => {
-      const rowStart = startIndexByMinute.get(entry.start_minute) + 2;
-      const rowSpan = Math.max(1, Math.ceil(entry.duration_minutes / 60));
       placements.set(entry, {
-        dayColumn: dayColumnByName.get(day),
-        rowStart,
-        rowSpan,
         lane: laneByEntry.get(entry) || 0,
         laneCount,
+        top: Math.max(0, calendarTopInset + (entry.start_minute - calendarStartMinute) * minuteHeight),
+        height: Math.max(56, entry.duration_minutes * minuteHeight),
       });
     });
   });
 
   return placements;
+}
+
+function entryCalendarStyle(placement) {
+  const gapPx = 10;
+  const laneWidth = 100 / placement.laneCount;
+  return {
+    top: `${placement.top + 5}px`,
+    height: `${Math.max(placement.height - 10, 48)}px`,
+    left: `calc(${laneWidth * placement.lane}% + ${placement.lane * gapPx}px)`,
+    width: `calc(${laneWidth}% - ${gapPx * (placement.laneCount - 1) / placement.laneCount}px)`,
+    boxSizing: "border-box",
+  };
+}
+
+function buildAgendaDays(entries = []) {
+  return days
+    .map((day) => ({
+      day,
+      entries: entries
+        .filter((entry) => entry.day === day)
+        .slice()
+        .sort((left, right) => left.start_minute - right.start_minute || right.duration_minutes - left.duration_minutes),
+    }))
+    .filter((item) => item.entries.length > 0);
+}
+
+function formatEntrySummary(entry) {
+  return `${entry.day} ${formatMinute(entry.start_minute)} for ${entry.duration_minutes} minutes`;
+}
+
+function getEntryKey(entry, index) {
+  return `${entry.session_id}-${entry.occurrence_index ?? 1}-${index}`;
+}
+
+function findEntryIndex(entries, target) {
+  return entries.findIndex(
+    (entry) =>
+      entry.session_id === target.session_id &&
+      (entry.occurrence_index ?? 1) === (target.occurrence_index ?? 1) &&
+      entry.day === target.day &&
+      entry.start_minute === target.start_minute
+  );
 }
 
 function downloadBase64(filename, contentType, content) {
@@ -344,6 +406,9 @@ function ViewStudio() {
   const [selectedLecturerId, setSelectedLecturerId] = useState("");
   const [selectedDegreeId, setSelectedDegreeId] = useState("");
   const [selectedPathId, setSelectedPathId] = useState("");
+  const [layoutMode, setLayoutMode] = useState("agenda");
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState(days[0]);
+  const [selectedEntryKey, setSelectedEntryKey] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -366,6 +431,7 @@ function ViewStudio() {
         pathId: nextMode === "student" && selectedPathId !== "general" ? selectedPathId : undefined,
       });
       setView(response);
+      setSelectedEntryKey("");
     } catch (err) {
       if (
         nextMode === "admin" &&
@@ -398,14 +464,43 @@ function ViewStudio() {
     return map;
   }, [view]);
 
-  const entryPlacements = useMemo(
-    () => buildEntryPlacements(view?.solution?.entries || []),
+  const calendarPlacements = useMemo(
+    () => buildCalendarPlacements(view?.solution?.entries || []),
     [view]
   );
+
+  const agendaDays = useMemo(
+    () => buildAgendaDays(view?.solution?.entries || []),
+    [view]
+  );
+
+  const selectedEntry = useMemo(() => {
+    const entries = view?.solution?.entries || [];
+    if (entries.length === 0) {
+      return null;
+    }
+    if (!selectedEntryKey) {
+      return entries[0];
+    }
+    return entries.find((entry, index) => `${entry.session_id}-${entry.occurrence_index ?? 1}-${index}` === selectedEntryKey) || entries[0];
+  }, [selectedEntryKey, view]);
+
+  const resolvedSelectedEntryKey = useMemo(() => {
+    const entries = view?.solution?.entries || [];
+    if (!selectedEntry || entries.length === 0) {
+      return "";
+    }
+    const index = findEntryIndex(entries, selectedEntry);
+    if (index === -1) {
+      return "";
+    }
+    return getEntryKey(selectedEntry, index);
+  }, [selectedEntry, view]);
 
   const handleModeChange = async (nextMode) => {
     setMode(nextMode);
     setError("");
+    setLayoutMode(nextMode === "admin" ? "agenda" : "calendar");
     if (nextMode === "admin") {
       await loadView(nextMode);
       return;
@@ -500,6 +595,22 @@ function ViewStudio() {
                 ))}
               </select>
             )}
+            <div className="view-layout-toggle" role="tablist" aria-label="View layout">
+              <button
+                type="button"
+                className={layoutMode === "calendar" ? "ghost-btn active-layout" : "ghost-btn"}
+                onClick={() => setLayoutMode("calendar")}
+              >
+                Calendar
+              </button>
+              <button
+                type="button"
+                className={layoutMode === "agenda" ? "ghost-btn active-layout" : "ghost-btn"}
+                onClick={() => setLayoutMode("agenda")}
+              >
+                Agenda
+              </button>
+            </div>
             {mode !== "admin" && (
               <button
                 className="ghost-btn"
@@ -553,78 +664,146 @@ function ViewStudio() {
               <p>{view.subtitle}</p>
             </section>
 
-            <section className="studio-card timetable-grid-card">
-              <div className="v2-grid v2-grid-spanned">
-                <div className="grid-header">Time</div>
-                {days.map((day) => (
-                  <div key={day} className="grid-header">{day}</div>
-                ))}
-                {startMinutes.map((minute) => (
-                  <React.Fragment key={minute}>
-                    <div className="grid-time">{formatMinute(minute)}</div>
-                    {days.map((day) => (
-                      <div key={`${day}-${minute}`} className="grid-cell tall">
-                      </div>
-                    ))}
-                  </React.Fragment>
-                ))}
-                {(view.solution.entries || []).map((entry, index) => {
-                  const placement = entryPlacements.get(entry);
-                  if (!placement) {
-                    return null;
-                  }
-                  const sessionLabel = compactSessionName(entry.module_code, entry.session_name);
-                  const lecturerLabel = compactLecturerNames(entry.lecturer_names);
-                  const audienceLabel = compactAudienceLabels(entry.degree_path_labels);
-                  return (
-                    <article
-                      key={`${entry.session_id}-${entry.occurrence_index ?? 1}-${index}`}
-                      className="entry-card detailed compact spanned"
-                      style={entryCardStyle(placement)}
-                      title={[
-                        `${entry.module_code} ${entry.session_name}`,
-                        entry.room_name,
-                        entry.lecturer_names.join(", "),
-                        entry.degree_path_labels.join(" | "),
-                        `${entry.total_students} students`,
-                      ].filter(Boolean).join("\n")}
+            <section className="studio-grid two-column view-layout-grid">
+            {layoutMode === "calendar" ? (
+              <section className="studio-card timetable-grid-card">
+                <div className="calendar-day-tabs" role="tablist" aria-label="Calendar day">
+                  {days.map((day) => (
+                    <button
+                      key={day}
+                      type="button"
+                      className={selectedCalendarDay === day ? "ghost-btn active-layout" : "ghost-btn"}
+                      onClick={() => setSelectedCalendarDay(day)}
                     >
-                      <strong>{entry.module_code}</strong>
-                      <span className="entry-session-line">{sessionLabel}</span>
-                      <span className="entry-meta-line">
-                        {[entry.room_name, lecturerLabel].filter(Boolean).join(" | ")}
-                      </span>
-                      <span className="entry-audience-line">{audienceLabel}</span>
-                      <span className="entry-duration-line">{entry.duration_minutes} min</span>
-                      <span className="entry-student-line">{entry.total_students} students</span>
-                    </article>
-                  );
-                })}
-              </div>
-            </section>
-
-            <section className="studio-card">
-              <h2>Session Detail List</h2>
-              {view.solution.entries.length === 0 ? (
-                <p className="empty-state">
-                  This view currently has no timetable entries.
-                </p>
-              ) : (
-                <div className="entry-list">
-                  {view.solution.entries.map((entry, index) => (
-                    <div key={`${entry.session_id}-${index}`} className="entry-row">
-                      <div>
-                        <strong>{entry.module_code} - {entry.session_name}</strong>
-                        <p>{entry.day} {formatMinute(entry.start_minute)} for {entry.duration_minutes} minutes</p>
-                      </div>
-                      <div>
-                        <span>{entry.room_name}</span>
-                        <span>{entry.total_students} students</span>
-                      </div>
-                    </div>
+                      {day}
+                    </button>
                   ))}
                 </div>
-              )}
+                <div
+                  className="calendar-stage"
+                  style={{ height: `${calendarTopInset + (calendarEndMinute - calendarStartMinute) * minuteHeight}px` }}
+                >
+                  {Array.from({ length: (calendarEndMinute - calendarStartMinute) / 60 }, (_, index) => {
+                    const minute = calendarStartMinute + index * 60;
+                    return (
+                      <div
+                        key={`stage-line-${minute}`}
+                        className="calendar-hour-line stage-line"
+                        style={{ top: `${calendarTopInset + (minute - calendarStartMinute) * minuteHeight}px` }}
+                      />
+                    );
+                  })}
+                  {Array.from({ length: (calendarEndMinute - calendarStartMinute) / 60 + 1 }, (_, index) => {
+                    const minute = calendarStartMinute + index * 60;
+                    return (
+                      <div
+                        key={`stage-label-${minute}`}
+                        className="calendar-time-label stage-time-label"
+                        style={{ top: `${calendarTopInset + (minute - calendarStartMinute) * minuteHeight}px` }}
+                      >
+                        <span className="calendar-time-hour">{formatCalendarHour(minute).hour}</span>
+                        <span className="calendar-time-mins">{formatCalendarHour(minute).mins}</span>
+                      </div>
+                    );
+                  })}
+                  <div className="calendar-stage-divider" />
+                  <div className="calendar-event-layer">
+                    {(view.solution.entries || [])
+                      .filter((entry) => entry.day === selectedCalendarDay)
+                      .map((entry, index) => {
+                        const placement = calendarPlacements.get(entry);
+                        if (!placement) {
+                          return null;
+                        }
+                        const entryKey = getEntryKey(entry, index);
+                        return (
+                          <article
+                            key={entryKey}
+                            className={
+                              resolvedSelectedEntryKey === entryKey
+                                ? `entry-card detailed compact calendar-entry simplified ${getEntryToneClass(entry)} selected-entry`
+                                : `entry-card detailed compact calendar-entry simplified ${getEntryToneClass(entry)}`
+                            }
+                            style={entryCalendarStyle(placement)}
+                            onClick={() => setSelectedEntryKey(entryKey)}
+                            title={[
+                              `${entry.module_code} ${entry.session_name}`,
+                              entry.room_name,
+                              entry.lecturer_names.join(", "),
+                              entry.degree_path_labels.join(" | "),
+                              `${entry.total_students} students`,
+                            ].filter(Boolean).join("\n")}
+                          >
+                            <strong>{entry.module_code}</strong>
+                            <span className="entry-meta-line">{entry.room_name}</span>
+                          </article>
+                        );
+                      })}
+                  </div>
+                </div>
+              </section>
+            ) : (
+              <section className="studio-card agenda-card">
+                <div className="agenda-days">
+                  {agendaDays.map(({ day, entries }) => (
+                    <section key={day} className="agenda-day-section">
+                      <h3>{day}</h3>
+                      <div className="agenda-day-list">
+                        {entries.map((entry, index) => {
+                          const entryKey = getEntryKey(entry, index);
+                          return (
+                          <article
+                            key={entryKey}
+                            className={
+                              resolvedSelectedEntryKey === entryKey
+                                ? `agenda-entry ${getEntryToneClass(entry)} selected-entry`
+                                : `agenda-entry ${getEntryToneClass(entry)}`
+                            }
+                            onClick={() => setSelectedEntryKey(entryKey)}
+                          >
+                            <div className="agenda-entry-time">
+                              <strong>{formatMinute(entry.start_minute)}</strong>
+                              <span>{entry.duration_minutes} min</span>
+                            </div>
+                            <div className="agenda-entry-body">
+                              <strong>{entry.module_code} {compactSessionName(entry.module_code, entry.session_name)}</strong>
+                              <span>{entry.room_name} | {compactLecturerNames(entry.lecturer_names)}</span>
+                              <span>{compactAudienceLabels(entry.degree_path_labels)}</span>
+                              <span>{entry.total_students} students</span>
+                            </div>
+                          </article>
+                        )})}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              </section>
+            )}
+              <aside className="studio-card detail-drawer">
+                <h2>Session Details</h2>
+                {!selectedEntry ? (
+                  <p className="empty-state">Select a session to inspect its details.</p>
+                ) : (
+                  <div className="detail-drawer-body">
+                    <strong className="detail-title">
+                      {selectedEntry.module_code} {compactSessionName(selectedEntry.module_code, selectedEntry.session_name)}
+                    </strong>
+                    <p className="detail-summary">{formatEntrySummary(selectedEntry)}</p>
+                    <div className="detail-pairs">
+                      <span>Room</span>
+                      <strong>{selectedEntry.room_name}</strong>
+                      <span>Lecturers</span>
+                      <strong>{selectedEntry.lecturer_names.join(", ") || "Unassigned"}</strong>
+                      <span>Student groups</span>
+                      <strong>{selectedEntry.student_group_names.join(", ") || "None"}</strong>
+                      <span>Degree paths</span>
+                      <strong>{selectedEntry.degree_path_labels.join(" | ") || "None"}</strong>
+                      <span>Students</span>
+                      <strong>{selectedEntry.total_students}</strong>
+                    </div>
+                  </div>
+                )}
+              </aside>
             </section>
           </>
         )}

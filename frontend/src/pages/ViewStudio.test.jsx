@@ -314,7 +314,7 @@ describe("ViewStudio", () => {
     expect(timetableStudioService.exportView).not.toHaveBeenCalled();
   });
 
-  it("renders longer sessions with row spanning and duration text", async () => {
+  it("defaults to agenda and supports focused calendar mode", async () => {
     timetableStudioService.getLookups.mockResolvedValue({
       lecturers: [],
       degrees: [],
@@ -346,8 +346,20 @@ describe("ViewStudio", () => {
 
     render(<ViewStudio />);
 
+    expect(await screen.findByRole("button", { name: "Agenda" })).toBeInTheDocument();
+    expect(screen.getByText("Session Details")).toBeInTheDocument();
+    expect(screen.queryByText("Session Detail List")).not.toBeInTheDocument();
+    expect(screen.getByText("Monday")).toBeInTheDocument();
+    expect(screen.getByText("A11 201 | Lecturer 1")).toBeInTheDocument();
+    expect(document.querySelector(".agenda-entry.selected-entry")).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Calendar" }));
+
     const card = await screen.findByTitle(/CHEM101 Chemistry Lecture/i);
-    expect(card).toHaveStyle({ gridRow: "2 / span 3" });
-    expect(screen.getByText("180 min")).toBeInTheDocument();
+    expect(card.className).toContain("selected-entry");
+    expect(card).toHaveStyle({ height: "179px" });
+    fireEvent.click(card);
+    expect(card.className).toContain("selected-entry");
+    expect(screen.getByText("Monday 08:00 for 180 minutes")).toBeInTheDocument();
   });
 });
