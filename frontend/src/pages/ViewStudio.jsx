@@ -99,11 +99,11 @@ function buildCalendarPlacements(entries = []) {
       laneByEntry.set(entry, lane);
     });
 
-    const laneCount = maxCalendarLanes;
+    const laneCount = Math.max(...laneByEntry.values(), 0) + 1;
     dayEntries.forEach((entry) => {
       placements.set(entry, {
         lane: laneByEntry.get(entry) || 0,
-        laneCount,
+        laneCount: Math.min(laneCount, maxCalendarLanes),
         top: Math.max(0, calendarTopInset + (entry.start_minute - calendarStartMinute) * minuteHeight),
         height: Math.max(56, entry.duration_minutes * minuteHeight),
       });
@@ -248,71 +248,67 @@ async function exportWorkbook(view, entryMap) {
   XLSX.writeFile(workbook, `${view.mode}-timetable.xlsx`);
 }
 
-async function exportPdf(view, entryMap) {
+async function exportPdf(view, entryMap, selectedDay) {
   const [{ default: jsPDF }] = await Promise.all([
     import("jspdf"),
     import("jspdf-autotable"),
   ]);
-  const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
-  doc.setFontSize(18);
-  doc.text(view.title, 40, 36);
-  doc.setFontSize(10);
-  doc.text(view.subtitle, 40, 54);
+  const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+  
+  // Custom Dark Theme Styles for PDF
+  const colors = {
+    bg: [17, 22, 26],
+    card: [45, 95, 139],
+    text: [255, 255, 255],
+    muted: [169, 177, 166],
+    header: [70, 84, 98]
+  };
 
-  const header = ["Time", ...days];
-  const body = startMinutes.map((minute) => [
-    formatMinute(minute),
-    ...days.map((day) => {
-      const entries = entryMap.get(`${day}-${minute}`) || [];
-      return entries
-        .map(
-          (entry) =>
-            `${entry.module_code} ${entry.session_name}\n${entry.room_name}\n${entry.lecturer_names.join(", ")}`
-        )
-        .join("\n\n");
-    }),
-  ]);
+  doc.setFillColor(...colors.bg);
+  doc.rect(0, 0, doc.internal.pageSize.width, doc.internal.pageSize.height, 'F');
 
-  doc.autoTable({
-    head: [header],
-    body,
-    startY: 72,
-    styles: { fontSize: 7, cellPadding: 4, overflow: "linebreak", valign: "middle" },
-    columnStyles: { 0: { cellWidth: 52, fontStyle: "bold" } },
-    headStyles: { fillColor: [146, 64, 14] },
-    margin: { left: 28, right: 28 },
-  });
+  doc.setTextColor(...colors.text);
+  doc.setFontSize(22);
+  doc.text(view.title, 40, 50);
+  doc.setFontSize(12);
+  doc.setTextColor(...colors.muted);
+  doc.text(`${view.subtitle} - ${selectedDay}`, 40, 70);
 
-  const detailRows = view.solution.entries.map((entry) => [
-    entry.day,
+  const dayEntries = view.solution.entries
+    .filter(e => e.day === selectedDay)
+    .sort((a, b) => a.start_minute - b.start_minute);
+
+  const tableData = dayEntries.map(entry => [
     formatMinute(entry.start_minute),
-    `${entry.module_code} ${entry.session_name}`,
+    entry.module_code,
+    entry.session_name,
     entry.room_name,
     entry.lecturer_names.join(", "),
-    String(entry.total_students),
+    entry.total_students
   ]);
 
-  doc.text("Session Details", 40, doc.lastAutoTable.finalY + 24);
   doc.autoTable({
-    head: [["Day", "Start", "Session", "Room", "Lecturers", "Students"]],
-    body: detailRows,
-    startY: doc.lastAutoTable.finalY + 32,
-    styles: { fontSize: 8, cellPadding: 4, overflow: "linebreak" },
-    headStyles: { fillColor: [22, 101, 52] },
-    margin: { left: 28, right: 28 },
+    head: [["Time", "Code", "Session", "Room", "Lecturers", "Students"]],
+    body: tableData,
+    startY: 100,
+    theme: 'grid',
+    headStyles: { fillColor: colors.header, textColor: [255, 255, 255], fontStyle: 'bold' },
+    bodyStyles: { fillColor: [30, 35, 40], textColor: [240, 240, 240], fontSize: 9 },
+    alternateRowStyles: { fillColor: [35, 42, 48] },
+    margin: { left: 40, right: 40 }
   });
 
-  doc.save(`${view.mode}-timetable.pdf`);
+  doc.save(`${view.mode}-${selectedDay}-timetable.pdf`);
 }
 
-async function exportPng(view, entryMap) {
-  const cellWidth = 220;
+async function exportPng(view, entryMap, selectedDay) {
+  const cellWidth = 800;
   const timeWidth = 90;
-  const headerHeight = 42;
-  const rowHeight = 130;
-  const detailHeight = Math.max(180, view.solution.entries.length * 22 + 48);
-  const width = timeWidth + days.length * cellWidth;
-  const height = 96 + headerHeight + startMinutes.length * rowHeight + detailHeight;
+  const headerHeight = 60;
+  const calendarHeight = (calendarEndMinute - calendarStartMinute) * minuteHeight + calendarTopInset + 40;
+  const detailHeight = Math.max(180, view.solution.entries.length * 28 + 60);
+  const width = timeWidth + cellWidth;
+  const height = 120 + headerHeight + calendarHeight + detailHeight;
 
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -323,68 +319,96 @@ async function exportPng(view, entryMap) {
     throw new Error("Canvas export is not supported in this browser.");
   }
 
-  ctx.fillStyle = "#f7efe3";
+  // Background
+  ctx.fillStyle = "#11161a";
   ctx.fillRect(0, 0, width, height);
-  ctx.fillStyle = "#201a13";
-  ctx.font = "bold 28px Georgia";
-  ctx.fillText(view.title, 30, 40);
-  ctx.font = "16px sans-serif";
-  ctx.fillStyle = "#847867";
-  ctx.fillText(view.subtitle, 30, 66);
 
-  const top = 96;
-  ctx.font = "bold 15px sans-serif";
-  ctx.fillStyle = "#f2eadc";
+  // Title & Subtitle
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 32px sans-serif";
+  ctx.fillText(view.title, 30, 50);
+  ctx.font = "18px sans-serif";
+  ctx.fillStyle = "#a9b1a6";
+  ctx.fillText(`${view.subtitle} - ${selectedDay}`, 30, 85);
+
+  const top = 120;
+  // Header
+  ctx.fillStyle = "#465462";
   ctx.fillRect(0, top, width, headerHeight);
-  ctx.strokeStyle = "#d7cfc3";
-  ctx.strokeRect(0, top, width, headerHeight);
-  ctx.fillStyle = "#3f362a";
-  ctx.fillText("Time", 24, top + 26);
-  days.forEach((day, dayIndex) => {
-    ctx.fillText(day, timeWidth + dayIndex * cellWidth + 16, top + 26);
-  });
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 20px sans-serif";
+  ctx.fillText("Time", 20, top + 38);
+  ctx.fillText(selectedDay, timeWidth + 20, top + 38);
 
-  startMinutes.forEach((minute, rowIndex) => {
-    const y = top + headerHeight + rowIndex * rowHeight;
-    ctx.fillStyle = "#fffaf2";
-    ctx.fillRect(0, y, width, rowHeight);
-    ctx.strokeStyle = "#d7cfc3";
-    ctx.strokeRect(0, y, width, rowHeight);
-    ctx.fillStyle = "#3f362a";
+  // Calendar Area
+  const calTop = top + headerHeight;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+  
+  // Hour Lines
+  for (let m = calendarStartMinute; m <= calendarEndMinute; m += 60) {
+    const y = calTop + calendarTopInset + (m - calendarStartMinute) * minuteHeight;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+    ctx.stroke();
+
+    ctx.fillStyle = "#cbd6e1";
     ctx.font = "bold 14px sans-serif";
-    ctx.fillText(formatMinute(minute), 18, y + 28);
+    const { hour, mins } = formatCalendarHour(m);
+    ctx.fillText(`${hour}${mins}`, 10, y + 5);
+  }
 
-    days.forEach((day, dayIndex) => {
-      const x = timeWidth + dayIndex * cellWidth;
-      ctx.strokeRect(x, y, cellWidth, rowHeight);
-      const entries = entryMap.get(`${day}-${minute}`) || [];
-      let cursorY = y + 22;
-      entries.forEach((entry) => {
-        ctx.fillStyle = "#fbeedc";
-        ctx.fillRect(x + 8, cursorY - 14, cellWidth - 16, 44);
-        ctx.strokeStyle = "#d9b186";
-        ctx.strokeRect(x + 8, cursorY - 14, cellWidth - 16, 44);
-        ctx.fillStyle = "#201a13";
-        ctx.font = "bold 11px sans-serif";
-        ctx.fillText(entry.module_code, x + 14, cursorY);
-        ctx.font = "10px sans-serif";
-        ctx.fillText(entry.room_name, x + 14, cursorY + 14);
-        ctx.fillText(`${entry.total_students} students`, x + 14, cursorY + 28);
-        cursorY += 52;
-      });
-    });
+  // Divider
+  ctx.beginPath();
+  ctx.moveTo(timeWidth, calTop);
+  ctx.lineTo(timeWidth, calTop + calendarHeight);
+  ctx.stroke();
+
+  // Entries
+  const dayEntries = view.solution.entries.filter(e => e.day === selectedDay);
+  const placements = buildCalendarPlacements(view.solution.entries);
+
+  dayEntries.forEach(entry => {
+    const p = placements.get(entry);
+    if (!p) return;
+
+    const xBase = timeWidth + 10;
+    const availableWidth = cellWidth - 40;
+    const laneW = availableWidth / p.laneCount;
+    const x = xBase + p.lane * laneW;
+    const y = calTop + p.top + 5;
+    const h = Math.max(p.height - 10, 48);
+    const w = laneW - 10;
+
+    // Card
+    const isLab = getEntryToneClass(entry) === "is-lab";
+    ctx.fillStyle = isLab ? "#2d6f74" : "#3a6793";
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 8);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+    ctx.stroke();
+
+    // Text
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 14px sans-serif";
+    ctx.fillText(entry.module_code, x + 10, y + 22);
+    ctx.font = "12px sans-serif";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.fillText(entry.room_name, x + 10, y + 40);
   });
 
-  const detailTop = top + headerHeight + startMinutes.length * rowHeight + 24;
-  ctx.fillStyle = "#201a13";
-  ctx.font = "bold 18px Georgia";
+  const detailTop = calTop + calendarHeight + 40;
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 24px sans-serif";
   ctx.fillText("Session Details", 30, detailTop);
-  ctx.font = "12px sans-serif";
-  ctx.fillStyle = "#3f362a";
-  view.solution.entries.forEach((entry, index) => {
-    const y = detailTop + 28 + index * 22;
-    const line = `${entry.day} ${formatMinute(entry.start_minute)}  |  ${entry.module_code} ${entry.session_name}  |  ${entry.room_name}  |  ${entry.lecturer_names.join(", ")}`;
-    ctx.fillText(line.slice(0, 150), 30, y);
+
+  ctx.font = "14px sans-serif";
+  ctx.fillStyle = "#edf1ea";
+  dayEntries.forEach((entry, index) => {
+    const y = detailTop + 40 + index * 28;
+    const line = `${formatMinute(entry.start_minute)} | ${entry.module_code} ${entry.session_name} | ${entry.room_name} | ${entry.lecturer_names.join(", ")}`;
+    ctx.fillText(line, 30, y);
   });
 
   const blob = await new Promise((resolve, reject) => {
@@ -396,7 +420,7 @@ async function exportPng(view, entryMap) {
       resolve(nextBlob);
     }, "image/png");
   });
-  downloadBlob(`${view.mode}-timetable.png`, blob);
+  downloadBlob(`${view.mode}-${selectedDay}-timetable.png`, blob);
 }
 
 function ViewStudio() {
@@ -526,7 +550,7 @@ function ViewStudio() {
         return;
       }
       if (format === "pdf") {
-        await exportPdf(view, entryMap);
+        await exportPdf(view, entryMap, selectedCalendarDay);
         return;
       }
       if (format === "xls") {
@@ -534,7 +558,7 @@ function ViewStudio() {
         return;
       }
       if (format === "png") {
-        await exportPng(view, entryMap);
+        await exportPng(view, entryMap, selectedCalendarDay);
         return;
       }
       const response = await timetableStudioService.exportView({
