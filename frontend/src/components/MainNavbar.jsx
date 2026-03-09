@@ -8,14 +8,13 @@ const MainNavbar = () => (
       <span className="logo-circle">FS</span>
       <div className="main-title-block">
         <span className="main-title">Faculty of Science</span><br />
-        <span className="main-subtitle">University of Kelaniya - Timetable Generator</span>
+        <span className="main-subtitle">University of Kelaniya - Timetable Studio</span>
       </div>
     </div>
     <nav className="main-menu">
-      <NavLink to="/database" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Database</NavLink>
-      <NavLink to="/constraints" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Constraints</NavLink>
+      <NavLink to="/setup" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Setup</NavLink>
       <NavLink to="/generate" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Generate</NavLink>
-      <NavLink to="/view" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>View</NavLink>
+      <NavLink to="/views" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Views</NavLink>
     </nav>
   </header>
 );
