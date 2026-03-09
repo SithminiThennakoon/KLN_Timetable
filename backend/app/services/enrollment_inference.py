@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import csv
+import math
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 
 
@@ -14,6 +14,8 @@ ACADEMIC_YEAR_RE = re.compile(r"^(?P<start>\d{4})/(?P<end>\d{4})$")
 COURSE_CODE_RE = re.compile(r"^(?P<prefix>[A-Z]+)\s+(?P<digits>\d{5})$")
 MIN_COHORT_SIZE = 0
 MAX_COURSES_PER_STREAM_YEAR_SEMESTER = 100
+TARGET_WEEKLY_LECTURER_HOURS = 35
+PATH_CORE_PARTICIPATION_THRESHOLD = 0.8
 
 STREAM_NAME_MAP = {
     "AC": "Applied Chemistry",
@@ -80,6 +82,11 @@ def _normalize_semester_bucket(value: str | None) -> int:
     return 1
 
 
+def _course_semester_bucket(course_code: str) -> int:
+    _, _, inferred_semester = _course_parts(course_code)
+    return _normalize_semester_bucket(inferred_semester)
+
+
 def _stable_mod(value: str, divisor: int) -> int:
     return sum(ord(char) for char in value) % divisor
 
@@ -111,11 +118,39 @@ def _synthetic_lab_type(prefix: str, course_code: str, year: int, audience_size:
     return lab_type
 
 
+def _split_assignment_count(group_sizes: list[int], limit: int | None) -> int:
+    if not group_sizes:
+        return 1
+    total = sum(group_sizes)
+    if not limit or total <= limit:
+        return 1
+
+    split_count = 0
+    current_total = 0
+    for size in sorted(group_sizes):
+        remaining = int(size)
+        while remaining > 0:
+            available = limit - current_total
+            if current_total > 0 and available == 0:
+                split_count += 1
+                current_total = 0
+                available = limit
+            fragment_size = min(remaining, available)
+            current_total += fragment_size
+            remaining -= fragment_size
+            if current_total >= limit:
+                split_count += 1
+                current_total = 0
+
+    if current_total > 0:
+        split_count += 1
+    return max(1, split_count)
+
+
 def _slug(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
 
 
-@lru_cache(maxsize=1)
 def load_enrollment_records(path: str = str(DEFAULT_ENROLLMENT_CSV)) -> tuple[EnrollmentRecord, ...]:
     csv_path = Path(path)
     if not csv_path.exists():
@@ -162,6 +197,20 @@ def build_realistic_demo_dataset_from_enrollment_csv(
         record
         for record in records
         if record.academic_year == latest_academic_year and record.attempt == "1"
+    ]
+    if not current_records:
+        raise ValueError("Enrollment CSV did not contain current-year attempt-1 records.")
+
+    semester_counts: Counter[int] = Counter(
+        _course_semester_bucket(record.course_code) for record in current_records
+    )
+    selected_semester = max(
+        semester_counts.items(), key=lambda item: (item[1], -item[0])
+    )[0]
+    current_records = [
+        record
+        for record in current_records
+        if _course_semester_bucket(record.course_code) == selected_semester
     ]
 
     # Pick the largest batch for each stream/year/path to represent the current cohort.
@@ -230,27 +279,39 @@ def build_realistic_demo_dataset_from_enrollment_csv(
     student_groups = []
     group_client_key_by_key: dict[tuple[str, int, str], str] = {}
     selected_students_to_group_keys: dict[str, set[str]] = defaultdict(set)
+    group_meta_by_client_key: dict[str, dict[str, str | int | None]] = {}
     for (stream, year, path_no), (batch, members) in sorted(selected_batches.items()):
         group_client_key = f"group_{_slug(stream)}_y{year}_p{_slug(path_no)}"
         group_client_key_by_key[(stream, year, path_no)] = group_client_key
         for student_hash in members:
             selected_students_to_group_keys[student_hash].add(group_client_key)
-        student_groups.append(
-            {
-                "client_key": group_client_key,
-                "degree_client_key": degree_client_key_by_stream[stream],
-                "path_client_key": path_client_key_by_key.get((stream, year, path_no)),
-                "year": year,
-                "name": f"{stream} Y{year} Batch {batch} Path {path_no}",
-                "size": len(members),
-            }
-        )
+        group_payload = {
+            "client_key": group_client_key,
+            "degree_client_key": degree_client_key_by_stream[stream],
+            "path_client_key": path_client_key_by_key.get((stream, year, path_no)),
+            "year": year,
+            "name": f"{stream} Y{year} Batch {batch} Path {path_no}",
+            "size": len(members),
+        }
+        group_meta_by_client_key[group_client_key] = {
+            "stream": stream,
+            "year": year,
+            "path_no": path_no,
+            "batch": batch,
+            "degree_client_key": degree_client_key_by_stream[stream],
+            "path_client_key": path_client_key_by_key.get((stream, year, path_no)),
+            "name": group_payload["name"],
+        }
+        student_groups.append(group_payload)
 
     group_size_by_client_key = {
         group["client_key"]: int(group["size"]) for group in student_groups
     }
 
     course_students: dict[str, set[str]] = defaultdict(set)
+    course_group_student_members: dict[str, dict[str, set[str]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
     course_group_keys: dict[str, set[str]] = defaultdict(set)
     course_year: dict[str, int] = {}
     course_subject_prefix: dict[str, str] = {}
@@ -262,11 +323,36 @@ def build_realistic_demo_dataset_from_enrollment_csv(
             continue
         prefix, inferred_year, inferred_semester = _course_parts(record.course_code)
         course_students[record.course_code].add(record.student_hash)
-        course_group_keys[record.course_code].update(group_keys)
+        for group_key in group_keys:
+            course_group_student_members[record.course_code][group_key].add(record.student_hash)
         course_year[record.course_code] = record.year
         course_subject_prefix[record.course_code] = prefix
         semester_bucket = _normalize_semester_bucket(inferred_semester)
         stream_year_semester_course_counts[(record.stream, record.year, semester_bucket)][record.course_code] += 1
+
+    subgroup_counter = 0
+    for course_code, group_members in course_group_student_members.items():
+        for group_key, enrolled_students in group_members.items():
+            base_group_size = group_size_by_client_key[group_key]
+            participation_ratio = len(enrolled_students) / base_group_size if base_group_size else 0
+            if participation_ratio >= PATH_CORE_PARTICIPATION_THRESHOLD:
+                course_group_keys[course_code].add(group_key)
+                continue
+
+            subgroup_counter += 1
+            meta = group_meta_by_client_key[group_key]
+            subgroup_client_key = f"group_{_slug(course_code)}_{subgroup_counter}"
+            subgroup_payload = {
+                "client_key": subgroup_client_key,
+                "degree_client_key": meta["degree_client_key"],
+                "path_client_key": meta["path_client_key"],
+                "year": int(meta["year"]),
+                "name": f"{meta['name']} {course_code} Cohort",
+                "size": len(enrolled_students),
+            }
+            student_groups.append(subgroup_payload)
+            group_size_by_client_key[subgroup_client_key] = len(enrolled_students)
+            course_group_keys[course_code].add(subgroup_client_key)
 
     selected_courses: set[str] = set()
     for key, counter in stream_year_semester_course_counts.items():
@@ -298,21 +384,25 @@ def build_realistic_demo_dataset_from_enrollment_csv(
 
     modules = []
     lecturer_prefixes = sorted({_course_parts(course_code)[0] for course_code in selected_courses})
-    lecturer_client_keys = {
-        prefix: f"lect_{_slug(prefix)}" for prefix in lecturer_prefixes
-    }
-
-    lecturers = [
-        {
-            "client_key": lecturer_client_keys[prefix],
-            "name": f"{prefix} Lecturer",
-            "email": f"{_slug(prefix)}@science.kln.ac.lk",
-        }
-        for prefix in lecturer_prefixes
-    ]
+    course_session_minutes: dict[str, int] = {}
 
     for course_code in sorted(selected_courses):
         prefix, inferred_year, inferred_semester = _course_parts(course_code)
+        audience_size = sum(
+            group_size_by_client_key[group_key] for group_key in course_group_keys[course_code]
+        )
+        lecture_duration = _synthetic_lecture_duration(course_code, audience_size)
+        total_minutes = lecture_duration
+        lab_type = _synthetic_lab_type(prefix, course_code, course_year[course_code], audience_size)
+        if lab_type:
+            split_limit = LAB_SPLIT_LIMIT_BY_TYPE[lab_type]
+            group_sizes = [
+                group_size_by_client_key[group_key]
+                for group_key in course_group_keys[course_code]
+            ]
+            lab_split_count = _split_assignment_count(group_sizes, split_limit)
+            total_minutes += 180 * lab_split_count
+        course_session_minutes[course_code] = total_minutes
         modules.append(
             {
                 "client_key": f"mod_{_slug(course_code)}",
@@ -324,6 +414,50 @@ def build_realistic_demo_dataset_from_enrollment_csv(
                 "is_full_year": False,
             }
         )
+
+    lecturer_target_minutes = TARGET_WEEKLY_LECTURER_HOURS * 60
+    lecturer_client_keys_by_prefix: dict[str, list[str]] = {}
+    lecturers = []
+    for prefix in lecturer_prefixes:
+        prefix_courses = [
+            course_code
+            for course_code in selected_courses
+            if _course_parts(course_code)[0] == prefix
+        ]
+        total_prefix_minutes = sum(course_session_minutes[course_code] for course_code in prefix_courses)
+        lecturer_count = max(1, math.ceil(total_prefix_minutes / lecturer_target_minutes))
+        prefix_keys = []
+        for index in range(lecturer_count):
+            client_key = f"lect_{_slug(prefix)}_{index + 1}"
+            prefix_keys.append(client_key)
+            lecturers.append(
+                {
+                    "client_key": client_key,
+                    "name": f"{prefix} Lecturer {index + 1}",
+                    "email": f"{_slug(prefix)}.{index + 1}@science.kln.ac.lk",
+                }
+            )
+        lecturer_client_keys_by_prefix[prefix] = prefix_keys
+
+    lecturer_assignment_by_course: dict[str, str] = {}
+    lecturer_minutes_by_client_key = {lecturer["client_key"]: 0 for lecturer in lecturers}
+    for prefix in lecturer_prefixes:
+        prefix_courses = sorted(
+            (
+                course_code
+                for course_code in selected_courses
+                if _course_parts(course_code)[0] == prefix
+            ),
+            key=lambda course_code: (-course_session_minutes[course_code], course_code),
+        )
+        prefix_lecturers = lecturer_client_keys_by_prefix[prefix]
+        for course_code in prefix_courses:
+            assigned_lecturer = min(
+                prefix_lecturers,
+                key=lambda client_key: (lecturer_minutes_by_client_key[client_key], client_key),
+            )
+            lecturer_assignment_by_course[course_code] = assigned_lecturer
+            lecturer_minutes_by_client_key[assigned_lecturer] += course_session_minutes[course_code]
 
     ranked_audience_sizes = sorted(
         (
@@ -505,15 +639,6 @@ def build_realistic_demo_dataset_from_enrollment_csv(
         },
     ]
 
-    room_capacity_order = sorted(
-        (
-            (int(room["capacity"]), room["client_key"])
-            for room in rooms
-            if room["room_type"] == "lecture"
-        ),
-        key=lambda item: item[0],
-    )
-
     sessions = []
     for course_code in sorted(selected_courses):
         prefix = course_subject_prefix[course_code]
@@ -522,11 +647,7 @@ def build_realistic_demo_dataset_from_enrollment_csv(
             group_size_by_client_key[group_key] for group_key in course_group_keys[course_code]
         )
         lecture_duration = _synthetic_lecture_duration(course_code, audience_size)
-        specific_room_client_key = room_capacity_order[-1][1]
-        for capacity, client_key in room_capacity_order:
-            if audience_size <= capacity:
-                specific_room_client_key = client_key
-                break
+        assigned_lecturer = lecturer_assignment_by_course[course_code]
         sessions.append(
             {
                 "client_key": f"session_{_slug(course_code)}_lecture",
@@ -538,11 +659,11 @@ def build_realistic_demo_dataset_from_enrollment_csv(
                 "occurrences_per_week": 1,
                 "required_room_type": "lecture",
                 "required_lab_type": None,
-                "specific_room_client_key": specific_room_client_key,
+                "specific_room_client_key": None,
                 "max_students_per_group": None,
                 "allow_parallel_rooms": False,
-                "notes": f"Seeded from real enrollment data for {latest_academic_year}.",
-                "lecturer_client_keys": [lecturer_client_keys[prefix]],
+                "notes": f"Seeded from real enrollment data for {latest_academic_year} semester {selected_semester}.",
+                "lecturer_client_keys": [assigned_lecturer],
                 "student_group_client_keys": sorted(course_group_keys[course_code]),
             }
         )
@@ -562,8 +683,8 @@ def build_realistic_demo_dataset_from_enrollment_csv(
                     "specific_room_client_key": None,
                     "max_students_per_group": LAB_SPLIT_LIMIT_BY_TYPE[lab_type],
                     "allow_parallel_rooms": False,
-                    "notes": f"Synthetic laboratory block inferred from real enrollment data for {latest_academic_year}.",
-                    "lecturer_client_keys": [lecturer_client_keys[prefix]],
+                    "notes": f"Synthetic laboratory block inferred from real enrollment data for {latest_academic_year} semester {selected_semester}.",
+                    "lecturer_client_keys": [assigned_lecturer],
                     "student_group_client_keys": sorted(course_group_keys[course_code]),
                 }
             )

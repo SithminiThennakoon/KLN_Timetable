@@ -39,6 +39,7 @@ START_MINUTE = 8 * 60
 END_MINUTE = 18 * 60
 LUNCH_START = 12 * 60
 LUNCH_END = 13 * 60
+WEEKLY_SCHEDULABLE_MINUTES = 5 * ((END_MINUTE - START_MINUTE) - (LUNCH_END - LUNCH_START))
 SOFT_CONSTRAINTS = {
     "spread_sessions_across_days": SoftConstraintOption(
         key="spread_sessions_across_days",
@@ -99,6 +100,8 @@ PERFORMANCE_PRESETS = {
         "probe_num_workers": max(1, min((os.cpu_count() or 1) - 1, 3)),
     },
 }
+
+LARGE_DATASET_SESSION_THRESHOLD = 250
 
 
 @dataclass(frozen=True)
@@ -500,9 +503,32 @@ def _precheck_diagnostics(
         return issues
 
     tasks_by_bundle: dict[tuple[int, int], list[SessionTask]] = defaultdict(list)
+    lecturer_minutes: dict[int, int] = defaultdict(int)
+    lecturer_names: dict[int, str] = {}
+    group_minutes: dict[int, int] = defaultdict(int)
+    group_session_minutes: dict[tuple[int, int, int], int] = {}
+    group_names: dict[int, str] = {}
+
+    for session in sessions:
+        for lecturer in session.lecturers:
+            lecturer_names[int(lecturer.id)] = lecturer.name
+        for group in session.student_groups:
+            group_names[int(group.id)] = group.name
 
     for task in tasks:
         session = session_lookup.get(task.session_id)
+        for lecturer_id in task.lecturer_ids:
+            lecturer_minutes[int(lecturer_id)] += task.duration_minutes
+        for group_id in task.student_group_ids:
+            group_session_key = (
+                int(group_id),
+                int(task.root_session_id),
+                int(task.occurrence_index),
+            )
+            group_session_minutes[group_session_key] = max(
+                group_session_minutes.get(group_session_key, 0),
+                int(task.duration_minutes),
+            )
         if _is_lab_task(task) and task.duration_minutes != 180:
             issues.append(
                 f"{task.module_code} / {task.session_name} must be scheduled as one 3-hour lab block (180 minutes)."
@@ -548,6 +574,31 @@ def _precheck_diagnostics(
             issues.append(
                 f"{sample.module_code} / {sample.session_name} cannot place all same-time parallel room parts into a shared slot for occurrence {sample.occurrence_index}."
             )
+
+    for lecturer_id, scheduled_minutes in sorted(
+        lecturer_minutes.items(), key=lambda item: item[1], reverse=True
+    ):
+        if scheduled_minutes <= WEEKLY_SCHEDULABLE_MINUTES:
+            continue
+        lecturer_name = lecturer_names.get(lecturer_id, f"lecturer #{lecturer_id}")
+        issues.append(
+            f"{lecturer_name} is assigned {scheduled_minutes // 60:.1f} weekly hours, which exceeds the timetable capacity of {WEEKLY_SCHEDULABLE_MINUTES // 60} hours."
+        )
+
+    for (group_id, _session_id, _occurrence_index), session_minutes in (
+        group_session_minutes.items()
+    ):
+        group_minutes[group_id] += session_minutes
+
+    for group_id, scheduled_minutes in sorted(
+        group_minutes.items(), key=lambda item: item[1], reverse=True
+    ):
+        if scheduled_minutes <= WEEKLY_SCHEDULABLE_MINUTES:
+            continue
+        group_name = group_names.get(group_id, f"group #{group_id}")
+        issues.append(
+            f"{group_name} requires {scheduled_minutes // 60:.1f} weekly hours, which exceeds the timetable capacity of {WEEKLY_SCHEDULABLE_MINUTES // 60} hours."
+        )
 
     return issues
 
@@ -1090,13 +1141,17 @@ def generate_timetables(
 ) -> V2GenerationRun:
     selected_soft_constraints = list(selected_soft_constraints)
     solve_profile = _resolve_solve_profile(performance_preset)
+    session_count = db.query(V2Session).count()
+    use_feasible_first_search = session_count > LARGE_DATASET_SESSION_THRESHOLD
     result = _solve_internal(
         db,
         selected_soft_constraints,
         max_solutions,
         time_limit_seconds,
-        enumerate_all_solutions=True,
-        num_search_workers=1,
+        enumerate_all_solutions=not use_feasible_first_search,
+        num_search_workers=(
+            solve_profile.probe_num_workers if use_feasible_first_search else 1
+        ),
     )
 
     run = V2GenerationRun(
@@ -1156,8 +1211,10 @@ def generate_timetables(
                 combo,
                 solve_profile.fallback_combo_count_cap,
                 min(time_limit_seconds, solve_profile.fallback_time_limit_seconds),
-                enumerate_all_solutions=True,
-                num_search_workers=1,
+                enumerate_all_solutions=not use_feasible_first_search,
+                num_search_workers=(
+                    solve_profile.probe_num_workers if use_feasible_first_search else 1
+                ),
             )
             fallback_combo_evaluated_count += 1
             if combo_result["solutions"]:
@@ -2043,7 +2100,7 @@ def build_legacy_realistic_demo_dataset() -> dict:
             {
                 "client_key": "room_auditorium",
                 "name": "Auditorium",
-                "capacity": 650,
+                "capacity": 2000,
                 "room_type": "lecture",
                 "lab_type": None,
                 "location": "Faculty Central",
@@ -2059,9 +2116,18 @@ def build_legacy_realistic_demo_dataset() -> dict:
                 "year_restriction": None,
             },
             {
+                "client_key": "room_a11301",
+                "name": "A11 301",
+                "capacity": 150,
+                "room_type": "lecture",
+                "lab_type": None,
+                "location": "A11 Complex",
+                "year_restriction": None,
+            },
+            {
                 "client_key": "room_a11207",
                 "name": "A11 207",
-                "capacity": 100,
+                "capacity": 150,
                 "room_type": "lecture",
                 "lab_type": None,
                 "location": "A11 Complex",
@@ -2070,7 +2136,7 @@ def build_legacy_realistic_demo_dataset() -> dict:
             {
                 "client_key": "room_a11307",
                 "name": "A11 307",
-                "capacity": 90,
+                "capacity": 150,
                 "room_type": "lecture",
                 "lab_type": None,
                 "location": "A11 Complex",
@@ -2088,7 +2154,7 @@ def build_legacy_realistic_demo_dataset() -> dict:
             {
                 "client_key": "room_a7301",
                 "name": "A7 301",
-                "capacity": 120,
+                "capacity": 300,
                 "room_type": "lecture",
                 "lab_type": None,
                 "location": "A7 Complex",
@@ -2097,7 +2163,7 @@ def build_legacy_realistic_demo_dataset() -> dict:
             {
                 "client_key": "room_a7303",
                 "name": "A7 303",
-                "capacity": 80,
+                "capacity": 100,
                 "room_type": "lecture",
                 "lab_type": None,
                 "location": "A7 Complex",
@@ -2106,8 +2172,8 @@ def build_legacy_realistic_demo_dataset() -> dict:
             {
                 "client_key": "room_a7406",
                 "name": "A7 406",
-                "capacity": 70,
-                "room_type": "seminar",
+                "capacity": 400,
+                "room_type": "lecture",
                 "lab_type": None,
                 "location": "A7 Complex",
                 "year_restriction": None,
@@ -2115,7 +2181,7 @@ def build_legacy_realistic_demo_dataset() -> dict:
             {
                 "client_key": "room_b1212",
                 "name": "B1 212",
-                "capacity": 80,
+                "capacity": 800,
                 "room_type": "lecture",
                 "lab_type": None,
                 "location": "B1 Complex",
@@ -2124,8 +2190,8 @@ def build_legacy_realistic_demo_dataset() -> dict:
             {
                 "client_key": "room_b1343",
                 "name": "B1 343",
-                "capacity": 60,
-                "room_type": "seminar",
+                "capacity": 50,
+                "room_type": "lecture",
                 "lab_type": None,
                 "location": "B1 Complex",
                 "year_restriction": None,
