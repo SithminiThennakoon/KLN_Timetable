@@ -12,8 +12,8 @@ ROOT_DIR = Path(__file__).resolve().parents[3]
 DEFAULT_ENROLLMENT_CSV = ROOT_DIR / "students_processed_TT_J.csv"
 ACADEMIC_YEAR_RE = re.compile(r"^(?P<start>\d{4})/(?P<end>\d{4})$")
 COURSE_CODE_RE = re.compile(r"^(?P<prefix>[A-Z]+)\s+(?P<digits>\d{5})$")
-MIN_COHORT_SIZE = 12
-MAX_COURSES_PER_STREAM_YEAR_SEMESTER = 1
+MIN_COHORT_SIZE = 0
+MAX_COURSES_PER_STREAM_YEAR_SEMESTER = 100
 
 STREAM_NAME_MAP = {
     "AC": "Applied Chemistry",
@@ -261,8 +261,6 @@ def build_realistic_demo_dataset_from_enrollment_csv(
         if not group_keys:
             continue
         prefix, inferred_year, inferred_semester = _course_parts(record.course_code)
-        if inferred_year is not None and inferred_year != record.year:
-            continue
         course_students[record.course_code].add(record.student_hash)
         course_group_keys[record.course_code].update(group_keys)
         course_year[record.course_code] = record.year
@@ -277,8 +275,6 @@ def build_realistic_demo_dataset_from_enrollment_csv(
             # code pattern is found in the current selection.
             for record in current_records:
                 prefix, inferred_year, inferred_semester = _course_parts(record.course_code)
-                if inferred_year is not None and inferred_year != record.year:
-                    continue
                 semester_bucket = _normalize_semester_bucket(inferred_semester)
                 if (
                     record.stream == key[0]
@@ -348,25 +344,34 @@ def build_realistic_demo_dataset_from_enrollment_csv(
         {
             "client_key": "room_auditorium",
             "name": "Auditorium",
-            "capacity": max(400, largest_audience + 80),
+            "capacity": 2000,
             "room_type": "lecture",
             "lab_type": None,
             "location": "Faculty Central",
             "year_restriction": None,
         },
         {
-            "client_key": "room_main_hall",
-            "name": "Main Hall",
-            "capacity": max(260, second_largest_audience + 40),
+            "client_key": "room_a11201",
+            "name": "A11 201",
+            "capacity": 150,
             "room_type": "lecture",
             "lab_type": None,
-            "location": "Faculty Central",
+            "location": "A11 Complex",
+            "year_restriction": None,
+        },
+        {
+            "client_key": "room_a11301",
+            "name": "A11 301",
+            "capacity": 150,
+            "room_type": "lecture",
+            "lab_type": None,
+            "location": "A11 Complex",
             "year_restriction": None,
         },
         {
             "client_key": "room_a7201",
             "name": "A7 201",
-            "capacity": max(180, third_largest_audience + 20),
+            "capacity": 200,
             "room_type": "lecture",
             "lab_type": None,
             "location": "A7 Complex",
@@ -375,28 +380,64 @@ def build_realistic_demo_dataset_from_enrollment_csv(
         {
             "client_key": "room_a7301",
             "name": "A7 301",
-            "capacity": 180,
+            "capacity": 300,
             "room_type": "lecture",
             "lab_type": None,
             "location": "A7 Complex",
             "year_restriction": None,
         },
         {
-            "client_key": "room_a11201",
-            "name": "A11 201",
-            "capacity": 120,
+            "client_key": "room_a7406",
+            "name": "A7 406",
+            "capacity": 400,
+            "room_type": "lecture",
+            "lab_type": None,
+            "location": "A7 Complex",
+            "year_restriction": None,
+        },
+        {
+            "client_key": "room_b1212",
+            "name": "B1 212",
+            "capacity": 800,
+            "room_type": "lecture",
+            "lab_type": None,
+            "location": "B1 Complex",
+            "year_restriction": None,
+        },
+        {
+            "client_key": "room_a11207",
+            "name": "A11 207",
+            "capacity": 150,
             "room_type": "lecture",
             "lab_type": None,
             "location": "A11 Complex",
             "year_restriction": None,
         },
         {
-            "client_key": "room_a11207",
-            "name": "A11 207",
-            "capacity": 90,
+            "client_key": "room_a11307",
+            "name": "A11 307",
+            "capacity": 150,
             "room_type": "lecture",
             "lab_type": None,
             "location": "A11 Complex",
+            "year_restriction": None,
+        },
+        {
+            "client_key": "room_a7303",
+            "name": "A7 303",
+            "capacity": 100,
+            "room_type": "lecture",
+            "lab_type": None,
+            "location": "A7 Complex",
+            "year_restriction": None,
+        },
+        {
+            "client_key": "room_b1343",
+            "name": "B1 343",
+            "capacity": 50,
+            "room_type": "lecture",
+            "lab_type": None,
+            "location": "B1 Complex",
             "year_restriction": None,
         },
         {

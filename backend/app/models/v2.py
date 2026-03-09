@@ -248,7 +248,7 @@ class V2GenerationRun(Base):
     total_solutions_found = Column(Integer, nullable=False, default=0)
     truncated = Column(Boolean, nullable=False, default=False)
     max_solutions = Column(Integer, nullable=False, default=1000)
-    time_limit_seconds = Column(Integer, nullable=False, default=60)
+    time_limit_seconds = Column(Integer, nullable=False, default=180)
     message = Column(Text, nullable=True)
     possible_soft_constraint_combinations = Column(Text, nullable=False, default="")
     created_at = Column(

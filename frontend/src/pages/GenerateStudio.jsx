@@ -72,13 +72,13 @@ const defaultPerformanceSettings = {
   performance_preset: "balanced",
   max_solutions: 1000,
   preview_limit: 5,
-  time_limit_seconds: 60,
+  time_limit_seconds: 180,
 };
 
 const generationLimits = {
   max_solutions: { min: 1, max: 5000 },
   preview_limit: { min: 1, max: 100 },
-  time_limit_seconds: { min: 1, max: 300 },
+  time_limit_seconds: { min: 1, max: 600 },
 };
 
 function formatMilliseconds(value) {

@@ -145,7 +145,7 @@ class GenerationRequest(BaseModel):
     performance_preset: PerformancePreset = "balanced"
     max_solutions: int = Field(default=1000, ge=1, le=5000)
     preview_limit: int = Field(default=5, ge=1, le=100)
-    time_limit_seconds: int = Field(default=60, ge=1, le=300)
+    time_limit_seconds: int = Field(default=180, ge=1, le=600)
 
 
 class GenerationCounts(BaseModel):
