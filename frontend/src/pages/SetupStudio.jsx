@@ -616,10 +616,23 @@ function SetupStudio() {
   const [saving, setSaving] = useState(false);
   const [showDegreeModal, setShowDegreeModal] = useState(false);
   const [showPathModal, setShowPathModal] = useState(false);
+  const [showLecturerModal, setShowLecturerModal] = useState(false);
+  const [showRoomModal, setShowRoomModal] = useState(false);
   const [visibleDegreeCount, setVisibleDegreeCount] = useState(INITIAL_VISIBLE_RECORDS);
   const [visiblePathCount, setVisiblePathCount] = useState(INITIAL_VISIBLE_RECORDS);
+  const [visibleLecturerCount, setVisibleLecturerCount] = useState(INITIAL_VISIBLE_RECORDS);
+  const [visibleRoomCount, setVisibleRoomCount] = useState(INITIAL_VISIBLE_RECORDS);
   const [tempDegree, setTempDegree] = useState({ code: "", name: "", duration_years: 3, intake_label: "" });
   const [tempPath, setTempPath] = useState({ degreeId: "", year: 1, code: "", name: "" });
+  const [tempLecturer, setTempLecturer] = useState({ name: "", email: "" });
+  const [tempRoom, setTempRoom] = useState({
+    name: "",
+    capacity: "",
+    room_type: "lecture",
+    lab_type: "",
+    location: "",
+    year_restriction: "",
+  });
 
   const validation = useMemo(() => validateDraft(draft), [draft]);
 
@@ -652,6 +665,8 @@ function SetupStudio() {
       setSummary(toSummary(normalized));
       setVisibleDegreeCount(INITIAL_VISIBLE_RECORDS);
       setVisiblePathCount(INITIAL_VISIBLE_RECORDS);
+      setVisibleLecturerCount(INITIAL_VISIBLE_RECORDS);
+      setVisibleRoomCount(INITIAL_VISIBLE_RECORDS);
       setStatus(nextStatus);
     } catch (err) {
       setError(err.message);
@@ -720,6 +735,28 @@ function SetupStudio() {
       setSummary(response.summary);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const persistAddedRecord = async (collection, record, successMessage) => {
+    setSaving(true);
+    setError("");
+    setStatus("");
+
+    try {
+      const nextDraft = syncBaseCohorts({
+        ...draft,
+        [collection]: [...draft[collection], record],
+      });
+      const response = await timetableStudioService.saveDataset(buildPayload(nextDraft));
+      await loadDataset(successMessage);
+      setSummary(response.summary);
+      return true;
+    } catch (err) {
+      setError(err.message);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -1511,13 +1548,10 @@ function SetupStudio() {
                   </button>
                   <button
                     className="ghost-btn"
-                    onClick={() =>
-                      addRecord("lecturers", {
-                        id: makeId("lecturer"),
-                        name: "",
-                        email: "",
-                      })
-                    }
+                    onClick={() => {
+                      setTempLecturer({ name: "", email: "" });
+                      setShowLecturerModal(true);
+                    }}
                   >
                     Add Lecturer
                   </button>
@@ -1527,7 +1561,7 @@ function SetupStudio() {
                 {draft.lecturers.length === 0 ? (
                   <p className="empty-state">No lecturers added yet.</p>
                 ) : (
-                  draft.lecturers.map((lecturer) => (
+                  draft.lecturers.slice(0, visibleLecturerCount).map((lecturer) => (
                     <div key={lecturer.id} className="editor-card">
                       <div className="form-grid two-column">
                         <label>
@@ -1554,6 +1588,25 @@ function SetupStudio() {
                       </button>
                     </div>
                   ))
+                )}
+                {draft.lecturers.length > INITIAL_VISIBLE_RECORDS && (
+                  <div className="list-see-more-wrap">
+                    <button
+                      type="button"
+                      className="list-see-more-btn"
+                      onClick={() =>
+                        setVisibleLecturerCount((current) =>
+                          current > INITIAL_VISIBLE_RECORDS ? INITIAL_VISIBLE_RECORDS : draft.lecturers.length
+                        )
+                      }
+                    >
+                      <span
+                        className={`list-see-more-arrow ${visibleLecturerCount > INITIAL_VISIBLE_RECORDS ? "is-open" : ""}`}
+                        aria-hidden="true"
+                      />
+                      {visibleLecturerCount > INITIAL_VISIBLE_RECORDS ? "See less" : "See more"}
+                    </button>
+                  </div>
                 )}
               </div>
             </section>
@@ -1584,17 +1637,17 @@ function SetupStudio() {
                   </button>
                   <button
                     className="ghost-btn"
-                    onClick={() =>
-                      addRecord("rooms", {
-                        id: makeId("room"),
+                    onClick={() => {
+                      setTempRoom({
                         name: "",
                         capacity: "",
                         room_type: "lecture",
                         lab_type: "",
                         location: "",
                         year_restriction: "",
-                      })
-                    }
+                      });
+                      setShowRoomModal(true);
+                    }}
                   >
                     Add Room
                   </button>
@@ -1604,7 +1657,7 @@ function SetupStudio() {
               {draft.rooms.length === 0 ? (
                 <p className="empty-state">No rooms added yet.</p>
               ) : (
-                draft.rooms.map((room) => (
+                draft.rooms.slice(0, visibleRoomCount).map((room) => (
                   <div key={room.id} className="editor-card">
                     {(() => {
                       const roomNameIssue = findRecordIssue(
@@ -1699,6 +1752,25 @@ function SetupStudio() {
                     </div>
                   </div>
                 ))
+              )}
+              {draft.rooms.length > INITIAL_VISIBLE_RECORDS && (
+                <div className="list-see-more-wrap">
+                  <button
+                    type="button"
+                    className="list-see-more-btn"
+                    onClick={() =>
+                      setVisibleRoomCount((current) =>
+                        current > INITIAL_VISIBLE_RECORDS ? INITIAL_VISIBLE_RECORDS : draft.rooms.length
+                      )
+                    }
+                  >
+                    <span
+                      className={`list-see-more-arrow ${visibleRoomCount > INITIAL_VISIBLE_RECORDS ? "is-open" : ""}`}
+                      aria-hidden="true"
+                    />
+                    {visibleRoomCount > INITIAL_VISIBLE_RECORDS ? "See less" : "See more"}
+                  </button>
+                </div>
               )}
               </div>
             </section>
@@ -2631,6 +2703,193 @@ function SetupStudio() {
                   }}
                 >
                   Save Path
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLecturerModal && (
+        <div className="modal-overlay" onClick={() => setShowLecturerModal(false)}>
+          <div className="modal-card setup-add-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="setup-add-modal-header">
+              <div className="setup-add-modal-title-block">
+                <span className="setup-add-modal-kicker">Lecturer setup</span>
+                <h3>Add New Lecturer</h3>
+                <p>Enter the lecturer details and save directly into the current setup dataset.</p>
+              </div>
+              <button type="button" className="setup-add-modal-close" onClick={() => setShowLecturerModal(false)}>
+                Close
+              </button>
+            </div>
+
+            <div className="setup-add-modal-body">
+              <div className="form-grid two-column">
+                <label>
+                  <span>Name</span>
+                  <input
+                    type="text"
+                    value={tempLecturer.name}
+                    onChange={(e) => setTempLecturer({ ...tempLecturer, name: e.target.value })}
+                    placeholder="e.g., Dr. Perera"
+                  />
+                </label>
+                <label>
+                  <span>Email</span>
+                  <input
+                    type="email"
+                    value={tempLecturer.email}
+                    onChange={(e) => setTempLecturer({ ...tempLecturer, email: e.target.value })}
+                    placeholder="e.g., lecturer@science.ac.lk"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="setup-add-modal-footer">
+              <p>Save writes the lecturer to the current setup dataset.</p>
+              <div className="modal-actions">
+                <button type="button" className="ghost-btn" onClick={() => setShowLecturerModal(false)} disabled={saving}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary-btn"
+                  disabled={saving}
+                  onClick={async () => {
+                    const lecturer = {
+                      id: makeId("lecturer"),
+                      name: tempLecturer.name,
+                      email: tempLecturer.email,
+                    };
+                    const saved = await persistAddedRecord(
+                      "lecturers",
+                      lecturer,
+                      "Lecturer saved to the setup dataset."
+                    );
+                    if (saved) {
+                      setVisibleLecturerCount((current) => current + 1);
+                      setShowLecturerModal(false);
+                    }
+                  }}
+                >
+                  {saving ? "Saving..." : "Save Lecturer"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRoomModal && (
+        <div className="modal-overlay" onClick={() => setShowRoomModal(false)}>
+          <div className="modal-card setup-add-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="setup-add-modal-header">
+              <div className="setup-add-modal-title-block">
+                <span className="setup-add-modal-kicker">Room setup</span>
+                <h3>Add New Room</h3>
+                <p>Capture the room details and save them directly into the current setup dataset.</p>
+              </div>
+              <button type="button" className="setup-add-modal-close" onClick={() => setShowRoomModal(false)}>
+                Close
+              </button>
+            </div>
+
+            <div className="setup-add-modal-body">
+              <div className="form-grid two-column">
+                <label>
+                  <span>Name</span>
+                  <input
+                    type="text"
+                    value={tempRoom.name}
+                    onChange={(e) => setTempRoom({ ...tempRoom, name: e.target.value })}
+                    placeholder="e.g., Hall A"
+                  />
+                </label>
+                <label>
+                  <span>Capacity</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={tempRoom.capacity}
+                    onChange={(e) => setTempRoom({ ...tempRoom, capacity: e.target.value })}
+                  />
+                </label>
+                <label>
+                  <span>Room type</span>
+                  <select
+                    value={tempRoom.room_type}
+                    onChange={(e) => setTempRoom({ ...tempRoom, room_type: e.target.value })}
+                  >
+                    <option value="lecture">Lecture</option>
+                    <option value="lab">Lab</option>
+                    <option value="seminar">Seminar</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Lab type</span>
+                  <input
+                    type="text"
+                    value={tempRoom.lab_type}
+                    onChange={(e) => setTempRoom({ ...tempRoom, lab_type: e.target.value })}
+                    placeholder="e.g., Chemistry"
+                  />
+                </label>
+                <label>
+                  <span>Location</span>
+                  <input
+                    type="text"
+                    value={tempRoom.location}
+                    onChange={(e) => setTempRoom({ ...tempRoom, location: e.target.value })}
+                    placeholder="e.g., Science Building"
+                  />
+                </label>
+                <label>
+                  <span>Year restriction</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="6"
+                    value={tempRoom.year_restriction}
+                    onChange={(e) => setTempRoom({ ...tempRoom, year_restriction: e.target.value })}
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="setup-add-modal-footer">
+              <p>Save writes the room to the current setup dataset.</p>
+              <div className="modal-actions">
+                <button type="button" className="ghost-btn" onClick={() => setShowRoomModal(false)} disabled={saving}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary-btn"
+                  disabled={saving}
+                  onClick={async () => {
+                    const room = {
+                      id: makeId("room"),
+                      name: tempRoom.name,
+                      capacity: tempRoom.capacity,
+                      room_type: tempRoom.room_type,
+                      lab_type: tempRoom.lab_type,
+                      location: tempRoom.location,
+                      year_restriction: tempRoom.year_restriction,
+                    };
+                    const saved = await persistAddedRecord(
+                      "rooms",
+                      room,
+                      "Room saved to the setup dataset."
+                    );
+                    if (saved) {
+                      setVisibleRoomCount((current) => current + 1);
+                      setShowRoomModal(false);
+                    }
+                  }}
+                >
+                  {saving ? "Saving..." : "Save Room"}
                 </button>
               </div>
             </div>
