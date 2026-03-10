@@ -1046,6 +1046,30 @@ select {
   white-space: nowrap;
 }
 
+.wce-lecturer-line {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 3px;
+  padding-top: 3px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.wce-students-line {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.48);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
 .wce-room {
   font-size: 0.68rem;
   color: rgba(255, 255, 255, 0.65);

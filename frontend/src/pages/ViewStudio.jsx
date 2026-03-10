@@ -641,6 +641,19 @@ function AdminDayCalendar({ entries, selectedDay, minuteHeight, onEntryClick }) 
                           {formatMinute(entry.start_minute)} – {formatMinute(entry.start_minute + entry.duration_minutes)}
                         </span>
                       )}
+                      {h >= 100 && entry.lecturer_names.length > 0 && (
+                        <span className="wce-lecturer-line">
+                          {compactLecturerNames(entry.lecturer_names)}
+                        </span>
+                      )}
+                      {h >= 130 && (
+                        <span className="wce-students-line">
+                          {entry.total_students} students
+                          {entry.student_group_names.length > 0 && (
+                            <> · {compactAudienceLabels(entry.student_group_names)}</>
+                          )}
+                        </span>
+                      )}
                     </>
                   )}
                 </button>
@@ -812,6 +825,19 @@ function DayCalendar({ entries, selectedDay, minuteHeight, onEntryClick }) {
                     {blockHeight >= 72 && (
                       <span className="wce-time">
                         {formatMinute(primary.start_minute)} – {formatMinute(primary.start_minute + primary.duration_minutes)}
+                      </span>
+                    )}
+                    {blockHeight >= 100 && primary.lecturer_names.length > 0 && (
+                      <span className="wce-lecturer-line">
+                        {compactLecturerNames(primary.lecturer_names)}
+                      </span>
+                    )}
+                    {blockHeight >= 130 && (
+                      <span className="wce-students-line">
+                        {primary.total_students} students
+                        {primary.student_group_names.length > 0 && (
+                          <> · {compactAudienceLabels(primary.student_group_names)}</>
+                        )}
                       </span>
                     )}
                   </>

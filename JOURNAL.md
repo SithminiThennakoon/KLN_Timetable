@@ -64,3 +64,10 @@
 - Cleared global AGENTS.md (~/.config/opencode/AGENTS.md) and local AGENTS.md (repo root) as requested
 - Production build passes with zero errors
 
+## 2026-03-10T22:30:00+05:30
+
+- Added progressive card detail lines to both AdminDayCalendar and DayCalendar: cards ≥100px show a lecturer line (compact: "Dr. Silva +2") with a subtle top divider; cards ≥130px show a students line ("120 students · Y1S1, Y2S2 +1 more")
+- Both new lines use compactLecturerNames and compactAudienceLabels helpers already in the file
+- Added .wce-lecturer-line (0.68rem, weight 600, rgba white 0.7, border-top separator) and .wce-students-line (0.65rem, weight 500, rgba white 0.48) CSS rules
+- Production build passes with zero errors
+
