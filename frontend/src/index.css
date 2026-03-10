@@ -1267,13 +1267,13 @@ select {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  transition: filter 0.1s ease, z-index 0s;
+  transition: background-color 0.12s ease, box-shadow 0.12s ease, z-index 0s;
   z-index: 2;
   border-left: 3px solid var(--cal-entry-border-left);
 }
 
 .week-cal-entry:hover {
-  filter: brightness(1.12);
+  box-shadow: 0 8px 18px var(--shadow);
   z-index: 8;
 }
 
@@ -1757,7 +1757,6 @@ select {
   inset: 0;
   z-index: 1000;
   background: var(--overlay-bg);
-  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1768,7 +1767,7 @@ select {
   background: linear-gradient(160deg, var(--modal-bg-from), var(--modal-bg-to));
   border: 1px solid var(--line);
   border-radius: 18px;
-  box-shadow: 0 32px 80px var(--shadow-modal);
+  box-shadow: 0 20px 44px var(--shadow-modal);
   width: 100%;
   max-width: 520px;
   max-height: 90vh;
