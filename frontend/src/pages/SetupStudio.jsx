@@ -618,10 +618,12 @@ function SetupStudio() {
   const [showPathModal, setShowPathModal] = useState(false);
   const [showLecturerModal, setShowLecturerModal] = useState(false);
   const [showRoomModal, setShowRoomModal] = useState(false);
+  const [showModuleModal, setShowModuleModal] = useState(false);
   const [visibleDegreeCount, setVisibleDegreeCount] = useState(INITIAL_VISIBLE_RECORDS);
   const [visiblePathCount, setVisiblePathCount] = useState(INITIAL_VISIBLE_RECORDS);
   const [visibleLecturerCount, setVisibleLecturerCount] = useState(INITIAL_VISIBLE_RECORDS);
   const [visibleRoomCount, setVisibleRoomCount] = useState(INITIAL_VISIBLE_RECORDS);
+  const [visibleModuleCount, setVisibleModuleCount] = useState(INITIAL_VISIBLE_RECORDS);
   const [tempDegree, setTempDegree] = useState({ code: "", name: "", duration_years: 3, intake_label: "" });
   const [tempPath, setTempPath] = useState({ degreeId: "", year: 1, code: "", name: "" });
   const [tempLecturer, setTempLecturer] = useState({ name: "", email: "" });
@@ -633,6 +635,28 @@ function SetupStudio() {
     location: "",
     year_restriction: "",
   });
+  const [tempModule, setTempModule] = useState({
+    code: "",
+    name: "",
+    subject_name: "",
+    year: 1,
+    semester: 1,
+    is_full_year: false,
+  });
+  const [moduleSearchQuery, setModuleSearchQuery] = useState("");
+
+  const filteredModules = useMemo(() => {
+    if (!moduleSearchQuery.trim()) {
+      return draft.modules;
+    }
+    const query = moduleSearchQuery.toLowerCase();
+    return draft.modules.filter(
+      (m) =>
+        m.name.toLowerCase().includes(query) ||
+        m.code.toLowerCase().includes(query) ||
+        m.subject_name.toLowerCase().includes(query)
+    );
+  }, [draft.modules, moduleSearchQuery]);
 
   const validation = useMemo(() => validateDraft(draft), [draft]);
 
@@ -667,6 +691,7 @@ function SetupStudio() {
       setVisiblePathCount(INITIAL_VISIBLE_RECORDS);
       setVisibleLecturerCount(INITIAL_VISIBLE_RECORDS);
       setVisibleRoomCount(INITIAL_VISIBLE_RECORDS);
+      setVisibleModuleCount(INITIAL_VISIBLE_RECORDS);
       setStatus(nextStatus);
     } catch (err) {
       setError(err.message);
@@ -2014,27 +2039,38 @@ function SetupStudio() {
                   </button>
                   <button
                     className="ghost-btn"
-                    onClick={() =>
-                      addRecord("modules", {
-                        id: makeId("module"),
+                    onClick={() => {
+                      setTempModule({
                         code: "",
                         name: "",
                         subject_name: "",
                         year: 1,
                         semester: 1,
                         is_full_year: false,
-                      })
-                    }
+                      });
+                      setShowModuleModal(true);
+                    }}
                   >
                     Add Module
                   </button>
                 </div>
               </div>
+              <div className="module-search-wrap">
+                <input
+                  type="text"
+                  className="module-search-input"
+                  placeholder="Search modules by name, code, or subject..."
+                  value={moduleSearchQuery}
+                  onChange={(e) => setModuleSearchQuery(e.target.value)}
+                />
+              </div>
               <div className="editor-list">
               {draft.modules.length === 0 ? (
                 <p className="empty-state">No modules added yet.</p>
+              ) : filteredModules.length === 0 ? (
+                <p className="empty-state">No modules found matching "{moduleSearchQuery}"</p>
               ) : (
-                draft.modules.map((module, index) => {
+                filteredModules.slice(0, visibleModuleCount).map((module, index) => {
                   const moduleIssue = findRecordIssue(
                     validation.blocking,
                     new RegExp(`^Module ${index + 1} is missing code, name, or subject\\.$`)
@@ -2122,6 +2158,25 @@ function SetupStudio() {
                     </div>
                   );
                 })
+              )}
+              {filteredModules.length > INITIAL_VISIBLE_RECORDS && (
+                <div className="list-see-more-wrap">
+                  <button
+                    type="button"
+                    className="list-see-more-btn"
+                    onClick={() =>
+                      setVisibleModuleCount((current) =>
+                        current > INITIAL_VISIBLE_RECORDS ? INITIAL_VISIBLE_RECORDS : filteredModules.length
+                      )
+                    }
+                  >
+                    <span
+                      className={`list-see-more-arrow ${visibleModuleCount > INITIAL_VISIBLE_RECORDS ? "is-open" : ""}`}
+                      aria-hidden="true"
+                    />
+                    {visibleModuleCount > INITIAL_VISIBLE_RECORDS ? "See less" : "See more"}
+                  </button>
+                </div>
               )}
               </div>
             </section>
@@ -2890,6 +2945,119 @@ function SetupStudio() {
                   }}
                 >
                   {saving ? "Saving..." : "Save Room"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showModuleModal && (
+        <div className="modal-overlay" onClick={() => setShowModuleModal(false)}>
+          <div className="modal-card setup-add-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="setup-add-modal-header">
+              <div className="setup-add-modal-title-block">
+                <span className="setup-add-modal-kicker">Module setup</span>
+                <h3>Add New Module</h3>
+                <p>Enter the module details and save them directly into the current setup dataset.</p>
+              </div>
+              <button type="button" className="setup-add-modal-close" onClick={() => setShowModuleModal(false)}>
+                Close
+              </button>
+            </div>
+
+            <div className="setup-add-modal-body">
+              <div className="form-grid two-column">
+                <label>
+                  <span>Code</span>
+                  <input
+                    type="text"
+                    value={tempModule.code}
+                    onChange={(e) => setTempModule({ ...tempModule, code: e.target.value })}
+                    placeholder="e.g., CS101"
+                  />
+                </label>
+                <label>
+                  <span>Year</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="6"
+                    value={tempModule.year}
+                    onChange={(e) => setTempModule({ ...tempModule, year: Number(e.target.value) })}
+                  />
+                </label>
+                <label>
+                  <span>Name</span>
+                  <input
+                    type="text"
+                    value={tempModule.name}
+                    onChange={(e) => setTempModule({ ...tempModule, name: e.target.value })}
+                    placeholder="e.g., Introduction to Programming"
+                  />
+                </label>
+                <label>
+                  <span>Semester</span>
+                  <select
+                    value={tempModule.semester}
+                    onChange={(e) => setTempModule({ ...tempModule, semester: Number(e.target.value) })}
+                  >
+                    <option value={1}>1</option>
+                    <option value={2}>2</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Subject</span>
+                  <input
+                    type="text"
+                    value={tempModule.subject_name}
+                    onChange={(e) => setTempModule({ ...tempModule, subject_name: e.target.value })}
+                    placeholder="e.g., Computer Science"
+                  />
+                </label>
+                <label className="checkbox-field">
+                  <input
+                    type="checkbox"
+                    checked={tempModule.is_full_year}
+                    onChange={(e) => setTempModule({ ...tempModule, is_full_year: e.target.checked })}
+                  />
+                  <span>Full-year module</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="setup-add-modal-footer">
+              <p>Save writes the module to the current setup dataset.</p>
+              <div className="modal-actions">
+                <button type="button" className="ghost-btn" onClick={() => setShowModuleModal(false)} disabled={saving}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary-btn"
+                  disabled={saving}
+                  onClick={async () => {
+                    const module = {
+                      id: makeId("module"),
+                      code: tempModule.code,
+                      name: tempModule.name,
+                      subject_name: tempModule.subject_name,
+                      year: tempModule.year,
+                      semester: tempModule.semester,
+                      is_full_year: tempModule.is_full_year,
+                    };
+                    const saved = await persistAddedRecord(
+                      "modules",
+                      module,
+                      "Module saved to the setup dataset."
+                    );
+                    if (saved) {
+                      setVisibleModuleCount((current) => current + 1);
+                      setShowModuleModal(false);
+                    }
+                  }}
+                >
+                  {saving ? "Saving..." : "Save Module"}
                 </button>
               </div>
             </div>
