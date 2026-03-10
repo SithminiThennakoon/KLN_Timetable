@@ -100,3 +100,12 @@
 - Fixed `--ink-300` duplicate in light block: was same value as `--ink-400` (`#94a3b8`); corrected to `#b8c5d3` so the ink hierarchy is visually distinct
 - Production build passes with zero errors
 
+## 2026-03-10T24:00:00+05:30 (onboarding tutorial)
+
+- Added `src/hooks/useOnboarding.js`: reads `localStorage` key `kln-onboarding-seen`; exposes `{ open, dismiss, reopen }` — `open` is true for first-time visitors, false after dismiss writes `'1'` to storage
+- Added `src/components/OnboardingTutorial.jsx`: 12-step interactive modal covering welcome/flow-diagram, setup-overview (7-step wizard list), structure/degrees/paths, lecturers, rooms, cohorts/override-groups, modules, sessions (core fields + advanced options + copy feature), review & save (blocking vs warning issues), generate (soft constraints list), timetable views (admin/lecturer/student modes, calendar/agenda/export), and a gotcha+tips step; includes progress dots with jump-to-step, Back/Next/Get started navigation, keyboard support (Escape closes, ←→ navigate), focus trap, and scroll-to-top on step change; clicking the overlay backdrop closes the modal
+- Added ~400 lines of `ob-*` CSS to `src/index.css`: `.ob-overlay` / `.ob-modal` shell, `.ob-header` / `.ob-content` / `.ob-footer` flex layout, `.ob-dot` / `.ob-dot-active` / `.ob-dot-done` progress dots, `.ob-info-box` / `.ob-tip-box` / `.ob-warn-box` / `.ob-example-box` tinted callouts, `.ob-field-table` / `.ob-field-row` / `.ob-field-name` / `.ob-field-desc` field documentation rows, `.ob-step-list` / `.ob-step-badge` setup-overview cards, `.ob-flow-diagram` / `.ob-flow-node` / `.ob-flow-active` welcome flow diagram, `.ob-checklist` tick list, `.ob-constraint-list` / `.ob-constraint-row` generate step table, `.ob-mode-card` views step cards, `.ob-check-block` / `.ob-check-warn` review step cards, `.ob-gotcha-list` / `.ob-gotcha` / `.ob-gotcha-icon` tips step; all tints use existing theme tokens; dark/light overrides for tip/warn/example/gotcha boxes; responsive grid collapses at ≤620 px
+- Added `.help-btn` CSS to `src/styles/App.css`: 38×38 px icon button matching `.theme-toggle` sizing and border style, placed left of theme toggle in `.header-right`
+- Wired everything in `src/App.jsx`: imported `OnboardingTutorial` and `useOnboarding`, called `useOnboarding()` in `App`, passed `reopen` as `onHelp` prop to `<MainNavbar>`, rendered `{open && <OnboardingTutorial onClose={dismiss} />}` after `<Routes>`; `MainNavbar.jsx` already had the `?` button from the previous session
+- Production build passes with zero errors
+

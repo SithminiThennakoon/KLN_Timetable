@@ -2007,6 +2007,674 @@ select {
   color: var(--ink-900);
 }
 
+/* ═══════════════════════════════════════════════════════
+   ONBOARDING TUTORIAL MODAL  (ob-*)
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Overlay & shell ──────────────────────────────────── */
+
+.ob-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: var(--overlay-bg);
+  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.ob-modal {
+  background: linear-gradient(160deg, var(--modal-bg-from), var(--modal-bg-to));
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 32px 80px var(--shadow-modal);
+  width: 100%;
+  max-width: 700px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+  transition: background 0.2s ease;
+}
+
+/* ── Header ───────────────────────────────────────────── */
+
+.ob-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 28px 18px;
+  border-bottom: 1px solid var(--line-soft);
+  flex-shrink: 0;
+}
+
+.ob-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ob-step-counter {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-400);
+}
+
+.ob-title {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: var(--ink-900);
+  line-height: 1.2;
+  margin: 0;
+  font-family: "Fira Sans", "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+.ob-subtitle {
+  font-size: 0.93rem;
+  color: var(--ink-500);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.ob-close-btn {
+  background: var(--line-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  color: var(--ink-500);
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.ob-close-btn:hover {
+  background: var(--line);
+  color: var(--ink-900);
+}
+
+/* ── Scrollable content area ──────────────────────────── */
+
+.ob-content {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 24px 28px;
+  min-height: 0;
+}
+
+/* ── Footer ───────────────────────────────────────────── */
+
+.ob-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 28px 22px;
+  border-top: 1px solid var(--line-soft);
+  flex-shrink: 0;
+}
+
+/* ── Progress dots ────────────────────────────────────── */
+
+.ob-progress {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.ob-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: none;
+  background: var(--line-strong);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+
+.ob-dot:hover {
+  transform: scale(1.25);
+}
+
+.ob-dot-active {
+  background: var(--accent-solid);
+  transform: scale(1.2);
+}
+
+.ob-dot-done {
+  background: var(--ink-300);
+}
+
+/* ── Nav buttons ──────────────────────────────────────── */
+
+.ob-nav-btns {
+  display: flex;
+  gap: 10px;
+}
+
+.ob-nav-btn {
+  padding: 10px 22px;
+  font-size: 0.95rem;
+}
+
+/* ── Step body base ───────────────────────────────────── */
+
+.ob-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  font-size: 0.97rem;
+  line-height: 1.6;
+  color: var(--ink-700);
+}
+
+.ob-lead {
+  font-size: 1.04rem;
+  color: var(--ink-800);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.ob-sub {
+  font-size: 0.88rem;
+  color: var(--ink-400);
+  margin: 4px 0 8px;
+}
+
+.ob-note {
+  font-style: italic;
+  color: var(--ink-500);
+  font-size: 0.92rem;
+  margin: 0;
+}
+
+.ob-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+/* ── Info / tip / warn / example boxes ───────────────── */
+
+.ob-info-box,
+.ob-tip-box,
+.ob-warn-box,
+.ob-example-box {
+  border-radius: 8px;
+  padding: 13px 16px;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  border-left: 4px solid;
+}
+
+.ob-info-box {
+  background: var(--banner-info-bg);
+  color: var(--banner-info-text);
+  border-color: var(--banner-info-bar);
+}
+
+.ob-tip-box {
+  background: rgba(16, 185, 129, 0.10);
+  color: var(--ink-700);
+  border-color: #10b981;
+}
+
+[data-theme="dark"] .ob-tip-box {
+  background: rgba(16, 185, 129, 0.08);
+  color: #6ee7b7;
+}
+
+.ob-warn-box {
+  background: rgba(245, 158, 11, 0.10);
+  color: var(--ink-700);
+  border-color: #f59e0b;
+}
+
+[data-theme="dark"] .ob-warn-box {
+  background: rgba(245, 158, 11, 0.08);
+  color: #fcd34d;
+}
+
+.ob-example-box {
+  background: rgba(16, 185, 129, 0.08);
+  color: var(--ink-700);
+  border-color: #10b981;
+}
+
+[data-theme="dark"] .ob-example-box {
+  color: #a7f3d0;
+}
+
+.ob-example-box.ob-example-bad {
+  background: rgba(245, 158, 11, 0.08);
+  color: var(--ink-700);
+  border-color: #f59e0b;
+}
+
+[data-theme="dark"] .ob-example-box.ob-example-bad {
+  color: #fcd34d;
+}
+
+/* ── Field table ──────────────────────────────────────── */
+
+.ob-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ob-field-group h4 {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-400);
+  margin: 0 0 2px;
+}
+
+.ob-field-table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.ob-field-row {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line-faint);
+  align-items: baseline;
+}
+
+.ob-field-row:last-child {
+  border-bottom: none;
+}
+
+.ob-field-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-family: "Fira Mono", "Cascadia Code", "Courier New", monospace;
+  color: var(--ink-900);
+  white-space: nowrap;
+}
+
+.ob-field-desc {
+  font-size: 0.88rem;
+  color: var(--ink-600);
+  line-height: 1.5;
+}
+
+.ob-field-desc code {
+  font-family: "Fira Mono", "Cascadia Code", "Courier New", monospace;
+  font-size: 0.84em;
+  background: var(--surface-code);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--accent);
+}
+
+/* ── Step list (setup-overview) ───────────────────────── */
+
+.ob-step-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ob-step-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 10px 14px;
+  background: var(--surface-dim);
+  border-radius: 8px;
+}
+
+.ob-step-badge {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent-solid);
+  color: var(--accent-text);
+  font-size: 0.8rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+
+.ob-step-item strong {
+  display: block;
+  font-size: 0.93rem;
+  color: var(--ink-900);
+  margin-bottom: 2px;
+}
+
+.ob-step-desc {
+  display: block;
+  font-size: 0.84rem;
+  color: var(--ink-500);
+}
+
+/* ── Flow diagram (welcome) ───────────────────────────── */
+
+.ob-flow-diagram {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px 0 8px;
+  flex-wrap: wrap;
+}
+
+.ob-flow-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  border: 1px solid var(--line-soft);
+  background: var(--surface-dim);
+  min-width: 88px;
+}
+
+.ob-flow-active {
+  border-color: var(--accent-focus);
+  background: var(--surface-wizard-active-from);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+}
+
+.ob-flow-num {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--ink-900);
+}
+
+.ob-flow-active .ob-flow-num {
+  color: var(--accent);
+}
+
+.ob-flow-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-500);
+}
+
+.ob-flow-active .ob-flow-label {
+  color: var(--accent);
+}
+
+.ob-flow-arrow {
+  font-size: 1.2rem;
+  color: var(--ink-300);
+  font-weight: 700;
+}
+
+/* ── Checklist ────────────────────────────────────────── */
+
+.ob-checklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ob-checklist li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.92rem;
+  color: var(--ink-700);
+}
+
+.ob-checklist li::before {
+  content: "✓";
+  flex-shrink: 0;
+  color: #10b981;
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+
+/* ── Constraint list (generate step) ─────────────────── */
+
+.ob-constraint-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.ob-constraint-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1fr);
+  gap: 12px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--line-faint);
+  align-items: baseline;
+  font-size: 0.88rem;
+}
+
+.ob-constraint-row:last-child {
+  border-bottom: none;
+}
+
+.ob-constraint-row strong {
+  color: var(--ink-800);
+}
+
+.ob-constraint-row span {
+  color: var(--ink-500);
+}
+
+/* ── Mode cards (views step) ──────────────────────────── */
+
+.ob-mode-card {
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--line-soft);
+  background: var(--surface-dim);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.ob-mode-card strong {
+  display: block;
+  font-size: 0.93rem;
+  color: var(--ink-900);
+  margin-bottom: 5px;
+}
+
+.ob-mode-card p {
+  color: var(--ink-500);
+  margin: 0;
+}
+
+.ob-mode-card-wide {
+  grid-column: 1 / -1;
+}
+
+/* ── Review check cards ───────────────────────────────── */
+
+.ob-check-card {
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--line-soft);
+  background: var(--surface-dim);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.ob-check-card strong {
+  display: block;
+  font-size: 0.93rem;
+  margin-bottom: 5px;
+  color: var(--ink-900);
+}
+
+.ob-check-card p {
+  color: var(--ink-500);
+  margin: 0;
+}
+
+.ob-check-block {
+  border-color: rgba(239, 68, 68, 0.40);
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.ob-check-block strong {
+  color: #ef4444;
+}
+
+[data-theme="dark"] .ob-check-block strong {
+  color: #fca5a5;
+}
+
+.ob-check-warn {
+  border-color: rgba(245, 158, 11, 0.40);
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.ob-check-warn strong {
+  color: #d97706;
+}
+
+[data-theme="dark"] .ob-check-warn strong {
+  color: #fcd34d;
+}
+
+/* ── Gotcha list (tips step) ──────────────────────────── */
+
+.ob-gotcha-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ob-gotcha {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.ob-gotcha-icon {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 800;
+  margin-top: 1px;
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+[data-theme="dark"] .ob-gotcha-icon {
+  color: #fcd34d;
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.ob-gotcha-icon:has(+ * > *:empty) { /* fallback */ }
+
+/* tip variant — icon is ✓ */
+.ob-gotcha:has(.ob-gotcha-icon:not(:empty)) .ob-gotcha-icon[style],
+.ob-gotcha .ob-gotcha-icon {
+  /* default warning style set above */
+}
+
+/* distinguish ✓ icons */
+.ob-gotcha:nth-child(n+5) .ob-gotcha-icon {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+[data-theme="dark"] .ob-gotcha:nth-child(n+5) .ob-gotcha-icon {
+  color: #6ee7b7;
+}
+
+.ob-gotcha > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.ob-gotcha > div strong {
+  display: block;
+  font-size: 0.93rem;
+  color: var(--ink-900);
+  margin-bottom: 4px;
+}
+
+.ob-gotcha > div p {
+  font-size: 0.88rem;
+  color: var(--ink-500);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.ob-gotcha > div p code {
+  font-family: "Fira Mono", "Cascadia Code", "Courier New", monospace;
+  font-size: 0.84em;
+  background: var(--surface-code);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--accent);
+}
+
+/* ── Responsive ───────────────────────────────────────── */
+
+@media (max-width: 620px) {
+  .ob-modal {
+    border-radius: 14px;
+    max-height: 94vh;
+  }
+
+  .ob-header,
+  .ob-content,
+  .ob-footer {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .ob-two-col {
+    grid-template-columns: 1fr;
+  }
+
+  .ob-field-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .ob-constraint-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
 @media (max-width: 980px) {
   .page-shell {
     padding: 24px;
