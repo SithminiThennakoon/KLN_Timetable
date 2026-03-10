@@ -5,7 +5,6 @@ python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
 pydantic>=2.7.3
 pydantic-settings>=2.2.1
-mysql-connector-python>=8.0.33
 sqlalchemy>=2.0.14
 python-dotenv>=1.0.0
 alembic>=1.10.2

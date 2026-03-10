@@ -86,14 +86,20 @@ Mounted API prefix: `/api/v2`
 Requirements:
 
 - Python 3.11+ is recommended
-- MySQL is the intended database
+- SQLite is the default database
 
 Environment:
 
 ```env
-DATABASE_URL=mysql+pymysql://user:password@localhost:3306/kln_timetable
+APP_ENV=development
+DATABASE_URL=sqlite:///./backend/data/kln_timetable.db
+CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 RESET_DB=false
 ```
+
+Example file:
+
+- [backend/.env.example](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/backend/.env.example)
 
 Run:
 
@@ -122,6 +128,36 @@ npm run dev
 ```
 
 Frontend runs through Vite.
+
+Environment:
+
+```env
+VITE_API_BASE_URL=/api
+```
+
+Example production file:
+
+- [frontend/.env.production.example](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/frontend/.env.production.example)
+
+For split hosting, set `VITE_API_BASE_URL` to the public backend base such as `https://api.example.com/api`.
+
+## Deployment
+
+Recommended low-cost deployment shape:
+
+- backend on a single Azure Linux VM
+- frontend on Cloudflare Pages
+- SQLite database file on the Azure VM
+
+Deployment notes:
+
+- keep the backend as a single app instance when using SQLite
+- put the SQLite file on a persistent VM path such as `/var/lib/kln-timetable/app.db`
+- set `CORS_ALLOWED_ORIGINS` to the exact Cloudflare Pages production domain and preview domains you want to allow
+- keep `RESET_DB=false` in production
+- use the provided systemd and Nginx templates in `deploy/azure/`
+
+For a step-by-step deployment guide, see [DEPLOYMENT_AZURE_CLOUDFLARE.md](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/DEPLOYMENT_AZURE_CLOUDFLARE.md).
 
 ## Desktop Launcher
 
