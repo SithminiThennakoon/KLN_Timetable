@@ -1,4 +1,10 @@
-const API_BASE_URL = "/api";
+const DEFAULT_API_BASE_URL = "/api";
+
+export function resolveApiBaseUrl(env = import.meta.env) {
+  const configuredBaseUrl = env?.VITE_API_BASE_URL?.trim();
+  const baseUrl = configuredBaseUrl || DEFAULT_API_BASE_URL;
+  return baseUrl.replace(/\/+$/, "");
+}
 
 function formatDetail(detail) {
   if (Array.isArray(detail)) {
@@ -24,7 +30,8 @@ function formatDetail(detail) {
 }
 
 async function request(path, options = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const response = await fetch(`${resolveApiBaseUrl()}${normalizedPath}`, {
     headers: {
       "Content-Type": "application/json",
       ...(options.headers || {}),

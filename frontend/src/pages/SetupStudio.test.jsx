@@ -105,6 +105,7 @@ describe("SetupStudio", () => {
     const roomEditor = screen.getByText("Capacity").closest("label");
     const capacityInput = within(roomEditor).getByRole("spinbutton");
     fireEvent.change(capacityInput, { target: { value: "0" } });
+    fireEvent.blur(capacityInput);
 
     expect(await screen.findAllByText(/Room 1 needs a positive capacity/i)).not.toHaveLength(0);
     expect(capacityInput.className).toContain("field-invalid");
@@ -166,6 +167,7 @@ describe("SetupStudio", () => {
 
     const codeLabel = (await screen.findByText("Code")).closest("label");
     const codeInput = within(codeLabel).getByRole("textbox");
+    fireEvent.blur(codeInput);
 
     expect(await screen.findAllByText(/Degree 1 is missing code, name, or intake label/i)).not.toHaveLength(0);
     expect(codeInput.className).toContain("field-invalid");
@@ -274,6 +276,7 @@ describe("SetupStudio", () => {
     expect(await screen.findAllByText(/Session 1 is missing module, name, or type/i)).not.toHaveLength(0);
     const sessionNameLabel = screen.getByText("Name").closest("label");
     const sessionNameInput = within(sessionNameLabel).getByRole("textbox");
+    fireEvent.blur(sessionNameInput);
     expect(sessionNameInput.className).toContain("field-invalid");
   });
 
@@ -317,9 +320,411 @@ describe("SetupStudio", () => {
     expect(await screen.findAllByText(/Override group 1 is missing degree or name/i)).not.toHaveLength(0);
     expect(await screen.findAllByText(/Override group 1 needs a positive student count/i)).not.toHaveLength(0);
 
-    const overrideNameLabel = screen.getByText("Override name").closest("label");
+    const overrideNameLabel = screen.getByText("Override group name").closest("label");
     const overrideNameInput = within(overrideNameLabel).getByRole("textbox");
+    fireEvent.blur(overrideNameInput);
     expect(overrideNameInput.className).toContain("field-invalid");
+  });
+
+  it("shows lab duration validation that matches the solver", async () => {
+    timetableStudioService.getFullDataset.mockResolvedValue({
+      ...emptyDataset(),
+      degrees: [
+        {
+          client_key: "degree_ps",
+          code: "PS",
+          name: "Physical Science",
+          duration_years: 1,
+          intake_label: "PS Intake",
+        },
+      ],
+      rooms: [
+        {
+          client_key: "room_lab_1",
+          name: "Physics Lab 1",
+          capacity: 40,
+          room_type: "lab",
+          lab_type: "physics",
+          location: "Science Block",
+          year_restriction: null,
+        },
+      ],
+      student_groups: [
+        {
+          client_key: "group_main",
+          degree_client_key: "degree_ps",
+          path_client_key: null,
+          year: 1,
+          name: "PS Y1 General",
+          size: 30,
+        },
+      ],
+      modules: [
+        {
+          client_key: "mod_1",
+          code: "PHYS101",
+          name: "Physics Laboratory",
+          subject_name: "Physics",
+          year: 1,
+          semester: 1,
+          is_full_year: false,
+        },
+      ],
+      sessions: [
+        {
+          client_key: "sess_1",
+          module_client_key: "mod_1",
+          name: "Physics Lab",
+          session_type: "lab",
+          duration_minutes: 120,
+          occurrences_per_week: 1,
+          required_room_type: "lab",
+          required_lab_type: "physics",
+          specific_room_client_key: null,
+          max_students_per_group: null,
+          allow_parallel_rooms: false,
+          notes: null,
+          lecturer_client_keys: [],
+          student_group_client_keys: ["group_main"],
+        },
+      ],
+    });
+
+    render(<SetupStudio />);
+
+    await screen.findByDisplayValue("PS");
+    fireEvent.click(screen.getByRole("button", { name: "6. Sessions" }));
+
+    expect(await screen.findAllByText(/Session 1 is treated as a lab and must be 180 minutes/i)).not.toHaveLength(0);
+  });
+
+  it("matches the backend occurrence cap on the sessions step", async () => {
+    timetableStudioService.getFullDataset.mockResolvedValue({
+      ...emptyDataset(),
+      degrees: [
+        {
+          client_key: "degree_ps",
+          code: "PS",
+          name: "Physical Science",
+          duration_years: 1,
+          intake_label: "PS Intake",
+        },
+      ],
+      rooms: [
+        {
+          client_key: "room_1",
+          name: "Room 1",
+          capacity: 120,
+          room_type: "lecture",
+          lab_type: null,
+          location: "Science Block",
+          year_restriction: null,
+        },
+      ],
+      student_groups: [
+        {
+          client_key: "group_main",
+          degree_client_key: "degree_ps",
+          path_client_key: null,
+          year: 1,
+          name: "PS Y1 General",
+          size: 80,
+        },
+      ],
+      modules: [
+        {
+          client_key: "mod_1",
+          code: "CHEM101",
+          name: "Foundations of Chemistry",
+          subject_name: "Chemistry",
+          year: 1,
+          semester: 1,
+          is_full_year: false,
+        },
+      ],
+      sessions: [
+        {
+          client_key: "sess_1",
+          module_client_key: "mod_1",
+          name: "Chemistry Lecture",
+          session_type: "lecture",
+          duration_minutes: 60,
+          occurrences_per_week: 11,
+          required_room_type: "lecture",
+          required_lab_type: null,
+          specific_room_client_key: null,
+          max_students_per_group: null,
+          allow_parallel_rooms: false,
+          notes: null,
+          lecturer_client_keys: [],
+          student_group_client_keys: ["group_main"],
+        },
+      ],
+    });
+
+    render(<SetupStudio />);
+
+    await screen.findByDisplayValue("PS");
+    fireEvent.click(screen.getByRole("button", { name: "6. Sessions" }));
+
+    expect(await screen.findAllByText(/Session 1 weekly occurrence count must be between 1 and 10/i)).not.toHaveLength(0);
+  });
+
+  it("makes it explicit that room year restriction is not enforced by the solver", async () => {
+    timetableStudioService.getFullDataset.mockResolvedValue({
+      ...emptyDataset(),
+      degrees: [
+        {
+          client_key: "degree_ps",
+          code: "PS",
+          name: "Physical Science",
+          duration_years: 1,
+          intake_label: "PS Intake",
+        },
+      ],
+      rooms: [
+        {
+          client_key: "room_1",
+          name: "Room 1",
+          capacity: 120,
+          room_type: "lecture",
+          lab_type: null,
+          location: "Science Block",
+          year_restriction: 1,
+        },
+      ],
+    });
+
+    render(<SetupStudio />);
+
+    await screen.findByDisplayValue("PS");
+    fireEvent.click(screen.getByRole("button", { name: "3. Rooms" }));
+
+    expect(
+      await screen.findAllByText(/stored with the dataset, but not currently enforced during timetable generation/i)
+    ).not.toHaveLength(0);
+  });
+
+  it("warns when a lab session has no lab type", async () => {
+    timetableStudioService.getFullDataset.mockResolvedValue({
+      ...emptyDataset(),
+      degrees: [
+        {
+          client_key: "degree_ps",
+          code: "PS",
+          name: "Physical Science",
+          duration_years: 1,
+          intake_label: "PS Intake",
+        },
+      ],
+      rooms: [
+        {
+          client_key: "room_lab_1",
+          name: "Physics Lab 1",
+          capacity: 40,
+          room_type: "lab",
+          lab_type: "physics",
+          location: "Science Block",
+          year_restriction: null,
+        },
+      ],
+      student_groups: [
+        {
+          client_key: "group_main",
+          degree_client_key: "degree_ps",
+          path_client_key: null,
+          year: 1,
+          name: "PS Y1 General",
+          size: 30,
+        },
+      ],
+      modules: [
+        {
+          client_key: "mod_1",
+          code: "PHYS101",
+          name: "Physics Laboratory",
+          subject_name: "Physics",
+          year: 1,
+          semester: 1,
+          is_full_year: false,
+        },
+      ],
+      sessions: [
+        {
+          client_key: "sess_1",
+          module_client_key: "mod_1",
+          name: "Physics Lab",
+          session_type: "lab",
+          duration_minutes: 180,
+          occurrences_per_week: 1,
+          required_room_type: "lab",
+          required_lab_type: null,
+          specific_room_client_key: null,
+          max_students_per_group: null,
+          allow_parallel_rooms: false,
+          notes: null,
+          lecturer_client_keys: [],
+          student_group_client_keys: ["group_main"],
+        },
+      ],
+    });
+
+    render(<SetupStudio />);
+
+    await screen.findByDisplayValue("PS");
+    fireEvent.click(screen.getByRole("button", { name: "6. Sessions" }));
+
+    expect(
+      await screen.findAllByText(/uses room type lab but has no lab type, so it may match the wrong lab pool/i)
+    ).not.toHaveLength(0);
+  });
+
+  it("blocks sessions that pin a room with mismatched room type", async () => {
+    timetableStudioService.getFullDataset.mockResolvedValue({
+      ...emptyDataset(),
+      degrees: [
+        {
+          client_key: "degree_ps",
+          code: "PS",
+          name: "Physical Science",
+          duration_years: 1,
+          intake_label: "PS Intake",
+        },
+      ],
+      rooms: [
+        {
+          client_key: "room_1",
+          name: "Room 1",
+          capacity: 120,
+          room_type: "lecture",
+          lab_type: null,
+          location: "Science Block",
+          year_restriction: null,
+        },
+      ],
+      student_groups: [
+        {
+          client_key: "group_main",
+          degree_client_key: "degree_ps",
+          path_client_key: null,
+          year: 1,
+          name: "PS Y1 General",
+          size: 80,
+        },
+      ],
+      modules: [
+        {
+          client_key: "mod_1",
+          code: "CHEM101",
+          name: "Foundations of Chemistry",
+          subject_name: "Chemistry",
+          year: 1,
+          semester: 1,
+          is_full_year: false,
+        },
+      ],
+      sessions: [
+        {
+          client_key: "sess_1",
+          module_client_key: "mod_1",
+          name: "Chemistry Lab",
+          session_type: "lab",
+          duration_minutes: 180,
+          occurrences_per_week: 1,
+          required_room_type: "lab",
+          required_lab_type: "chemistry",
+          specific_room_client_key: "room_1",
+          max_students_per_group: 40,
+          allow_parallel_rooms: false,
+          notes: null,
+          lecturer_client_keys: [],
+          student_group_client_keys: ["group_main"],
+        },
+      ],
+    });
+
+    render(<SetupStudio />);
+
+    await screen.findByDisplayValue("PS");
+    fireEvent.click(screen.getByRole("button", { name: "6. Sessions" }));
+
+    expect(
+      await screen.findAllByText(/pins room "Room 1" but its room type does not match the selected requirement/i)
+    ).not.toHaveLength(0);
+  });
+
+  it("blocks sessions that exceed every matching room capacity without a split limit", async () => {
+    timetableStudioService.getFullDataset.mockResolvedValue({
+      ...emptyDataset(),
+      degrees: [
+        {
+          client_key: "degree_ps",
+          code: "PS",
+          name: "Physical Science",
+          duration_years: 1,
+          intake_label: "PS Intake",
+        },
+      ],
+      rooms: [
+        {
+          client_key: "room_lab_1",
+          name: "Physics Lab 1",
+          capacity: 25,
+          room_type: "lab",
+          lab_type: "physics",
+          location: "Science Block",
+          year_restriction: null,
+        },
+      ],
+      student_groups: [
+        {
+          client_key: "group_main",
+          degree_client_key: "degree_ps",
+          path_client_key: null,
+          year: 1,
+          name: "PS Y1 General",
+          size: 30,
+        },
+      ],
+      modules: [
+        {
+          client_key: "mod_1",
+          code: "PHYS101",
+          name: "Physics Laboratory",
+          subject_name: "Physics",
+          year: 1,
+          semester: 1,
+          is_full_year: false,
+        },
+      ],
+      sessions: [
+        {
+          client_key: "sess_1",
+          module_client_key: "mod_1",
+          name: "Physics Lab",
+          session_type: "lab",
+          duration_minutes: 180,
+          occurrences_per_week: 1,
+          required_room_type: "lab",
+          required_lab_type: "physics",
+          specific_room_client_key: null,
+          max_students_per_group: null,
+          allow_parallel_rooms: false,
+          notes: null,
+          lecturer_client_keys: [],
+          student_group_client_keys: ["group_main"],
+        },
+      ],
+    });
+
+    render(<SetupStudio />);
+
+    await screen.findByDisplayValue("PS");
+    fireEvent.click(screen.getByRole("button", { name: "6. Sessions" }));
+
+    expect(
+      await screen.findAllByText(/exceeds every matching room capacity for 30 students, so add a split limit or expand the room pool/i)
+    ).not.toHaveLength(0);
   });
 
   it("duplicates a session with its key settings and links", async () => {
@@ -400,8 +805,8 @@ describe("SetupStudio", () => {
     fireEvent.click(screen.getByRole("button", { name: "Duplicate Session" }));
 
     expect(screen.getAllByDisplayValue("Chemistry Lecture")).toHaveLength(2);
-    expect(screen.getAllByDisplayValue("lecture")).toHaveLength(2);
     expect(screen.getAllByDisplayValue("60")).toHaveLength(2);
+    expect(screen.getAllByLabelText("Type").map((element) => element.value)).toEqual(["lecture", "lecture"]);
     expect(screen.getAllByText("Lecturer 1")).not.toHaveLength(0);
     expect(screen.getAllByText("PS Y1 General")).not.toHaveLength(0);
   });
@@ -605,7 +1010,11 @@ describe("SetupStudio", () => {
     expect(screen.getAllByDisplayValue("Foundations of Chemistry Lecture")).toHaveLength(1);
     expect(screen.getAllByDisplayValue("Mechanics Lecture")).toHaveLength(1);
     expect(screen.getAllByDisplayValue("Mechanics Tutorial")).toHaveLength(1);
-    expect(screen.getAllByDisplayValue("tutorial")).toHaveLength(1);
+    expect(screen.getAllByLabelText("Type").map((element) => element.value)).toEqual([
+      "lecture",
+      "lecture",
+      "tutorial",
+    ]);
   });
 
   it("creates semester module shells only for uncovered year-semester combinations", async () => {
@@ -763,6 +1172,10 @@ describe("SetupStudio", () => {
 
     fireEvent.click(
       within(lectureCard).getByRole("button", { name: "Copy Lecturers + Cohorts To Module Set" })
+    );
+    // Two-step confirm: click the "Overwrite" button that appears in the confirm strip
+    fireEvent.click(
+      within(lectureCard).getByRole("button", { name: "Overwrite" })
     );
 
     expect(within(tutorialCard).getByRole("checkbox", { name: "Lecturer 1" })).toBeChecked();

@@ -56,6 +56,9 @@ coverage.xml
 *.log
 local_settings.py
 db.sqlite3
+backend/data/*.db
+backend/data/*.sqlite
+backend/data/*.sqlite3
 
 # Flask stuff:
 instance/
@@ -187,4 +190,3 @@ typings/
 .Trashes
 ehthumbs.db
 Thumbs.db
-

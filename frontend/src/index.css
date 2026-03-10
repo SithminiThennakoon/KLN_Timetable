@@ -2770,3 +2770,130 @@ select {
     grid-template-columns: 90px minmax(0, 1fr);
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Setup Studio — Phase 2/3 additions
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Inline delete confirmation strip ──────────────────────────────────────── */
+.confirm-strip {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--color-error-bg, #fff5f5);
+  border: 1px solid var(--color-error-border, #feb2b2);
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.confirm-strip-msg {
+  color: var(--color-text, #1a1a1a);
+}
+
+.confirm-strip-note {
+  color: var(--color-text-muted, #6b7280);
+}
+
+.confirm-strip-yes {
+  font-size: 0.8rem;
+  padding: 3px 10px;
+}
+
+.confirm-strip-cancel {
+  font-size: 0.8rem;
+  padding: 3px 10px;
+}
+
+/* ── Empty state with an inline action button ───────────────────────────────── */
+.empty-state-with-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 28px 16px;
+  text-align: center;
+}
+
+/* ── editor-card header row (label + badge) ─────────────────────────────────── */
+.editor-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.editor-card-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--color-text, #1a1a1a);
+}
+
+/* ── Session count badge on tag-chip ─────────────────────────────────────────── */
+.tag-chip-count {
+  background: var(--color-primary-muted, #e0e7ff);
+  color: var(--color-primary, #4f46e5);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 99px;
+}
+
+/* ── Rooms two-row grid ──────────────────────────────────────────────────────── */
+.rooms-primary-row {
+  grid-template-columns: minmax(140px, 2fr) minmax(140px, 2fr) 100px;
+}
+
+.rooms-secondary-row {
+  grid-template-columns: 140px 160px 120px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border-subtle, #e5e7eb);
+}
+
+/* ── Advanced options accordion toggle ───────────────────────────────────────── */
+.advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 6px 0;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text-muted, #6b7280);
+  margin-top: 4px;
+}
+
+.advanced-toggle:hover {
+  color: var(--color-text, #1a1a1a);
+}
+
+/* ── Cohort group header in session checklist ────────────────────────────────── */
+.group-header-chip {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text-muted, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--color-border-subtle, #e5e7eb);
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+/* ── Session type accent left-border ─────────────────────────────────────────── */
+.session-type-accent {
+  border-left: 4px solid transparent;
+  padding-left: 12px;
+}
+
+.session-accent-lecture   { border-left-color: #6366f1; }
+.session-accent-tutorial  { border-left-color: #0ea5e9; }
+.session-accent-seminar   { border-left-color: #10b981; }
+.session-accent-practical { border-left-color: #f59e0b; }
+.session-accent-lab       { border-left-color: #ef4444; }
+.session-accent-other     { border-left-color: #9ca3af; }
