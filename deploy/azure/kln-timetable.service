@@ -1,0 +1,16 @@
+[Unit]
+Description=KLN Timetable FastAPI service
+After=network.target
+
+[Service]
+Type=simple
+User=kln
+Group=kln
+WorkingDirectory=/opt/kln-timetable
+EnvironmentFile=/opt/kln-timetable/backend/.env
+ExecStart=/opt/kln-timetable/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
