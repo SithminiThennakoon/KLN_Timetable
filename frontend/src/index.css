@@ -539,6 +539,23 @@ a {
   padding-top: 6px;
 }
 
+.cohort-year-filter {
+  border-radius: 8px;
+  border: 2px solid var(--input-border);
+  padding: 10px 14px;
+  background: var(--input-bg);
+  color: var(--ink-900);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cohort-year-filter:focus {
+  outline: none;
+  border-color: var(--accent-focus);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+}
+
 .list-see-more-btn {
   display: inline-flex;
   align-items: center;

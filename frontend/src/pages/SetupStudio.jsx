@@ -644,6 +644,35 @@ function SetupStudio() {
     is_full_year: false,
   });
   const [moduleSearchQuery, setModuleSearchQuery] = useState("");
+  const [visibleBaseCohortCount, setVisibleBaseCohortCount] = useState(INITIAL_VISIBLE_RECORDS);
+  const [visibleOverrideCohortCount, setVisibleOverrideCohortCount] = useState(INITIAL_VISIBLE_RECORDS);
+  const [cohortYearFilter, setCohortYearFilter] = useState("all");
+  const [showOverrideCohortModal, setShowOverrideCohortModal] = useState(false);
+  const [tempOverrideCohort, setTempOverrideCohort] = useState({
+    degreeId: "",
+    year: 1,
+    pathId: "",
+    name: "",
+    size: "",
+  });
+  const [sessionYearFilter, setSessionYearFilter] = useState("all");
+  const [visibleSessionCount, setVisibleSessionCount] = useState(INITIAL_VISIBLE_RECORDS);
+  const [showSessionModal, setShowSessionModal] = useState(false);
+  const [tempSession, setTempSession] = useState({
+    moduleId: "",
+    name: "",
+    session_type: "lecture",
+    duration_minutes: 60,
+    occurrences_per_week: 1,
+    required_room_type: "lecture",
+    required_lab_type: "",
+    specific_room_id: "",
+    max_students_per_group: "",
+    allow_parallel_rooms: false,
+    notes: "",
+    lecturerIds: [],
+    cohortIds: [],
+  });
 
   const filteredModules = useMemo(() => {
     if (!moduleSearchQuery.trim()) {
@@ -657,6 +686,33 @@ function SetupStudio() {
         m.subject_name.toLowerCase().includes(query)
     );
   }, [draft.modules, moduleSearchQuery]);
+
+  const filteredBaseCohorts = useMemo(() => {
+    const baseCohorts = draft.cohorts.filter((c) => c.kind === "base");
+    if (cohortYearFilter === "all") {
+      return baseCohorts;
+    }
+    return baseCohorts.filter((c) => String(c.year) === cohortYearFilter);
+  }, [draft.cohorts, cohortYearFilter]);
+
+  const filteredOverrideCohorts = useMemo(() => {
+    const overrideCohorts = draft.cohorts.filter((c) => c.kind === "override");
+    if (cohortYearFilter === "all") {
+      return overrideCohorts;
+    }
+    return overrideCohorts.filter((c) => String(c.year) === cohortYearFilter);
+  }, [draft.cohorts, cohortYearFilter]);
+
+  const filteredSessions = useMemo(() => {
+    const moduleYear = (m) => {
+      const mod = draft.modules.find((mod) => mod.id === m.moduleId);
+      return mod ? mod.year : null;
+    };
+    if (sessionYearFilter === "all") {
+      return draft.sessions;
+    }
+    return draft.sessions.filter((s) => String(moduleYear(s)) === sessionYearFilter);
+  }, [draft.sessions, draft.modules, sessionYearFilter]);
 
   const validation = useMemo(() => validateDraft(draft), [draft]);
 
@@ -690,8 +746,13 @@ function SetupStudio() {
       setVisibleDegreeCount(INITIAL_VISIBLE_RECORDS);
       setVisiblePathCount(INITIAL_VISIBLE_RECORDS);
       setVisibleLecturerCount(INITIAL_VISIBLE_RECORDS);
+      setVisibleBaseCohortCount(INITIAL_VISIBLE_RECORDS);
+      setVisibleOverrideCohortCount(INITIAL_VISIBLE_RECORDS);
+      setCohortYearFilter("all");
       setVisibleRoomCount(INITIAL_VISIBLE_RECORDS);
       setVisibleModuleCount(INITIAL_VISIBLE_RECORDS);
+      setSessionYearFilter("all");
+      setVisibleSessionCount(INITIAL_VISIBLE_RECORDS);
       setStatus(nextStatus);
     } catch (err) {
       setError(err.message);
@@ -1811,62 +1872,97 @@ function SetupStudio() {
                   <h2>Base Cohorts</h2>
                   <p>These are derived from degree, year, and path structure. Enter counts here first.</p>
                 </div>
+                <div className="record-actions">
+                  <select
+                    className="cohort-year-filter"
+                    value={cohortYearFilter}
+                    onChange={(e) => setCohortYearFilter(e.target.value)}
+                  >
+                    <option value="all">All Years</option>
+                    {[1, 2, 3, 4, 5, 6].map((y) => (
+                      <option key={y} value={y}>
+                        Year {y}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div className="editor-list">
-                {draft.cohorts.filter((cohort) => cohort.kind === "base").length === 0 ? (
-                  <p className="empty-state">Add degrees and paths first.</p>
+                {filteredBaseCohorts.length === 0 ? (
+                  <p className="empty-state">
+                    {cohortYearFilter !== "all"
+                      ? `No base cohorts found for Year ${cohortYearFilter}.`
+                      : "Add degrees and paths first."}
+                  </p>
                 ) : (
-                  draft.cohorts
-                    .filter((cohort) => cohort.kind === "base")
-                    .map((cohort) => {
-                      const degree = degreeOptions.find((entry) => entry.id === cohort.degreeId);
-                      const path = pathOptions.find((entry) => entry.id === cohort.pathId);
-                      const baseIndex =
-                        draft.cohorts.filter((entry) => entry.kind === "base").findIndex((entry) => entry.id === cohort.id) + 1;
-                      const cohortNameIssue = findRecordIssue(
-                        validation.blocking,
-                        new RegExp(`^Base cohort ${baseIndex} is missing a name\\.$`)
-                      );
-                      const cohortSizeIssue = findRecordIssue(
-                        validation.blocking,
-                        new RegExp(`^Base cohort ${baseIndex} needs a positive student count\\.$`)
-                      );
-                      return (
-                        <div key={cohort.id} className="editor-card">
-                          <div className="chip-row">
-                            <span className="tag-chip">{degree?.code || "Degree"}</span>
-                            <span className="tag-chip">Year {cohort.year}</span>
-                            <span className="tag-chip">{path?.code || "General"}</span>
-                          </div>
-                          <div className="form-grid two-column">
-                            <label>
-                              <span>Cohort name</span>
-                              <input
-                                className={invalidClass(cohortNameIssue)}
-                                value={cohort.name}
-                                onChange={(event) =>
-                                  updateRecord("cohorts", cohort.id, "name", event.target.value)
-                                }
-                              />
-                              {cohortNameIssue && <small className="field-hint invalid">{cohortNameIssue}</small>}
-                            </label>
-                            <label>
-                              <span>Student count</span>
-                              <input
-                                className={invalidClass(cohortSizeIssue)}
-                                type="number"
-                                min="1"
-                                value={cohort.size}
-                                onChange={(event) =>
-                                  updateRecord("cohorts", cohort.id, "size", event.target.value)
-                                }
-                              />
-                              {cohortSizeIssue && <small className="field-hint invalid">{cohortSizeIssue}</small>}
-                            </label>
-                          </div>
+                  filteredBaseCohorts.slice(0, visibleBaseCohortCount).map((cohort) => {
+                    const degree = degreeOptions.find((entry) => entry.id === cohort.degreeId);
+                    const path = pathOptions.find((entry) => entry.id === cohort.pathId);
+                    const baseIndex =
+                      draft.cohorts.filter((entry) => entry.kind === "base").findIndex((entry) => entry.id === cohort.id) + 1;
+                    const cohortNameIssue = findRecordIssue(
+                      validation.blocking,
+                      new RegExp(`^Base cohort ${baseIndex} is missing a name\\.$`)
+                    );
+                    const cohortSizeIssue = findRecordIssue(
+                      validation.blocking,
+                      new RegExp(`^Base cohort ${baseIndex} needs a positive student count\\.$`)
+                    );
+                    return (
+                      <div key={cohort.id} className="editor-card">
+                        <div className="chip-row">
+                          <span className="tag-chip">{degree?.code || "Degree"}</span>
+                          <span className="tag-chip">Year {cohort.year}</span>
+                          <span className="tag-chip">{path?.code || "General"}</span>
                         </div>
-                      );
-                    })
+                        <div className="form-grid two-column">
+                          <label>
+                            <span>Cohort name</span>
+                            <input
+                              className={invalidClass(cohortNameIssue)}
+                              value={cohort.name}
+                              onChange={(event) =>
+                                updateRecord("cohorts", cohort.id, "name", event.target.value)
+                              }
+                            />
+                            {cohortNameIssue && <small className="field-hint invalid">{cohortNameIssue}</small>}
+                          </label>
+                          <label>
+                            <span>Student count</span>
+                            <input
+                              className={invalidClass(cohortSizeIssue)}
+                              type="number"
+                              min="1"
+                              value={cohort.size}
+                              onChange={(event) =>
+                                updateRecord("cohorts", cohort.id, "size", event.target.value)
+                              }
+                            />
+                            {cohortSizeIssue && <small className="field-hint invalid">{cohortSizeIssue}</small>}
+                          </label>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+                {filteredBaseCohorts.length > INITIAL_VISIBLE_RECORDS && (
+                  <div className="list-see-more-wrap">
+                    <button
+                      type="button"
+                      className="list-see-more-btn"
+                      onClick={() =>
+                        setVisibleBaseCohortCount((current) =>
+                          current > INITIAL_VISIBLE_RECORDS ? INITIAL_VISIBLE_RECORDS : filteredBaseCohorts.length
+                        )
+                      }
+                    >
+                      <span
+                        className={`list-see-more-arrow ${visibleBaseCohortCount > INITIAL_VISIBLE_RECORDS ? "is-open" : ""}`}
+                        aria-hidden="true"
+                      />
+                      {visibleBaseCohortCount > INITIAL_VISIBLE_RECORDS ? "See less" : "See more"}
+                    </button>
+                  </div>
                 )}
               </div>
             </section>
@@ -1887,17 +1983,16 @@ function SetupStudio() {
                   </button>
                   <button
                     className="ghost-btn"
-                    onClick={() =>
-                      addRecord("cohorts", {
-                        id: makeId("cohort"),
-                        kind: "override",
+                    onClick={() => {
+                      setTempOverrideCohort({
                         degreeId: degreeOptions[0]?.id || "",
                         year: 1,
                         pathId: "",
                         name: "",
                         size: "",
-                      })
-                    }
+                      });
+                      setShowOverrideCohortModal(true);
+                    }}
                     disabled={degreeOptions.length === 0}
                   >
                     Add Override
@@ -1905,12 +2000,14 @@ function SetupStudio() {
                 </div>
               </div>
               <div className="editor-list">
-                {draft.cohorts.filter((cohort) => cohort.kind === "override").length === 0 ? (
-                  <p className="empty-state">No override groups added.</p>
+                {filteredOverrideCohorts.length === 0 ? (
+                  <p className="empty-state">
+                    {cohortYearFilter !== "all"
+                      ? `No override groups found for Year ${cohortYearFilter}.`
+                      : "No override groups added."}
+                  </p>
                 ) : (
-                  draft.cohorts
-                    .filter((cohort) => cohort.kind === "override")
-                    .map((cohort, index) => {
+                  filteredOverrideCohorts.slice(0, visibleOverrideCohortCount).map((cohort, index) => {
                       const overrideIdentityIssue = findRecordIssue(
                         validation.blocking,
                         new RegExp(`^Override group ${index + 1} is missing degree or name\\.$`)
@@ -2007,6 +2104,25 @@ function SetupStudio() {
                         </div>
                       );
                     })
+                )}
+                {filteredOverrideCohorts.length > INITIAL_VISIBLE_RECORDS && (
+                  <div className="list-see-more-wrap">
+                    <button
+                      type="button"
+                      className="list-see-more-btn"
+                      onClick={() =>
+                        setVisibleOverrideCohortCount((current) =>
+                          current > INITIAL_VISIBLE_RECORDS ? INITIAL_VISIBLE_RECORDS : filteredOverrideCohorts.length
+                        )
+                      }
+                    >
+                      <span
+                        className={`list-see-more-arrow ${visibleOverrideCohortCount > INITIAL_VISIBLE_RECORDS ? "is-open" : ""}`}
+                        aria-hidden="true"
+                      />
+                      {visibleOverrideCohortCount > INITIAL_VISIBLE_RECORDS ? "See less" : "See more"}
+                    </button>
+                  </div>
                 )}
               </div>
             </section>
@@ -2219,9 +2335,8 @@ function SetupStudio() {
                   </button>
                   <button
                     className="ghost-btn"
-                    onClick={() =>
-                      addRecord("sessions", {
-                        id: makeId("session"),
+                    onClick={() => {
+                      setTempSession({
                         moduleId: moduleOptions[0]?.id || "",
                         name: "",
                         session_type: "lecture",
@@ -2235,19 +2350,40 @@ function SetupStudio() {
                         notes: "",
                         lecturerIds: [],
                         cohortIds: [],
-                      })
-                    }
+                      });
+                      setShowSessionModal(true);
+                    }}
                     disabled={moduleOptions.length === 0}
                   >
                     Add Session
                   </button>
                 </div>
               </div>
+              <div className="section-row" style={{ borderBottom: 0, paddingBottom: 0, marginBottom: 0 }}>
+                <div className="record-actions">
+                  <select
+                    className="cohort-year-filter"
+                    value={sessionYearFilter}
+                    onChange={(e) => setSessionYearFilter(e.target.value)}
+                  >
+                    <option value="all">All Years</option>
+                    {[1, 2, 3, 4].map((y) => (
+                      <option key={y} value={y}>
+                        Year {y}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
               <div className="editor-list">
-              {draft.sessions.length === 0 ? (
-                <p className="empty-state">No sessions added yet.</p>
+              {filteredSessions.length === 0 ? (
+                <p className="empty-state">
+                  {sessionYearFilter !== "all"
+                    ? `No sessions found for Year ${sessionYearFilter}.`
+                    : "No sessions added yet."}
+                </p>
               ) : (
-                draft.sessions.map((session) => {
+                filteredSessions.slice(0, visibleSessionCount).map((session) => {
                   const sessionIndex = draft.sessions.findIndex((entry) => entry.id === session.id) + 1;
                   const sessionIdentityIssue = findRecordIssue(
                     validation.blocking,
@@ -2508,6 +2644,25 @@ function SetupStudio() {
                   </div>
                 );
                 })
+              )}
+              {filteredSessions.length > INITIAL_VISIBLE_RECORDS && (
+                <div className="list-see-more-wrap">
+                  <button
+                    type="button"
+                    className="list-see-more-btn"
+                    onClick={() =>
+                      setVisibleSessionCount((current) =>
+                        current > INITIAL_VISIBLE_RECORDS ? INITIAL_VISIBLE_RECORDS : filteredSessions.length
+                      )
+                    }
+                  >
+                    <span
+                      className={`list-see-more-arrow ${visibleSessionCount > INITIAL_VISIBLE_RECORDS ? "is-open" : ""}`}
+                      aria-hidden="true"
+                    />
+                    {visibleSessionCount > INITIAL_VISIBLE_RECORDS ? "See less" : "See more"}
+                  </button>
+                </div>
               )}
               </div>
             </section>
@@ -3058,6 +3213,276 @@ function SetupStudio() {
                   }}
                 >
                   {saving ? "Saving..." : "Save Module"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showOverrideCohortModal && (
+        <div className="modal-overlay" onClick={() => setShowOverrideCohortModal(false)}>
+          <div className="modal-card setup-add-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="setup-add-modal-header">
+              <div className="setup-add-modal-title-block">
+                <span className="setup-add-modal-kicker">Cohort setup</span>
+                <h3>Add New Override Group</h3>
+                <p>Enter the override group details and save them directly into the current setup dataset.</p>
+              </div>
+              <button type="button" className="setup-add-modal-close" onClick={() => setShowOverrideCohortModal(false)}>
+                Close
+              </button>
+            </div>
+
+            <div className="setup-add-modal-body">
+              <div className="form-grid two-column">
+                <label>
+                  <span>Degree</span>
+                  <select
+                    value={tempOverrideCohort.degreeId}
+                    onChange={(e) => setTempOverrideCohort({ ...tempOverrideCohort, degreeId: e.target.value, pathId: "" })}
+                  >
+                    <option value="">Select degree</option>
+                    {degreeOptions.map((degree) => (
+                      <option key={degree.id} value={degree.id}>
+                        {degree.code}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Year</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="6"
+                    value={tempOverrideCohort.year}
+                    onChange={(e) => setTempOverrideCohort({ ...tempOverrideCohort, year: Number(e.target.value) })}
+                  />
+                </label>
+                <label>
+                  <span>Path</span>
+                  <select
+                    value={tempOverrideCohort.pathId}
+                    onChange={(e) => setTempOverrideCohort({ ...tempOverrideCohort, pathId: e.target.value })}
+                  >
+                    <option value="">General</option>
+                    {pathOptions
+                      .filter((path) => path.degreeId === tempOverrideCohort.degreeId)
+                      .map((path) => (
+                        <option key={path.id} value={path.id}>
+                          {path.code}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Student count</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={tempOverrideCohort.size}
+                    onChange={(e) => setTempOverrideCohort({ ...tempOverrideCohort, size: e.target.value })}
+                  />
+                </label>
+                <label className="full-span">
+                  <span>Override name</span>
+                  <input
+                    type="text"
+                    value={tempOverrideCohort.name}
+                    onChange={(e) => setTempOverrideCohort({ ...tempOverrideCohort, name: e.target.value })}
+                    placeholder="e.g., Elective Group A"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="setup-add-modal-footer">
+              <p>Save writes the override group to the current setup dataset.</p>
+              <div className="modal-actions">
+                <button type="button" className="ghost-btn" onClick={() => setShowOverrideCohortModal(false)} disabled={saving}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary-btn"
+                  disabled={saving}
+                  onClick={async () => {
+                    const cohort = {
+                      id: makeId("cohort"),
+                      kind: "override",
+                      degreeId: tempOverrideCohort.degreeId,
+                      year: tempOverrideCohort.year,
+                      pathId: tempOverrideCohort.pathId,
+                      name: tempOverrideCohort.name,
+                      size: tempOverrideCohort.size,
+                    };
+                    const saved = await persistAddedRecord(
+                      "cohorts",
+                      cohort,
+                      "Override group saved to the setup dataset."
+                    );
+                    if (saved) {
+                      setVisibleOverrideCohortCount((current) => current + 1);
+                      setShowOverrideCohortModal(false);
+                    }
+                  }}
+                >
+                  {saving ? "Saving..." : "Save Override"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSessionModal && (
+        <div className="modal-overlay" onClick={() => setShowSessionModal(false)}>
+          <div className="modal-card setup-add-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="setup-add-modal-header">
+              <div className="setup-add-modal-title-block">
+                <span className="setup-add-modal-kicker">Session setup</span>
+                <h3>Add New Session</h3>
+                <p>Enter the session details and save them directly into the current setup dataset.</p>
+              </div>
+              <button type="button" className="setup-add-modal-close" onClick={() => setShowSessionModal(false)}>
+                Close
+              </button>
+            </div>
+
+            <div className="setup-add-modal-body">
+              <div className="form-grid two-column">
+                <label>
+                  <span>Module</span>
+                  <select
+                    value={tempSession.moduleId}
+                    onChange={(e) => setTempSession({ ...tempSession, moduleId: e.target.value })}
+                  >
+                    <option value="">Select module</option>
+                    {moduleOptions.map((module) => (
+                      <option key={module.id} value={module.id}>
+                        {module.code} - {module.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Session name</span>
+                  <input
+                    type="text"
+                    value={tempSession.name}
+                    onChange={(e) => setTempSession({ ...tempSession, name: e.target.value })}
+                    placeholder="e.g., Lecture 1"
+                  />
+                </label>
+                <label>
+                  <span>Session type</span>
+                  <select
+                    value={tempSession.session_type}
+                    onChange={(e) => setTempSession({ ...tempSession, session_type: e.target.value })}
+                  >
+                    <option value="lecture">Lecture</option>
+                    <option value="tutorial">Tutorial</option>
+                    <option value="lab">Lab</option>
+                    <option value="practical">Practical</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Duration (minutes)</span>
+                  <input
+                    type="number"
+                    min="30"
+                    step="30"
+                    value={tempSession.duration_minutes}
+                    onChange={(e) => setTempSession({ ...tempSession, duration_minutes: Number(e.target.value) })}
+                  />
+                </label>
+                <label>
+                  <span>Occurrences per week</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={tempSession.occurrences_per_week}
+                    onChange={(e) => setTempSession({ ...tempSession, occurrences_per_week: Number(e.target.value) })}
+                  />
+                </label>
+                <label>
+                  <span>Required room type</span>
+                  <select
+                    value={tempSession.required_room_type}
+                    onChange={(e) => setTempSession({ ...tempSession, required_room_type: e.target.value })}
+                  >
+                    <option value="lecture">Lecture Hall</option>
+                    <option value="lab">Lab</option>
+                    <option value="seminar">Seminar Room</option>
+                    <option value="any">Any</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Required lab type</span>
+                  <input
+                    type="text"
+                    value={tempSession.required_lab_type}
+                    onChange={(e) => setTempSession({ ...tempSession, required_lab_type: e.target.value })}
+                    placeholder="e.g., Chemistry"
+                  />
+                </label>
+                <label>
+                  <span>Specific room</span>
+                  <select
+                    value={tempSession.specific_room_id}
+                    onChange={(e) => setTempSession({ ...tempSession, specific_room_id: e.target.value })}
+                  >
+                    <option value="">Any room</option>
+                    {roomOptions.map((room) => (
+                      <option key={room.id} value={room.id}>
+                        {room.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div className="setup-add-modal-footer">
+              <p>Save writes the session to the current setup dataset.</p>
+              <div className="modal-actions">
+                <button type="button" className="ghost-btn" onClick={() => setShowSessionModal(false)} disabled={saving}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary-btn"
+                  disabled={saving}
+                  onClick={async () => {
+                    const session = {
+                      id: makeId("session"),
+                      moduleId: tempSession.moduleId,
+                      name: tempSession.name,
+                      session_type: tempSession.session_type,
+                      duration_minutes: tempSession.duration_minutes,
+                      occurrences_per_week: tempSession.occurrences_per_week,
+                      required_room_type: tempSession.required_room_type,
+                      required_lab_type: tempSession.required_lab_type,
+                      specific_room_id: tempSession.specific_room_id,
+                      max_students_per_group: tempSession.max_students_per_group,
+                      allow_parallel_rooms: tempSession.allow_parallel_rooms,
+                      notes: tempSession.notes,
+                      lecturerIds: tempSession.lecturerIds,
+                      cohortIds: tempSession.cohortIds,
+                    };
+                    const saved = await persistAddedRecord(
+                      "sessions",
+                      session,
+                      "Session saved to the setup dataset."
+                    );
+                    if (saved) {
+                      setVisibleSessionCount((current) => current + 1);
+                      setShowSessionModal(false);
+                    }
+                  }}
+                >
+                  {saving ? "Saving..." : "Save Session"}
                 </button>
               </div>
             </div>
