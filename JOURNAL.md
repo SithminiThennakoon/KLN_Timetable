@@ -45,3 +45,12 @@
 - Removed now-unused .wce-lecturer rule; updated day column minmax from 0 to 160px so columns remain readable at any density
 - Production build passes with zero errors
 
+## 2026-03-10T21:10:00+05:30
+
+- Replaced 5-column WeekCalendar with a single-day DayCalendar: one full-width column for the selected day, making session cards large and readable instead of 5 tiny ~160px-wide strips
+- Added DayPicker tab bar (Mon/Tue/Wed/Thu/Fri) between the toolbar and the calendar card; each tab shows a session-count badge and highlights the active day; auto-selects the first day with entries when data loads
+- DayCalendar uses the same groupOverlappingEntries + SlotPopover logic; cards now have left/right margin of 6px (was 3px); tall cards (≥72px) show the time range as a third line
+- exportDay state removed; PDF/PNG exports now use selectedDay directly, so the export always reflects the currently viewed day
+- Removed now-unused week-cal-header, week-cal-header-day, week-cal-day-name, week-cal-day-meta CSS; added .day-picker, .day-picker-btn, .dp-day-name, .dp-count, .wce-time rules; updated responsive media query
+- Production build passes with zero errors
+

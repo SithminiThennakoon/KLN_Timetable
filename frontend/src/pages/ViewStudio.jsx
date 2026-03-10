@@ -472,39 +472,61 @@ function SlotPopover({ entries, anchorStyle, onSelectEntry, onClose }) {
   );
 }
 
-// ─── Week Calendar Component ───────────────────────────────────────────────────
+// ─── Day Picker ────────────────────────────────────────────────────────────────
 
-function WeekCalendar({ entries, minuteHeight, dayLoad, onEntryClick }) {
+function DayPicker({ selectedDay, onSelectDay, dayLoad }) {
+  return (
+    <div className="day-picker" role="tablist" aria-label="Select day">
+      {days.map((day) => {
+        const load = dayLoad.find((d) => d.day === day);
+        const isActive = day === selectedDay;
+        return (
+          <button
+            key={day}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            className={`day-picker-btn${isActive ? " active" : ""}`}
+            onClick={() => onSelectDay(day)}
+          >
+            <span className="dp-day-name">{day.slice(0, 3).toUpperCase()}</span>
+            {load && load.total > 0 && (
+              <span className="dp-count">{load.total}</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Day Calendar Component ────────────────────────────────────────────────────
+
+function DayCalendar({ entries, selectedDay, minuteHeight, onEntryClick }) {
   const hourCount = (calendarEndMinute - calendarStartMinute) / 60;
   const totalHeight = (calendarEndMinute - calendarStartMinute) * minuteHeight;
   const timeColWidth = 52;
 
-  // popover state: { dayKey, primary entry, rect of the card }
   const [popover, setPopover] = useState(null);
   const wrapperRef = useRef(null);
 
-  // Build per-day group placement maps
-  const dayGroupMaps = useMemo(() => {
-    const result = new Map();
-    days.forEach((day) => {
-      const dayEntries = entries.filter((e) => e.day === day);
-      result.set(day, groupOverlappingEntries(dayEntries, minuteHeight));
-    });
-    return result;
-  }, [entries, minuteHeight]);
+  const groupMap = useMemo(() => {
+    const dayEntries = entries.filter((e) => e.day === selectedDay);
+    return groupOverlappingEntries(dayEntries, minuteHeight);
+  }, [entries, selectedDay, minuteHeight]);
 
-  const handleCardClick = useCallback((e, day, primary, placement) => {
+  // Close popover when the day changes
+  useEffect(() => { setPopover(null); }, [selectedDay]);
+
+  const handleCardClick = useCallback((e, primary, placement) => {
     if (placement.extraCount === 0) {
       onEntryClick(primary);
       return;
     }
     e.stopPropagation();
-    // Position popover relative to wrapper
     const wrapperRect = wrapperRef.current?.getBoundingClientRect() ?? { top: 0, left: 0 };
     const cardRect = e.currentTarget.getBoundingClientRect();
     setPopover({
-      day,
-      primary,
       allEntries: placement.allEntries,
       top: cardRect.bottom - wrapperRect.top + 4,
       left: cardRect.left - wrapperRect.left,
@@ -515,27 +537,8 @@ function WeekCalendar({ entries, minuteHeight, dayLoad, onEntryClick }) {
 
   return (
     <div className="week-cal-wrapper" ref={wrapperRef}>
-      {/* Sticky header row */}
-      <div className="week-cal-header" style={{ gridTemplateColumns: `${timeColWidth}px repeat(5, minmax(160px, 1fr))` }}>
-        <div className="week-cal-header-time" />
-        {days.map((day) => {
-          const load = dayLoad.find((d) => d.day === day);
-          return (
-            <div key={day} className="week-cal-header-day">
-              <span className="week-cal-day-name">{day.slice(0, 3).toUpperCase()}</span>
-              {load && (
-                <span className="week-cal-day-meta">
-                  {load.total} sessions
-                  <span className="week-cal-day-meta-detail"> · {load.lectureCount}L {load.labCount}P</span>
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Scrollable body */}
-      <div className="week-cal-body" style={{ gridTemplateColumns: `${timeColWidth}px repeat(5, minmax(160px, 1fr))` }}>
+      {/* Body: time gutter + single day column */}
+      <div className="week-cal-body" style={{ gridTemplateColumns: `${timeColWidth}px 1fr` }}>
         {/* Time gutter */}
         <div className="week-cal-time-col" style={{ height: `${totalHeight}px` }}>
           {Array.from({ length: hourCount + 1 }, (_, i) => {
@@ -552,93 +555,90 @@ function WeekCalendar({ entries, minuteHeight, dayLoad, onEntryClick }) {
           })}
         </div>
 
-        {/* Day columns */}
-        {days.map((day) => {
-          const groupMap = dayGroupMaps.get(day) || new Map();
+        {/* Single day column */}
+        <div className="week-cal-day-col" style={{ height: `${totalHeight}px` }}>
+          {/* Hour lines */}
+          {Array.from({ length: hourCount }, (_, i) => (
+            <div
+              key={i}
+              className="week-cal-hour-line"
+              style={{ top: `${i * 60 * minuteHeight}px` }}
+            />
+          ))}
+          {/* Half-hour lines */}
+          {Array.from({ length: hourCount }, (_, i) => (
+            <div
+              key={`half-${i}`}
+              className="week-cal-halfhour-line"
+              style={{ top: `${(i * 60 + 30) * minuteHeight}px` }}
+            />
+          ))}
 
-          return (
-            <div key={day} className="week-cal-day-col" style={{ height: `${totalHeight}px` }}>
-              {/* Hour lines */}
-              {Array.from({ length: hourCount }, (_, i) => (
-                <div
-                  key={i}
-                  className="week-cal-hour-line"
-                  style={{ top: `${i * 60 * minuteHeight}px` }}
-                />
-              ))}
-              {/* Half-hour lines */}
-              {Array.from({ length: hourCount }, (_, i) => (
-                <div
-                  key={`half-${i}`}
-                  className="week-cal-halfhour-line"
-                  style={{ top: `${(i * 60 + 30) * minuteHeight}px` }}
-                />
-              ))}
+          {/* Entry blocks — one per group (primary only) */}
+          {[...groupMap.entries()].map(([primary, placement], idx) => {
+            const toneClass = getEntryToneClass(primary);
+            const sessionShort = compactSessionName(primary.module_code, primary.session_name);
+            const blockHeight = placement.height;
+            const isShort = blockHeight < 48;
+            const isTiny = blockHeight < 28;
+            const hasExtras = placement.extraCount > 0;
 
-              {/* Entry blocks — one per group (primary only) */}
-              {[...groupMap.entries()].map(([primary, placement], idx) => {
-                const toneClass = getEntryToneClass(primary);
-                const sessionShort = compactSessionName(primary.module_code, primary.session_name);
-                const blockHeight = placement.height;
-                const isShort = blockHeight < 40;
-                const isTiny = blockHeight < 26;
-                const hasExtras = placement.extraCount > 0;
-
-                const style = {
+            return (
+              <button
+                key={`${selectedDay}-${primary.session_id}-${primary.occurrence_index ?? 1}-${idx}`}
+                type="button"
+                className={`week-cal-entry ${toneClass}${hasExtras ? " has-extras" : ""}`}
+                style={{
                   top: `${placement.top + 2}px`,
                   height: `${Math.max(blockHeight - 4, 22)}px`,
-                  left: "3px",
-                  right: "3px",
-                };
-
-                return (
-                  <button
-                    key={`${day}-${primary.session_id}-${primary.occurrence_index ?? 1}-${idx}`}
-                    type="button"
-                    className={`week-cal-entry ${toneClass}${hasExtras ? " has-extras" : ""}`}
-                    style={style}
-                    onClick={(e) => handleCardClick(e, day, primary, placement)}
-                    title={hasExtras
-                      ? `${placement.allEntries.length} sessions at ${formatMinute(primary.start_minute)}\nClick to see all`
-                      : [
-                          `${primary.module_code} ${primary.session_name}`,
-                          `${formatMinute(primary.start_minute)} – ${formatMinute(primary.start_minute + primary.duration_minutes)}`,
-                          primary.room_name,
-                          primary.lecturer_names.join(", "),
-                        ].filter(Boolean).join("\n")
-                    }
-                  >
-                    {isTiny ? (
-                      <span className="wce-code-only">{primary.module_code}{hasExtras ? ` +${placement.extraCount}` : ""}</span>
-                    ) : isShort ? (
-                      <>
-                        <span className="wce-top-line">
-                          <span className="wce-code">{primary.module_code}</span>
-                          {hasExtras && <span className="wce-extras-badge">+{placement.extraCount}</span>}
-                        </span>
-                        <span className="wce-room">{primary.room_name}</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="wce-top-line">
-                          <span className="wce-code">{primary.module_code}</span>
-                          {hasExtras && <span className="wce-extras-badge">+{placement.extraCount}</span>}
-                        </span>
-                        <span className="wce-type-room">
-                          <span className={`wce-type-dot ${toneClass}`} />
-                          {toneClass === "is-lab" ? "Lab" : "Lecture"} · {primary.room_name}
-                        </span>
-                        {!isShort && sessionShort && (
-                          <span className="wce-session">{sessionShort}</span>
-                        )}
-                      </>
+                  left: "6px",
+                  right: "6px",
+                }}
+                onClick={(e) => handleCardClick(e, primary, placement)}
+                title={hasExtras
+                  ? `${placement.allEntries.length} sessions at ${formatMinute(primary.start_minute)} — click to see all`
+                  : [
+                      `${primary.module_code} ${primary.session_name}`,
+                      `${formatMinute(primary.start_minute)} – ${formatMinute(primary.start_minute + primary.duration_minutes)}`,
+                      primary.room_name,
+                      primary.lecturer_names.join(", "),
+                    ].filter(Boolean).join("\n")
+                }
+              >
+                {isTiny ? (
+                  <span className="wce-code-only">{primary.module_code}{hasExtras ? ` +${placement.extraCount}` : ""}</span>
+                ) : isShort ? (
+                  <>
+                    <span className="wce-top-line">
+                      <span className="wce-code">{primary.module_code}</span>
+                      {hasExtras && <span className="wce-extras-badge">+{placement.extraCount}</span>}
+                    </span>
+                    <span className="wce-room">{primary.room_name}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="wce-top-line">
+                      <span className="wce-code">{primary.module_code}</span>
+                      {hasExtras && <span className="wce-extras-badge">+{placement.extraCount}</span>}
+                    </span>
+                    <span className="wce-type-room">
+                      <span className={`wce-type-dot ${toneClass}`} />
+                      {toneClass === "is-lab" ? "Lab" : "Lecture"} · {primary.room_name}
+                    </span>
+                    {sessionShort && (
+                      <span className="wce-session">{sessionShort}</span>
                     )}
-                  </button>
-                );
-              })}
-            </div>
-          );
-        })}
+                    {blockHeight >= 72 && (
+                      <span className="wce-time">
+                        {formatMinute(primary.start_minute)} – {formatMinute(primary.start_minute + primary.duration_minutes)}
+                      </span>
+                    )}
+                  </>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Slot popover */}
@@ -717,8 +717,7 @@ function ViewStudio() {
   const [modalEntry, setModalEntry] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  // For PDF/PNG export day selection (uses the first day with data by default)
-  const [exportDay, setExportDay] = useState(days[0]);
+  const [selectedDay, setSelectedDay] = useState(days[0]);
 
   const minuteHeight = densityModes[densityMode].minuteHeight;
 
@@ -777,11 +776,11 @@ function ViewStudio() {
   const agendaDays = useMemo(() => buildAgendaDays(view?.solution?.entries || []), [view]);
   const dayLoad = useMemo(() => buildDayLoad(view?.solution?.entries || []), [view]);
 
-  // Sync exportDay to first day that has entries
+  // Sync selectedDay to first day that has entries
   useEffect(() => {
     if (view?.solution?.entries?.length) {
       const firstDay = days.find((d) => view.solution.entries.some((e) => e.day === d));
-      if (firstDay) setExportDay(firstDay);
+      if (firstDay) setSelectedDay(firstDay);
     }
   }, [view]);
 
@@ -807,9 +806,9 @@ function ViewStudio() {
   const handleExport = async (format) => {
     try {
       if (!view) { setError("Load a timetable before exporting."); return; }
-      if (format === "pdf") { await exportPdf(view, entryMap, exportDay); return; }
+      if (format === "pdf") { await exportPdf(view, entryMap, selectedDay); return; }
       if (format === "xls") { await exportWorkbook(view, entryMap); return; }
-      if (format === "png") { await exportPng(view, entryMap, exportDay); return; }
+      if (format === "png") { await exportPng(view, entryMap, selectedDay); return; }
       const response = await timetableStudioService.exportView({
         mode,
         format,
@@ -996,14 +995,21 @@ function ViewStudio() {
 
             {/* Calendar or Agenda */}
             {layoutMode === "calendar" ? (
-              <section className="studio-card vs-calendar-card">
-                <WeekCalendar
-                  entries={view.solution.entries}
-                  minuteHeight={minuteHeight}
+              <>
+                <DayPicker
+                  selectedDay={selectedDay}
+                  onSelectDay={setSelectedDay}
                   dayLoad={dayLoad}
-                  onEntryClick={handleEntryClick}
                 />
-              </section>
+                <section className="studio-card vs-calendar-card">
+                  <DayCalendar
+                    entries={view.solution.entries}
+                    selectedDay={selectedDay}
+                    minuteHeight={minuteHeight}
+                    onEntryClick={handleEntryClick}
+                  />
+                </section>
+              </>
             ) : (
               <section className="studio-card vs-agenda-card">
                 <AgendaView

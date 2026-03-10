@@ -777,47 +777,66 @@ select {
   min-height: 0;
 }
 
-/* Sticky header */
-.week-cal-header {
-  display: grid;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: rgba(28, 34, 40, 0.98);
-  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(8px);
+/* ─── Day Picker ─────────────────────────────────────────────────────────────── */
+
+.day-picker {
+  display: flex;
+  gap: 4px;
+  padding: 10px 16px;
+  background: rgba(20, 26, 32, 0.8);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px 10px 0 0;
+  flex-wrap: wrap;
 }
 
-.week-cal-header-time {
-  padding: 14px 8px;
-}
-
-.week-cal-header-day {
+.day-picker-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 12px 8px;
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
   gap: 3px;
+  padding: 8px 20px;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  min-width: 64px;
 }
 
-.week-cal-day-name {
-  font-size: 0.88rem;
+.day-picker-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.day-picker-btn.active {
+  background: rgba(90, 160, 230, 0.2);
+  border-color: rgba(90, 160, 230, 0.6);
+}
+
+.dp-day-name {
+  font-size: 0.82rem;
   font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.75);
 }
 
-.week-cal-day-meta {
-  font-size: 0.78rem;
-  color: rgba(255, 255, 255, 0.55);
+.day-picker-btn.active .dp-day-name {
+  color: #7ec8f8;
+}
+
+.dp-count {
+  font-size: 0.72rem;
   font-weight: 600;
+  color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 0 6px;
+  line-height: 1.5;
 }
 
-.week-cal-day-meta-detail {
-  font-weight: 400;
-  color: rgba(255, 255, 255, 0.38);
+.day-picker-btn.active .dp-count {
+  background: rgba(90, 160, 230, 0.2);
+  color: rgba(126, 200, 248, 0.8);
 }
 
 /* Scrollable body */
@@ -993,6 +1012,20 @@ select {
   font-size: 0.7rem;
   color: rgba(255, 255, 255, 0.82);
   font-weight: 500;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.wce-time {
+  display: block;
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.45);
+  font-weight: 500;
+  margin-top: 2px;
+  white-space: nowrap;
 }
 
 .wce-room {
@@ -1545,10 +1578,20 @@ select {
     margin-left: 0;
   }
 
-  /* Week calendar responsive: allow horizontal scroll */
-  .week-cal-body,
-  .week-cal-header {
-    min-width: 640px;
+  /* Day picker responsive: wrap to smaller buttons */
+  .day-picker {
+    gap: 3px;
+    padding: 8px 12px;
+  }
+
+  .day-picker-btn {
+    padding: 6px 12px;
+    min-width: 52px;
+  }
+
+  /* Week calendar body: no min-width needed (single column) */
+  .week-cal-body {
+    min-width: 0;
   }
 
   .week-cal-wrapper {
