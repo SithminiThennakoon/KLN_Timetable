@@ -505,6 +505,43 @@ a {
   gap: 14px;
 }
 
+.list-see-more-wrap {
+  display: flex;
+  justify-content: center;
+  padding-top: 6px;
+}
+
+.list-see-more-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--btn-primary-border);
+  font-size: 0.96rem;
+  font-weight: 800;
+  padding: 8px 14px;
+  border-radius: 999px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.list-see-more-btn:hover {
+  background: color-mix(in srgb, var(--btn-primary-bg) 10%, transparent);
+}
+
+.list-see-more-arrow {
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg) translateY(-1px);
+  transition: transform 0.15s ease;
+}
+
+.list-see-more-arrow.is-open {
+  transform: rotate(-135deg) translateY(-1px);
+}
+
 .editor-card,
 .future-card {
   border: none;
@@ -2767,5 +2804,157 @@ select {
 
   .modal-detail-row {
     grid-template-columns: 90px minmax(0, 1fr);
+  }
+}
+
+.modal-card h3 {
+  margin: 0 0 20px;
+  font-size: 1.25rem;
+  color: var(--ink-900);
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.setup-add-modal {
+  max-width: 640px;
+  border-radius: 24px;
+  border: 1px solid color-mix(in srgb, var(--line) 74%, white 26%);
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--btn-primary-bg) 12%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--modal-bg-from) 92%, white 8%), var(--modal-bg-to));
+  overflow: hidden;
+}
+
+.setup-add-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 24px 18px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.setup-add-modal-title-block {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.setup-add-modal-kicker {
+  width: fit-content;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--btn-primary-bg) 12%, white 88%);
+  border: 1px solid color-mix(in srgb, var(--btn-primary-border) 28%, white 72%);
+  color: var(--btn-primary-border);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.setup-add-modal-header h3 {
+  margin: 0;
+  font-size: 1.6rem;
+  line-height: 1.1;
+}
+
+.setup-add-modal-header p,
+.setup-add-modal-footer p {
+  margin: 0;
+  color: var(--helper-text);
+  line-height: 1.5;
+}
+
+.setup-add-modal-close {
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--input-bg) 88%, white 12%);
+  color: var(--ink-900);
+  font-weight: 700;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.setup-add-modal-close:hover {
+  background: color-mix(in srgb, var(--btn-primary-bg) 8%, white 92%);
+  border-color: var(--btn-primary-border);
+  transform: translateY(-1px);
+}
+
+.setup-add-modal-body {
+  padding: 22px 24px 0;
+}
+
+.setup-add-modal .form-grid {
+  gap: 16px;
+}
+
+.setup-add-modal .form-grid label {
+  gap: 10px;
+}
+
+.setup-add-modal .form-grid input,
+.setup-add-modal .form-grid select {
+  min-height: 52px;
+  border-radius: 14px;
+  border-color: color-mix(in srgb, var(--input-border) 80%, white 20%);
+  background: color-mix(in srgb, var(--input-bg) 94%, white 6%);
+}
+
+.setup-add-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 24px 24px;
+  margin-top: 22px;
+  border-top: 1px solid var(--line-soft);
+  background: color-mix(in srgb, var(--modal-bg-to) 84%, white 16%);
+}
+
+.setup-add-modal .modal-actions {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .setup-add-modal {
+    max-width: 100%;
+  }
+
+  .setup-add-modal-header,
+  .setup-add-modal-footer {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .setup-add-modal-body {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .setup-add-modal-header,
+  .setup-add-modal-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .setup-add-modal .modal-actions {
+    justify-content: stretch;
+  }
+
+  .setup-add-modal .modal-actions button,
+  .setup-add-modal-close {
+    width: 100%;
   }
 }

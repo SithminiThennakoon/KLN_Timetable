@@ -606,6 +606,7 @@ function invalidClass(message) {
 }
 
 function SetupStudio() {
+  const INITIAL_VISIBLE_RECORDS = 4;
   const [draft, setDraft] = useState(emptyDraft);
   const [summary, setSummary] = useState(toSummary(emptyDraft));
   const [activeStep, setActiveStep] = useState(0);
@@ -613,6 +614,12 @@ function SetupStudio() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showDegreeModal, setShowDegreeModal] = useState(false);
+  const [showPathModal, setShowPathModal] = useState(false);
+  const [visibleDegreeCount, setVisibleDegreeCount] = useState(INITIAL_VISIBLE_RECORDS);
+  const [visiblePathCount, setVisiblePathCount] = useState(INITIAL_VISIBLE_RECORDS);
+  const [tempDegree, setTempDegree] = useState({ code: "", name: "", duration_years: 3, intake_label: "" });
+  const [tempPath, setTempPath] = useState({ degreeId: "", year: 1, code: "", name: "" });
 
   const validation = useMemo(() => validateDraft(draft), [draft]);
 
@@ -643,6 +650,8 @@ function SetupStudio() {
       const normalized = normalizeDataset(dataset);
       setDraft(normalized);
       setSummary(toSummary(normalized));
+      setVisibleDegreeCount(INITIAL_VISIBLE_RECORDS);
+      setVisiblePathCount(INITIAL_VISIBLE_RECORDS);
       setStatus(nextStatus);
     } catch (err) {
       setError(err.message);
@@ -1266,15 +1275,10 @@ function SetupStudio() {
                   </button>
                   <button
                     className="primary-btn"
-                    onClick={() =>
-                      addRecord("degrees", {
-                        id: makeId("degree"),
-                        code: "",
-                        name: "",
-                        duration_years: 3,
-                        intake_label: "",
-                      })
-                    }
+                    onClick={() => {
+                      setTempDegree({ code: "", name: "", duration_years: 3, intake_label: "" });
+                      setShowDegreeModal(true);
+                    }}
                   >
                     Add Degree
                   </button>
@@ -1284,7 +1288,7 @@ function SetupStudio() {
                 {draft.degrees.length === 0 ? (
                   <p className="empty-state">No degrees added yet.</p>
                 ) : (
-                  draft.degrees.map((degree, index) => {
+                  draft.degrees.slice(0, visibleDegreeCount).map((degree, index) => {
                     const degreeIssue = findRecordIssue(
                       validation.blocking,
                       new RegExp(`^Degree ${index + 1} is missing code, name, or intake label\\.$`)
@@ -1362,6 +1366,22 @@ function SetupStudio() {
                     );
                   })
                 )}
+                {draft.degrees.length > INITIAL_VISIBLE_RECORDS && (
+                  <div className="list-see-more-wrap">
+                    <button
+                      type="button"
+                      className="list-see-more-btn"
+                      onClick={() =>
+                        setVisibleDegreeCount((current) =>
+                          current > INITIAL_VISIBLE_RECORDS ? INITIAL_VISIBLE_RECORDS : draft.degrees.length
+                        )
+                      }
+                    >
+                      <span className={`list-see-more-arrow ${visibleDegreeCount > INITIAL_VISIBLE_RECORDS ? "is-open" : ""}`} aria-hidden="true" />
+                      {visibleDegreeCount > INITIAL_VISIBLE_RECORDS ? "See less" : "See more"}
+                    </button>
+                  </div>
+                )}
               </div>
             </section>
 
@@ -1373,15 +1393,10 @@ function SetupStudio() {
                 </div>
                 <button
                   className="ghost-btn"
-                  onClick={() =>
-                    addRecord("paths", {
-                      id: makeId("path"),
-                      degreeId: degreeOptions[0]?.id || "",
-                      year: 1,
-                      code: "",
-                      name: "",
-                    })
-                  }
+                  onClick={() => {
+                    setTempPath({ degreeId: degreeOptions[0]?.id || "", year: 1, code: "", name: "" });
+                    setShowPathModal(true);
+                  }}
                   disabled={degreeOptions.length === 0}
                 >
                   Add Path
@@ -1391,7 +1406,7 @@ function SetupStudio() {
                 {draft.paths.length === 0 ? (
                   <p className="empty-state">Direct-entry degrees can be left without paths.</p>
                 ) : (
-                  draft.paths.map((path, index) => {
+                  draft.paths.slice(0, visiblePathCount).map((path, index) => {
                     const pathIssue = findRecordIssue(
                       validation.blocking,
                       new RegExp(`^Path ${index + 1} is missing degree, code, or name\\.$`)
@@ -1459,6 +1474,22 @@ function SetupStudio() {
                       </div>
                     );
                   })
+                )}
+                {draft.paths.length > INITIAL_VISIBLE_RECORDS && (
+                  <div className="list-see-more-wrap">
+                    <button
+                      type="button"
+                      className="list-see-more-btn"
+                      onClick={() =>
+                        setVisiblePathCount((current) =>
+                          current > INITIAL_VISIBLE_RECORDS ? INITIAL_VISIBLE_RECORDS : draft.paths.length
+                        )
+                      }
+                    >
+                      <span className={`list-see-more-arrow ${visiblePathCount > INITIAL_VISIBLE_RECORDS ? "is-open" : ""}`} aria-hidden="true" />
+                      {visiblePathCount > INITIAL_VISIBLE_RECORDS ? "See less" : "See more"}
+                    </button>
+                  </div>
                 )}
               </div>
             </section>
@@ -2431,6 +2462,181 @@ function SetupStudio() {
           </button>
         </div>
       </div>
+
+      {showDegreeModal && (
+        <div className="modal-overlay" onClick={() => setShowDegreeModal(false)}>
+          <div className="modal-card setup-add-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="setup-add-modal-header">
+              <div className="setup-add-modal-title-block">
+                <span className="setup-add-modal-kicker">Degree setup</span>
+                <h3>Add New Degree</h3>
+                <p>Enter the core details once, then save it into the structure list.</p>
+              </div>
+              <button type="button" className="setup-add-modal-close" onClick={() => setShowDegreeModal(false)}>
+                Close
+              </button>
+            </div>
+
+            <div className="setup-add-modal-body">
+              <div className="form-grid two-column">
+                <label>
+                  <span>Code</span>
+                  <input
+                    type="text"
+                    value={tempDegree.code}
+                    onChange={(e) => setTempDegree({ ...tempDegree, code: e.target.value })}
+                    placeholder="e.g., CS"
+                  />
+                </label>
+                <label>
+                  <span>Duration (years)</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="6"
+                    value={tempDegree.duration_years}
+                    onChange={(e) => setTempDegree({ ...tempDegree, duration_years: Number(e.target.value) })}
+                  />
+                </label>
+                <label className="full-span">
+                  <span>Name</span>
+                  <input
+                    type="text"
+                    value={tempDegree.name}
+                    onChange={(e) => setTempDegree({ ...tempDegree, name: e.target.value })}
+                    placeholder="e.g., Computer Science"
+                  />
+                </label>
+                <label className="full-span">
+                  <span>Intake Label</span>
+                  <input
+                    type="text"
+                    value={tempDegree.intake_label}
+                    onChange={(e) => setTempDegree({ ...tempDegree, intake_label: e.target.value })}
+                    placeholder="e.g., CS Intake"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="setup-add-modal-footer">
+              <p>Cancel closes this window without adding anything.</p>
+              <div className="modal-actions">
+                <button type="button" className="ghost-btn" onClick={() => setShowDegreeModal(false)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={() => {
+                    addRecord("degrees", {
+                      id: makeId("degree"),
+                      code: tempDegree.code,
+                      name: tempDegree.name,
+                      duration_years: tempDegree.duration_years,
+                      intake_label: tempDegree.intake_label,
+                    });
+                    setVisibleDegreeCount((current) => current + 1);
+                    setShowDegreeModal(false);
+                  }}
+                >
+                  Save Degree
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPathModal && (
+        <div className="modal-overlay" onClick={() => setShowPathModal(false)}>
+          <div className="modal-card setup-add-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="setup-add-modal-header">
+              <div className="setup-add-modal-title-block">
+                <span className="setup-add-modal-kicker">Path setup</span>
+                <h3>Add New Path</h3>
+                <p>Choose the degree and year first, then add the path code and display name.</p>
+              </div>
+              <button type="button" className="setup-add-modal-close" onClick={() => setShowPathModal(false)}>
+                Close
+              </button>
+            </div>
+
+            <div className="setup-add-modal-body">
+              <div className="form-grid two-column">
+                <label>
+                  <span>Degree</span>
+                  <select
+                    value={tempPath.degreeId}
+                    onChange={(e) => setTempPath({ ...tempPath, degreeId: e.target.value })}
+                  >
+                    <option value="">Select degree</option>
+                    {draft.degrees.map((degree) => (
+                      <option key={degree.id} value={degree.id}>
+                        {degree.code} - {degree.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Year</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="6"
+                    value={tempPath.year}
+                    onChange={(e) => setTempPath({ ...tempPath, year: Number(e.target.value) })}
+                  />
+                </label>
+                <label>
+                  <span>Code</span>
+                  <input
+                    type="text"
+                    value={tempPath.code}
+                    onChange={(e) => setTempPath({ ...tempPath, code: e.target.value })}
+                    placeholder="e.g., CS-GENERAL"
+                  />
+                </label>
+                <label>
+                  <span>Name</span>
+                  <input
+                    type="text"
+                    value={tempPath.name}
+                    onChange={(e) => setTempPath({ ...tempPath, name: e.target.value })}
+                    placeholder="e.g., Computer Science General"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="setup-add-modal-footer">
+              <p>Save adds the path to the draft, ready for the main dataset save.</p>
+              <div className="modal-actions">
+                <button type="button" className="ghost-btn" onClick={() => setShowPathModal(false)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={() => {
+                    addRecord("paths", {
+                      id: makeId("path"),
+                      degreeId: tempPath.degreeId,
+                      year: tempPath.year,
+                      code: tempPath.code,
+                      name: tempPath.name,
+                    });
+                    setVisiblePathCount((current) => current + 1);
+                    setShowPathModal(false);
+                  }}
+                >
+                  Save Path
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
