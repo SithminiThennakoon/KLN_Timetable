@@ -1308,17 +1308,36 @@ select {
 }
 
 .at-time small {
-  font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.at-time small::before {
+  content: "↳ ";
+  opacity: 0.6;
 }
 
 .at-code {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 0.82rem;
   font-weight: 700;
   color: rgba(255, 255, 255, 0.9);
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.at-type-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4a8bbf;
+}
+
+.agenda-table-row.is-lab .at-type-dot {
+  background: #3da8a8;
 }
 
 .at-session {
@@ -1330,8 +1349,23 @@ select {
 }
 
 .at-room {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+}
+
+.at-room-name {
   font-size: 0.8rem;
   color: rgba(255, 255, 255, 0.65);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.at-room-loc {
+  font-size: 0.69rem;
+  color: rgba(255, 255, 255, 0.35);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1346,9 +1380,26 @@ select {
 }
 
 .at-students {
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
   text-align: right;
+  overflow: hidden;
+}
+
+.at-students strong {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.2;
+}
+
+.at-groups {
+  font-size: 0.67rem;
+  color: rgba(255, 255, 255, 0.35);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1649,6 +1700,7 @@ select {
     grid-template-columns: 90px minmax(0, 1fr);
     grid-template-rows: auto auto auto;
     gap: 2px 12px;
+    align-items: start;
   }
 
   .at-time { grid-row: 1; grid-column: 1; }

@@ -71,3 +71,11 @@
 - Added .wce-lecturer-line (0.68rem, weight 600, rgba white 0.7, border-top separator) and .wce-students-line (0.65rem, weight 500, rgba white 0.48) CSS rules
 - Production build passes with zero errors
 
+## 2026-03-10T23:10:00+05:30
+
+- Improved AgendaView in ViewStudio.jsx: time cell now shows start–end range ("08:00" + "↳ 10:00") instead of start + duration; module code cell gains a colored 7px type-dot (blue=lecture, teal=lab) matching the calendar card tone; room cell becomes two-line (room name + room_location sub-line); lecturer cell gets a native title tooltip with all names for overflow cases; students cell becomes two-line (bold count + compact degree_path_labels below)
+- Added .at-type-dot (7px circle, default #4a8bbf), .agenda-table-row.is-lab .at-type-dot (#3da8a8), .at-room-name, .at-room-loc, .at-groups CSS rules
+- Updated .at-code to flex+gap to accommodate the new dot; .at-room to flex-column; .at-students to flex-column+right-align with .at-students strong and .at-groups sub-line; .at-time small to "↳ end-time" style
+- Responsive 980px override updated to align-items:start for taller multi-line cells; at-room still shown in mobile layout, at-lecturer/at-students still hidden on narrow screens
+- Production build passes with zero errors
+

@@ -884,6 +884,9 @@ function AgendaView({ agendaDays, onEntryClick }) {
             {entries.map((entry, idx) => {
               const toneClass = getEntryToneClass(entry);
               const sessionShort = compactSessionName(entry.module_code, entry.session_name);
+              const endMinute = entry.start_minute + entry.duration_minutes;
+              const audienceCompact = compactAudienceLabels(entry.degree_path_labels || []);
+              const allLecturers = (entry.lecturer_names || []).join(", ") || "Unassigned";
               return (
                 <button
                   key={getEntryKey(entry, idx)}
@@ -893,13 +896,28 @@ function AgendaView({ agendaDays, onEntryClick }) {
                 >
                   <span className="at-time">
                     <strong>{formatMinute(entry.start_minute)}</strong>
-                    <small>{formatDuration(entry.duration_minutes)}</small>
+                    <small>{formatMinute(endMinute)}</small>
                   </span>
-                  <span className="at-code">{entry.module_code}</span>
+                  <span className="at-code">
+                    <span className="at-type-dot" />
+                    {entry.module_code}
+                  </span>
                   <span className="at-session">{sessionShort || entry.session_name}</span>
-                  <span className="at-room">{entry.room_name}</span>
-                  <span className="at-lecturer">{compactLecturerNames(entry.lecturer_names)}</span>
-                  <span className="at-students">{entry.total_students}</span>
+                  <span className="at-room">
+                    <span className="at-room-name">{entry.room_name}</span>
+                    {entry.room_location && (
+                      <small className="at-room-loc">{entry.room_location}</small>
+                    )}
+                  </span>
+                  <span className="at-lecturer" title={allLecturers}>
+                    {compactLecturerNames(entry.lecturer_names)}
+                  </span>
+                  <span className="at-students">
+                    <strong>{entry.total_students}</strong>
+                    {audienceCompact && (
+                      <small className="at-groups">{audienceCompact}</small>
+                    )}
+                  </span>
                 </button>
               );
             })}
