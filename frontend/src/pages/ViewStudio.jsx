@@ -54,10 +54,11 @@ function getEntryToneClass(entry) {
   return "is-lecture";
 }
 
-// Build placements for each day independently (one column per day in week view)
-function buildDayPlacements(dayEntries, minuteHeight) {
-  const maxLanes = 6;
-  const sorted = dayEntries
+// Group overlapping entries in a single day column into slot-groups.
+// Each group has one primary entry (shown as the card) and extras (shown in popover).
+// A slot-group spans the union of all its members' time ranges.
+function groupOverlappingEntries(dayEntries, minuteHeight) {
+  const visible = dayEntries
     .filter(
       (e) => e.start_minute >= calendarStartMinute && e.start_minute < calendarEndMinute
     )
@@ -68,40 +69,36 @@ function buildDayPlacements(dayEntries, minuteHeight) {
         : b.duration_minutes - a.duration_minutes
     );
 
-  const laneEnds = [];
-  const laneByEntry = new Map();
-  sorted.forEach((entry) => {
-    const endMinute = entry.start_minute + entry.duration_minutes;
-    let lane = laneEnds.findIndex((end) => entry.start_minute >= end);
-    if (lane === -1) {
-      if (laneEnds.length < maxLanes) {
-        lane = laneEnds.length;
-        laneEnds.push(endMinute);
-      } else {
-        let min = 0;
-        for (let i = 1; i < laneEnds.length; i++) {
-          if (laneEnds[i] < laneEnds[min]) min = i;
-        }
-        lane = min;
-        laneEnds[lane] = endMinute;
-      }
+  const groups = []; // [{ primary, extras, groupStart, groupEnd }]
+
+  visible.forEach((entry) => {
+    const start = entry.start_minute;
+    const end = entry.start_minute + entry.duration_minutes;
+    // Find an existing group that overlaps with this entry
+    const overlap = groups.find(
+      (g) => start < g.groupEnd && end > g.groupStart
+    );
+    if (overlap) {
+      overlap.extras.push(entry);
+      overlap.groupStart = Math.min(overlap.groupStart, start);
+      overlap.groupEnd = Math.max(overlap.groupEnd, end);
     } else {
-      laneEnds[lane] = endMinute;
+      groups.push({ primary: entry, extras: [], groupStart: start, groupEnd: end });
     }
-    laneByEntry.set(entry, lane);
   });
 
-  const laneCount = Math.max(...[...laneByEntry.values()], 0) + 1;
+  // Build placement map: primary entry → { top, height, extraCount, allEntries }
   const placements = new Map();
-  sorted.forEach((entry) => {
-    const lane = laneByEntry.get(entry) ?? 0;
-    placements.set(entry, {
-      lane,
-      laneCount: Math.min(laneCount, maxLanes),
-      top: calendarTopInset + (entry.start_minute - calendarStartMinute) * minuteHeight,
-      height: Math.max(28, entry.duration_minutes * minuteHeight),
+  groups.forEach(({ primary, extras, groupStart, groupEnd }) => {
+    const spanMinutes = groupEnd - groupStart;
+    placements.set(primary, {
+      top: (groupStart - calendarStartMinute) * minuteHeight,
+      height: Math.max(32, spanMinutes * minuteHeight),
+      extraCount: extras.length,
+      allEntries: [primary, ...extras],
     });
   });
+
   return placements;
 }
 
@@ -291,17 +288,15 @@ async function exportPng(view, entryMap, selectedDay) {
   }
   ctx.beginPath(); ctx.moveTo(timeWidth, calTop); ctx.lineTo(timeWidth, calTop + calendarHeight); ctx.stroke();
   const dayEntries = view.solution.entries.filter((e) => e.day === selectedDay);
-  const placements = buildDayPlacements(dayEntries, exportMinuteHeight);
+  const placements = groupOverlappingEntries(dayEntries, exportMinuteHeight);
   dayEntries.forEach((entry) => {
     const p = placements.get(entry);
-    if (!p) return;
+    if (!p) return; // extras are not in placements map
     const xBase = timeWidth + 10;
-    const availableWidth = colWidth - 40;
-    const laneW = availableWidth / p.laneCount;
-    const x = xBase + p.lane * laneW;
+    const w = colWidth - 40;
+    const x = xBase;
     const y = calTop + p.top + 5;
     const h = Math.max(p.height - 10, 28);
-    const w = laneW - 10;
     ctx.fillStyle = getEntryToneClass(entry) === "is-lab" ? "#2d6f74" : "#3a6793";
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 8); ctx.fill();
     ctx.strokeStyle = "rgba(255,255,255,0.2)"; ctx.stroke();
@@ -309,6 +304,11 @@ async function exportPng(view, entryMap, selectedDay) {
     ctx.fillText(entry.module_code, x + 10, y + 22);
     ctx.font = "12px sans-serif"; ctx.fillStyle = "rgba(255,255,255,0.9)";
     ctx.fillText(entry.room_name, x + 10, y + 40);
+    if (p.extraCount > 0) {
+      ctx.fillStyle = "rgba(246,179,90,0.9)";
+      ctx.font = "bold 11px sans-serif";
+      ctx.fillText(`+${p.extraCount} more`, x + w - 60, y + 16);
+    }
   });
   const detailTop = calTop + calendarHeight + 40;
   ctx.fillStyle = "#ffffff"; ctx.font = "bold 24px sans-serif";
@@ -418,6 +418,60 @@ function SessionModal({ entry, onClose }) {
   );
 }
 
+// ─── Slot Popover ──────────────────────────────────────────────────────────────
+
+function SlotPopover({ entries, anchorStyle, onSelectEntry, onClose }) {
+  const popoverRef = useRef(null);
+
+  useEffect(() => {
+    const handleKey = (e) => { if (e.key === "Escape") onClose(); };
+    const handleClick = (e) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target)) onClose();
+    };
+    document.addEventListener("keydown", handleKey);
+    // Delay outside-click listener so the opening click doesn't immediately close it
+    const tid = setTimeout(() => document.addEventListener("mousedown", handleClick), 0);
+    return () => {
+      document.removeEventListener("keydown", handleKey);
+      clearTimeout(tid);
+      document.removeEventListener("mousedown", handleClick);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="slot-popover"
+      ref={popoverRef}
+      style={anchorStyle}
+      role="listbox"
+      aria-label={`${entries.length} sessions at this time`}
+    >
+      <div className="slot-popover-header">
+        <span>{entries.length} sessions</span>
+        <button type="button" className="slot-popover-close" onClick={onClose} aria-label="Close">×</button>
+      </div>
+      {entries.map((entry, idx) => {
+        const toneClass = getEntryToneClass(entry);
+        const sessionShort = compactSessionName(entry.module_code, entry.session_name);
+        return (
+          <button
+            key={getEntryKey(entry, idx)}
+            type="button"
+            className={`slot-popover-row ${toneClass}`}
+            onClick={() => { onSelectEntry(entry); onClose(); }}
+          >
+            <span className="spr-code">{entry.module_code}</span>
+            <span className="spr-body">
+              <span className="spr-session">{sessionShort || entry.session_name}</span>
+              <span className="spr-meta">{entry.room_name} · {compactLecturerNames(entry.lecturer_names)} · {entry.total_students} students</span>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Week Calendar Component ───────────────────────────────────────────────────
 
 function WeekCalendar({ entries, minuteHeight, dayLoad, onEntryClick }) {
@@ -425,29 +479,54 @@ function WeekCalendar({ entries, minuteHeight, dayLoad, onEntryClick }) {
   const totalHeight = (calendarEndMinute - calendarStartMinute) * minuteHeight;
   const timeColWidth = 52;
 
-  // Build per-day placement maps
-  const dayPlacements = useMemo(() => {
+  // popover state: { dayKey, primary entry, rect of the card }
+  const [popover, setPopover] = useState(null);
+  const wrapperRef = useRef(null);
+
+  // Build per-day group placement maps
+  const dayGroupMaps = useMemo(() => {
     const result = new Map();
     days.forEach((day) => {
       const dayEntries = entries.filter((e) => e.day === day);
-      result.set(day, buildDayPlacements(dayEntries, minuteHeight));
+      result.set(day, groupOverlappingEntries(dayEntries, minuteHeight));
     });
     return result;
   }, [entries, minuteHeight]);
 
+  const handleCardClick = useCallback((e, day, primary, placement) => {
+    if (placement.extraCount === 0) {
+      onEntryClick(primary);
+      return;
+    }
+    e.stopPropagation();
+    // Position popover relative to wrapper
+    const wrapperRect = wrapperRef.current?.getBoundingClientRect() ?? { top: 0, left: 0 };
+    const cardRect = e.currentTarget.getBoundingClientRect();
+    setPopover({
+      day,
+      primary,
+      allEntries: placement.allEntries,
+      top: cardRect.bottom - wrapperRect.top + 4,
+      left: cardRect.left - wrapperRect.left,
+    });
+  }, [onEntryClick]);
+
+  const closePopover = useCallback(() => setPopover(null), []);
+
   return (
-    <div className="week-cal-wrapper">
+    <div className="week-cal-wrapper" ref={wrapperRef}>
       {/* Sticky header row */}
-      <div className="week-cal-header" style={{ gridTemplateColumns: `${timeColWidth}px repeat(5, minmax(0, 1fr))` }}>
+      <div className="week-cal-header" style={{ gridTemplateColumns: `${timeColWidth}px repeat(5, minmax(160px, 1fr))` }}>
         <div className="week-cal-header-time" />
         {days.map((day) => {
           const load = dayLoad.find((d) => d.day === day);
           return (
             <div key={day} className="week-cal-header-day">
-              <span className="week-cal-day-name">{day.slice(0, 3)}</span>
+              <span className="week-cal-day-name">{day.slice(0, 3).toUpperCase()}</span>
               {load && (
                 <span className="week-cal-day-meta">
-                  {load.total} <span className="week-cal-day-meta-detail">({load.lectureCount}L / {load.labCount}P)</span>
+                  {load.total} sessions
+                  <span className="week-cal-day-meta-detail"> · {load.lectureCount}L {load.labCount}P</span>
                 </span>
               )}
             </div>
@@ -456,7 +535,7 @@ function WeekCalendar({ entries, minuteHeight, dayLoad, onEntryClick }) {
       </div>
 
       {/* Scrollable body */}
-      <div className="week-cal-body" style={{ gridTemplateColumns: `${timeColWidth}px repeat(5, minmax(0, 1fr))` }}>
+      <div className="week-cal-body" style={{ gridTemplateColumns: `${timeColWidth}px repeat(5, minmax(160px, 1fr))` }}>
         {/* Time gutter */}
         <div className="week-cal-time-col" style={{ height: `${totalHeight}px` }}>
           {Array.from({ length: hourCount + 1 }, (_, i) => {
@@ -475,10 +554,7 @@ function WeekCalendar({ entries, minuteHeight, dayLoad, onEntryClick }) {
 
         {/* Day columns */}
         {days.map((day) => {
-          const colPlacements = dayPlacements.get(day) || new Map();
-          const dayEntries = entries.filter(
-            (e) => e.day === day && e.start_minute >= calendarStartMinute && e.start_minute < calendarEndMinute
-          );
+          const groupMap = dayGroupMaps.get(day) || new Map();
 
           return (
             <div key={day} className="week-cal-day-col" style={{ height: `${totalHeight}px` }}>
@@ -499,51 +575,61 @@ function WeekCalendar({ entries, minuteHeight, dayLoad, onEntryClick }) {
                 />
               ))}
 
-              {/* Entry blocks */}
-              {dayEntries.map((entry, idx) => {
-                const p = colPlacements.get(entry);
-                if (!p) return null;
-                const gapPx = 3;
-                const laneW = 100 / p.laneCount;
+              {/* Entry blocks — one per group (primary only) */}
+              {[...groupMap.entries()].map(([primary, placement], idx) => {
+                const toneClass = getEntryToneClass(primary);
+                const sessionShort = compactSessionName(primary.module_code, primary.session_name);
+                const blockHeight = placement.height;
+                const isShort = blockHeight < 40;
+                const isTiny = blockHeight < 26;
+                const hasExtras = placement.extraCount > 0;
+
                 const style = {
-                  top: `${p.top + 2}px`,
-                  height: `${Math.max(p.height - 4, 24)}px`,
-                  left: `calc(${laneW * p.lane}% + ${p.lane * gapPx}px)`,
-                  width: `calc(${laneW}% - ${gapPx * (p.laneCount - 1) / p.laneCount + 3}px)`,
+                  top: `${placement.top + 2}px`,
+                  height: `${Math.max(blockHeight - 4, 22)}px`,
+                  left: "3px",
+                  right: "3px",
                 };
-                const toneClass = getEntryToneClass(entry);
-                const sessionShort = compactSessionName(entry.module_code, entry.session_name);
-                const isShort = p.height < 38;
-                const isTiny = p.height < 26;
 
                 return (
                   <button
-                    key={getEntryKey(entry, idx)}
+                    key={`${day}-${primary.session_id}-${primary.occurrence_index ?? 1}-${idx}`}
                     type="button"
-                    className={`week-cal-entry ${toneClass}`}
+                    className={`week-cal-entry ${toneClass}${hasExtras ? " has-extras" : ""}`}
                     style={style}
-                    onClick={() => onEntryClick(entry)}
-                    title={[
-                      `${entry.module_code} ${entry.session_name}`,
-                      `${formatMinute(entry.start_minute)} – ${formatMinute(entry.start_minute + entry.duration_minutes)}`,
-                      entry.room_name,
-                      entry.lecturer_names.join(", "),
-                    ].filter(Boolean).join("\n")}
+                    onClick={(e) => handleCardClick(e, day, primary, placement)}
+                    title={hasExtras
+                      ? `${placement.allEntries.length} sessions at ${formatMinute(primary.start_minute)}\nClick to see all`
+                      : [
+                          `${primary.module_code} ${primary.session_name}`,
+                          `${formatMinute(primary.start_minute)} – ${formatMinute(primary.start_minute + primary.duration_minutes)}`,
+                          primary.room_name,
+                          primary.lecturer_names.join(", "),
+                        ].filter(Boolean).join("\n")
+                    }
                   >
                     {isTiny ? (
-                      <span className="wce-code-only">{entry.module_code}</span>
+                      <span className="wce-code-only">{primary.module_code}{hasExtras ? ` +${placement.extraCount}` : ""}</span>
                     ) : isShort ? (
                       <>
-                        <span className="wce-code">{entry.module_code}</span>
-                        <span className="wce-room">{entry.room_name}</span>
+                        <span className="wce-top-line">
+                          <span className="wce-code">{primary.module_code}</span>
+                          {hasExtras && <span className="wce-extras-badge">+{placement.extraCount}</span>}
+                        </span>
+                        <span className="wce-room">{primary.room_name}</span>
                       </>
                     ) : (
                       <>
-                        <span className="wce-code">{entry.module_code}</span>
-                        {sessionShort && <span className="wce-session">{sessionShort}</span>}
-                        <span className="wce-room">{entry.room_name}</span>
-                        {!isShort && (
-                          <span className="wce-lecturer">{compactLecturerNames(entry.lecturer_names)}</span>
+                        <span className="wce-top-line">
+                          <span className="wce-code">{primary.module_code}</span>
+                          {hasExtras && <span className="wce-extras-badge">+{placement.extraCount}</span>}
+                        </span>
+                        <span className="wce-type-room">
+                          <span className={`wce-type-dot ${toneClass}`} />
+                          {toneClass === "is-lab" ? "Lab" : "Lecture"} · {primary.room_name}
+                        </span>
+                        {!isShort && sessionShort && (
+                          <span className="wce-session">{sessionShort}</span>
                         )}
                       </>
                     )}
@@ -554,6 +640,16 @@ function WeekCalendar({ entries, minuteHeight, dayLoad, onEntryClick }) {
           );
         })}
       </div>
+
+      {/* Slot popover */}
+      {popover && (
+        <SlotPopover
+          entries={popover.allEntries}
+          anchorStyle={{ top: popover.top, left: popover.left }}
+          onSelectEntry={onEntryClick}
+          onClose={closePopover}
+        />
+      )}
     </div>
   );
 }

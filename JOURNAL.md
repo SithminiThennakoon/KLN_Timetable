@@ -35,3 +35,13 @@
 - Reorganised the toolbar into two rows: Row 1 has the page title, Admin/Lecturer/Student mode toggles, and contextual filter dropdowns + Apply button; Row 2 has View (Calendar/Agenda), Density (Compact/Comfortable/Expanded), and Export (PDF/CSV/XLSX/PNG) controls
 - Rewrote all related CSS in index.css: removed old calendar-stage, agenda-entry, detail-drawer, day-load-strip, view-layout-grid, and density-toolbar blocks; added week-cal-*, agenda-table-*, modal-*, and vs-toolbar-* rulesets; confirmed production build passes with zero errors
 
+## 20:15
+
+- Fixed the week calendar's unreadable lane-split layout: replaced buildDayPlacements (6-lane parallel algorithm) with groupOverlappingEntries, which renders one full-width card per time-slot group and tracks extras for a popover
+- Added SlotPopover component: an absolutely-anchored dropdown listing all sessions in a slot group, each row clickable to open SessionModal, closes on Escape or outside-click
+- Rewrote WeekCalendar render loop to use groupOverlappingEntries; cards span the full day column with an amber +N badge and amber left-border when a group has extras; clicking a lone session opens the modal directly, clicking a stacked group opens the popover first
+- Updated PNG export path to use groupOverlappingEntries instead of the old buildDayPlacements
+- Added new CSS rules to index.css: .wce-top-line (flex row for code + badge), .wce-extras-badge (amber pill), .wce-type-room (type dot + room text), .wce-type-dot.is-lecture / .is-lab (coloured 5 px circle), .week-cal-entry.has-extras (amber left border), and the full .slot-popover / .slot-popover-header / .slot-popover-close / .slot-popover-row / .spr-* family
+- Removed now-unused .wce-lecturer rule; updated day column minmax from 0 to 160px so columns remain readable at any density
+- Production build passes with zero errors
+

@@ -916,8 +916,7 @@ select {
 .wce-code-only,
 .wce-code,
 .wce-session,
-.wce-room,
-.wce-lecturer {
+.wce-room {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -935,6 +934,59 @@ select {
   font-size: 0.74rem;
   font-weight: 800;
   color: rgba(255, 255, 255, 0.98);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wce-top-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.wce-extras-badge {
+  flex-shrink: 0;
+  font-size: 0.64rem;
+  font-weight: 800;
+  background: rgba(246, 179, 90, 0.28);
+  color: #f6b35a;
+  border: 1px solid rgba(246, 179, 90, 0.45);
+  border-radius: 3px;
+  padding: 0 3px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.wce-type-room {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.67rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 1px;
+}
+
+.wce-type-dot {
+  flex-shrink: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+.wce-type-dot.is-lecture {
+  background: #6ab4f0;
+}
+
+.wce-type-dot.is-lab {
+  background: #5dd6cc;
 }
 
 .wce-session {
@@ -950,10 +1002,121 @@ select {
   margin-top: 1px;
 }
 
-.wce-lecturer {
-  font-size: 0.64rem;
-  color: rgba(255, 255, 255, 0.5);
-  margin-top: 1px;
+/* has-extras: amber left border to signal stacked sessions */
+.week-cal-entry.has-extras {
+  border-left-color: #f6b35a;
+}
+
+/* ═══════════════════════════════════════════════════════
+   SLOT POPOVER
+   ═══════════════════════════════════════════════════════ */
+
+.slot-popover {
+  position: absolute;
+  z-index: 50;
+  min-width: 280px;
+  max-width: 380px;
+  background: #1e2830;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.slot-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.slot-popover-close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  border-radius: 3px;
+  transition: color 0.12s;
+}
+
+.slot-popover-close:hover {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.slot-popover-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 12px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.slot-popover-row:first-of-type {
+  border-top: none;
+}
+
+.slot-popover-row:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.slot-popover-row.is-lecture .spr-code {
+  color: #6ab4f0;
+}
+
+.slot-popover-row.is-lab .spr-code {
+  color: #5dd6cc;
+}
+
+.spr-code {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 800;
+  width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-top: 1px;
+}
+
+.spr-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.spr-session {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spr-meta {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.48);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ═══════════════════════════════════════════════════════
