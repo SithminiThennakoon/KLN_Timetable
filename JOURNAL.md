@@ -79,3 +79,13 @@
 - Responsive 980px override updated to align-items:start for taller multi-line cells; at-room still shown in mobile layout, at-lecturer/at-students still hidden on narrow screens
 - Production build passes with zero errors
 
+## 2026-03-10T23:45:00+05:30
+
+- Introduced dual-theme (dark/light) support across the entire frontend; default for new visitors is light mode
+- Rewrote index.css `:root` block into `[data-theme="dark"]` and `[data-theme="light"]` blocks covering ~130 CSS custom properties (bg-page, card surfaces, ink scale, accent, header, calendar/agenda entries, modal, buttons, banners, overlays, badges); all ~1730 lines of rules now consume `var(--)` tokens instead of hard-coded hex/rgba values
+- Rewrote App.css so all navbar colors reference `var(--)` tokens; added `.header-right` wrapper class for flex-row alignment of nav links + toggle button
+- Added `src/hooks/useTheme.js`: reads/writes `localStorage` key `kln-theme`, syncs `data-theme` attribute on `<html>`, exposes `{ theme, toggle }`
+- Edited `src/main.jsx`: synchronous IIFE sets `data-theme` before first paint to eliminate flash of wrong theme
+- Updated `MainNavbar.jsx`: converted from arrow-expression to function body, imported `useTheme`, wrapped nav in `.header-right` div, added `<button className="theme-toggle">` with ☀/☾ icon and aria-label
+- Light mode accent: deep navy `#1d4ed8`; light surfaces: page `#f0f4f8`, cards `#ffffff` with subtle shadows
+- Production build passes with zero errors
