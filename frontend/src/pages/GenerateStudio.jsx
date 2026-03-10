@@ -361,6 +361,10 @@ function GenerateStudio() {
               </div>
               <div className="performance-grid">
                 <div className="summary-item">
+                  <span>Solver engine</span>
+                  <strong>{generation.stats?.solver_engine || "legacy_guarded"}</strong>
+                </div>
+                <div className="summary-item">
                   <span>Performance preset</span>
                   <strong>{generation.performance_preset || "balanced"}</strong>
                 </div>
@@ -377,8 +381,16 @@ function GenerateStudio() {
                   <strong>{generation.stats?.assignment_variable_count || 0}</strong>
                 </div>
                 <div className="summary-item">
+                  <span>Slot variables</span>
+                  <strong>{generation.stats?.slot_variable_count || 0}</strong>
+                </div>
+                <div className="summary-item">
                   <span>Candidate options</span>
                   <strong>{generation.stats?.candidate_option_count || 0}</strong>
+                </div>
+                <div className="summary-item">
+                  <span>Room retries</span>
+                  <strong>{generation.stats?.room_assignment_retry_count || 0}</strong>
                 </div>
                 <div className="summary-item">
                   <span>Machine CPU count</span>
@@ -387,12 +399,19 @@ function GenerateStudio() {
               </div>
               <p className="helper-copy">
                 Precheck {formatMilliseconds(generation.timing?.precheck_ms)} | Model build{" "}
-                {formatMilliseconds(generation.timing?.model_build_ms)} | Fallback search{" "}
+                {formatMilliseconds(generation.timing?.model_build_ms)} | Room assignment{" "}
+                {formatMilliseconds(generation.timing?.room_assignment_ms)} | Fallback search{" "}
                 {formatMilliseconds(generation.timing?.fallback_search_ms)}
                 {generation.stats?.fallback_combo_truncated
                   ? " | Fallback combination search was capped early."
                   : ""}
               </p>
+              {generation.stats?.domain_reduction_ratio > 0 && (
+                <p className="helper-copy">
+                  Domain reduction {(generation.stats.domain_reduction_ratio * 100).toFixed(1)}% | Memory
+                  limit {generation.stats?.memory_limit_mb || 0} MB
+                </p>
+              )}
               {generation.counts.total_solutions_found > 100 && (
                 <div className="info-banner invalid">
                   More than 100 valid timetables exist. Add nice-to-have constraints if you need a smaller solution set. If you keep this run, the stored previews are representative options rather than the full list.
