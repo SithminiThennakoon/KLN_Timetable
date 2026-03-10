@@ -102,6 +102,50 @@ function groupOverlappingEntries(dayEntries, minuteHeight) {
   return placements;
 }
 
+// Assign each entry in a day to a lane (column) so that no two entries in the
+// same lane overlap in time. Returns a Map<entry, { top, height, lane, laneCount }>.
+// laneCount is the total number of lanes used for the day (set after all entries placed).
+function buildLanePlacements(dayEntries, minuteHeight) {
+  const visible = dayEntries
+    .filter((e) => e.start_minute >= calendarStartMinute && e.start_minute < calendarEndMinute)
+    .slice()
+    .sort((a, b) =>
+      a.start_minute !== b.start_minute
+        ? a.start_minute - b.start_minute
+        : b.duration_minutes - a.duration_minutes
+    );
+
+  // lanes[i] = end_minute of the last entry placed in lane i
+  const laneEnds = [];
+  const assignments = []; // { entry, lane }
+
+  visible.forEach((entry) => {
+    const start = entry.start_minute;
+    const end = entry.start_minute + entry.duration_minutes;
+    // Find the first lane whose last entry has already ended
+    let lane = laneEnds.findIndex((laneEnd) => laneEnd <= start);
+    if (lane === -1) {
+      lane = laneEnds.length; // open a new lane
+      laneEnds.push(end);
+    } else {
+      laneEnds[lane] = end;
+    }
+    assignments.push({ entry, lane });
+  });
+
+  const laneCount = Math.max(1, laneEnds.length);
+  const placements = new Map();
+  assignments.forEach(({ entry, lane }) => {
+    placements.set(entry, {
+      top: (entry.start_minute - calendarStartMinute) * minuteHeight,
+      height: Math.max(28, entry.duration_minutes * minuteHeight - 4),
+      lane,
+      laneCount,
+    });
+  });
+  return placements;
+}
+
 function buildDayLoad(entries = []) {
   return days.map((day) => {
     const dayEntries = entries.filter((e) => e.day === day);
@@ -468,6 +512,143 @@ function SlotPopover({ entries, anchorStyle, onSelectEntry, onClose }) {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// ─── Admin Day Calendar (multi-lane, horizontally scrollable) ─────────────────
+
+function AdminDayCalendar({ entries, selectedDay, minuteHeight, onEntryClick }) {
+  const hourCount = (calendarEndMinute - calendarStartMinute) / 60;
+  const totalHeight = (calendarEndMinute - calendarStartMinute) * minuteHeight;
+  const timeColWidth = 52;
+  const laneMinWidth = 240;
+
+  const [modalEntry, setModalEntry] = useState(null);
+  const wrapperRef = useRef(null);
+
+  const { placements, laneCount } = useMemo(() => {
+    const dayEntries = entries.filter((e) => e.day === selectedDay);
+    const p = buildLanePlacements(dayEntries, minuteHeight);
+    const lc = dayEntries.length === 0 ? 1 : (p.size === 0 ? 1 : Math.max(...[...p.values()].map((v) => v.lane)) + 1);
+    return { placements: p, laneCount: lc };
+  }, [entries, selectedDay, minuteHeight]);
+
+  // Group placements by lane
+  const laneEntries = useMemo(() => {
+    const lanes = Array.from({ length: laneCount }, () => []);
+    placements.forEach((placement, entry) => {
+      lanes[placement.lane].push({ entry, placement });
+    });
+    return lanes;
+  }, [placements, laneCount]);
+
+  const handleCardClick = useCallback((entry) => {
+    onEntryClick(entry);
+  }, [onEntryClick]);
+
+  const hourLines = Array.from({ length: hourCount }, (_, i) => i);
+  const halfLines = Array.from({ length: hourCount }, (_, i) => i);
+
+  return (
+    <div className="admin-cal-wrapper" ref={wrapperRef}>
+      <div
+        className="admin-cal-body"
+        style={{ gridTemplateColumns: `${timeColWidth}px repeat(${laneCount}, minmax(${laneMinWidth}px, 1fr))` }}
+      >
+        {/* Time gutter */}
+        <div className="week-cal-time-col" style={{ height: `${totalHeight}px` }}>
+          {Array.from({ length: hourCount + 1 }, (_, i) => {
+            const minute = calendarStartMinute + i * 60;
+            return (
+              <div
+                key={minute}
+                className="week-cal-time-label"
+                style={{ top: `${i * 60 * minuteHeight}px` }}
+              >
+                {formatMinute(minute)}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Lane columns */}
+        {laneEntries.map((lane, laneIdx) => (
+          <div
+            key={laneIdx}
+            className="week-cal-day-col admin-cal-lane-col"
+            style={{ height: `${totalHeight}px` }}
+          >
+            {/* Hour lines */}
+            {hourLines.map((i) => (
+              <div key={i} className="week-cal-hour-line" style={{ top: `${i * 60 * minuteHeight}px` }} />
+            ))}
+            {/* Half-hour lines */}
+            {halfLines.map((i) => (
+              <div key={`h-${i}`} className="week-cal-halfhour-line" style={{ top: `${(i * 60 + 30) * minuteHeight}px` }} />
+            ))}
+
+            {/* Entry cards */}
+            {lane.map(({ entry, placement }, idx) => {
+              const toneClass = getEntryToneClass(entry);
+              const sessionShort = compactSessionName(entry.module_code, entry.session_name);
+              const h = placement.height;
+              const isTiny = h < 28;
+              const isShort = h < 52;
+
+              return (
+                <button
+                  key={`${entry.session_id}-${entry.occurrence_index ?? 1}-${idx}`}
+                  type="button"
+                  className={`week-cal-entry ${toneClass}`}
+                  style={{
+                    top: `${placement.top + 2}px`,
+                    height: `${h}px`,
+                    left: "4px",
+                    right: "4px",
+                  }}
+                  onClick={() => handleCardClick(entry)}
+                  title={[
+                    `${entry.module_code} ${entry.session_name}`,
+                    `${formatMinute(entry.start_minute)} – ${formatMinute(entry.start_minute + entry.duration_minutes)}`,
+                    entry.room_name,
+                    entry.lecturer_names.join(", "),
+                  ].filter(Boolean).join("\n")}
+                >
+                  {isTiny ? (
+                    <span className="wce-code-only">{entry.module_code}</span>
+                  ) : isShort ? (
+                    <>
+                      <span className="wce-top-line">
+                        <span className="wce-code">{entry.module_code}</span>
+                      </span>
+                      <span className="wce-room">{entry.room_name}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="wce-top-line">
+                        <span className="wce-code">{entry.module_code}</span>
+                      </span>
+                      <span className="wce-type-room">
+                        <span className={`wce-type-dot ${toneClass}`} />
+                        {toneClass === "is-lab" ? "Lab" : "Lecture"} · {entry.room_name}
+                      </span>
+                      {sessionShort && (
+                        <span className="wce-session">{sessionShort}</span>
+                      )}
+                      {h >= 72 && (
+                        <span className="wce-time">
+                          {formatMinute(entry.start_minute)} – {formatMinute(entry.start_minute + entry.duration_minutes)}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1002,12 +1183,21 @@ function ViewStudio() {
                   dayLoad={dayLoad}
                 />
                 <section className="studio-card vs-calendar-card">
-                  <DayCalendar
-                    entries={view.solution.entries}
-                    selectedDay={selectedDay}
-                    minuteHeight={minuteHeight}
-                    onEntryClick={handleEntryClick}
-                  />
+                  {mode === "admin" ? (
+                    <AdminDayCalendar
+                      entries={view.solution.entries}
+                      selectedDay={selectedDay}
+                      minuteHeight={minuteHeight}
+                      onEntryClick={handleEntryClick}
+                    />
+                  ) : (
+                    <DayCalendar
+                      entries={view.solution.entries}
+                      selectedDay={selectedDay}
+                      minuteHeight={minuteHeight}
+                      onEntryClick={handleEntryClick}
+                    />
+                  )}
                 </section>
               </>
             ) : (

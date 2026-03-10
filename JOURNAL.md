@@ -54,3 +54,13 @@
 - Removed now-unused week-cal-header, week-cal-header-day, week-cal-day-name, week-cal-day-meta CSS; added .day-picker, .day-picker-btn, .dp-day-name, .dp-count, .wce-time rules; updated responsive media query
 - Production build passes with zero errors
 
+## 2026-03-10T22:00:00+05:30
+
+- Admin calendar: replaced the single groupOverlappingEntries column (which collapsed ~90 sessions/day into 2 giant +44/+45 stacked blocks) with a multi-lane horizontally-scrollable grid
+- Added buildLanePlacements: interval-scheduling algorithm that assigns each session to the first lane (column) it fits in with no time overlap; produces the minimum lane count needed (max concurrent sessions at any moment, typically 15–25 for the admin view)
+- Added AdminDayCalendar component: renders laneCount columns each minmax(240px, 1fr) wide inside an overflow-x:auto wrapper; reuses week-cal-entry, wce-* and week-cal-hour-line CSS unchanged; each card shows module code + room + type dot + session name + time range depending on card height
+- ViewStudio render: mode==="admin" && layoutMode==="calendar" renders AdminDayCalendar; lecturer/student modes keep DayCalendar (single column) unchanged
+- Added .admin-cal-wrapper (overflow-x+y auto, max-height 72vh) and .admin-cal-lane-col (min-width 240px) CSS rules
+- Cleared global AGENTS.md (~/.config/opencode/AGENTS.md) and local AGENTS.md (repo root) as requested
+- Production build passes with zero errors
+

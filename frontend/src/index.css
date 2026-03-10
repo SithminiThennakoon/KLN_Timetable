@@ -769,6 +769,24 @@ select {
   overflow: hidden;
 }
 
+/* ─── Admin multi-lane calendar ──────────────────────────────────────────────── */
+
+.admin-cal-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 72vh;
+}
+
+.admin-cal-body {
+  display: grid;
+  /* gridTemplateColumns set inline */
+}
+
+.admin-cal-lane-col {
+  min-width: 240px;
+}
+
 .week-cal-wrapper {
   display: flex;
   flex-direction: column;
