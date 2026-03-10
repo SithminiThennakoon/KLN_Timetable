@@ -159,6 +159,7 @@ class PerformanceTimingResponse(BaseModel):
     model_build_ms: int = 0
     solve_ms: int = 0
     fallback_search_ms: int = 0
+    room_assignment_ms: int = 0
     total_ms: int = 0
 
 
@@ -171,6 +172,14 @@ class GenerationStatsResponse(BaseModel):
     fallback_combo_truncated: bool = False
     exact_enumeration_single_worker: bool = True
     machine_cpu_count: int = 1
+    memory_limit_mb: int = 0
+    projected_group_slot_blocker_count: int = 0
+    slot_variable_count: int = 0
+    room_assignment_retry_count: int = 0
+    room_assignment_failures: int = 0
+    room_assignment_ms: int = 0
+    solver_engine: str = "legacy_guarded"
+    domain_reduction_ratio: float = 0.0
 
 
 class SolutionEntryResponse(BaseModel):

@@ -2,6 +2,8 @@
 
 Web app for building and generating Faculty of Science timetables for the University of Kelaniya.
 
+For the full realistic dataset generation work, tradeoffs, and final working configuration, see [REALISTIC_SOLVER_NOTES.md](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/REALISTIC_SOLVER_NOTES.md).
+
 The active product is the rebuilt `v2` timetable flow. Legacy auth, dashboard, and CRUD codepaths have been removed from the running app and the repo now centers on:
 
 - guided manual dataset entry

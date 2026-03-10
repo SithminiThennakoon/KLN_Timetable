@@ -541,6 +541,7 @@ class TimetableV2Tests(unittest.TestCase):
         self.assertIn("stats", serialized)
         self.assertGreaterEqual(serialized["stats"]["assignment_variable_count"], 1)
         self.assertGreaterEqual(serialized["stats"]["candidate_option_count"], 1)
+        self.assertGreaterEqual(serialized["stats"]["memory_limit_mb"], 1)
 
     def test_fallback_only_checks_subsets_of_selected_constraints(self):
         payload = DatasetUpsertRequest(**build_dataset())
@@ -629,6 +630,25 @@ class TimetableV2Tests(unittest.TestCase):
                 "avoid_monday_overload",
             },
         )
+
+    def test_generation_returns_resource_limited_when_model_budget_is_exceeded(self):
+        payload = DatasetUpsertRequest(**build_dataset(room_capacity=120, room_count=2))
+        replace_dataset(self.db, payload)
+
+        with patch.object(timetable_v2_service, "MAX_ASSIGNMENT_VARIABLE_BUDGET", 1):
+            run = generate_timetables(
+                self.db,
+                selected_soft_constraints=[],
+                max_solutions=5,
+                preview_limit=1,
+                time_limit_seconds=10,
+            )
+
+        serialized = serialize_generation_run(get_latest_run(self.db))
+        self.assertEqual(run.status, "resource_limited")
+        self.assertEqual(serialized["status"], "resource_limited")
+        self.assertIn("projected model size is too large", run.message)
+        self.assertGreater(serialized["stats"]["assignment_variable_count"], 1)
 
     def test_practical_afternoon_soft_constraint_pushes_lab_after_lunch(self):
         payload = DatasetUpsertRequest(**build_dataset())

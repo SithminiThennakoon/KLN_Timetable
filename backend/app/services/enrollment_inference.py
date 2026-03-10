@@ -16,6 +16,14 @@ MIN_COHORT_SIZE = 0
 MAX_COURSES_PER_STREAM_YEAR_SEMESTER = 100
 TARGET_WEEKLY_LECTURER_HOURS = 35
 PATH_CORE_PARTICIPATION_THRESHOLD = 0.8
+OPTIONAL_MODULE_CODES = {
+    # Handbook-audited optional BECS modules. The realistic demo should treat
+    # them as non-mandatory demand unless explicitly modeled separately.
+    "BECS 11722",
+    "BECS 12742",
+    "BECS 21722",
+    "BECS 21732",
+}
 
 STREAM_NAME_MAP = {
     "AC": "Applied Chemistry",
@@ -28,7 +36,6 @@ STREAM_NAME_MAP = {
 
 LAB_TYPE_BY_PREFIX = {
     "APCH": "chemistry",
-    "BECS": "computer",
     "BIOL": "biology",
     "CHEM": "chemistry",
     "CMSK": "computer",
@@ -37,6 +44,16 @@ LAB_TYPE_BY_PREFIX = {
     "PHYS": "physics",
     "SENG": "computer",
     "STAT": "statistics",
+}
+
+EXPLICIT_LAB_MODULE_TYPES = {
+    # BECS explicit laboratory units from UoK handbooks / detailed curriculum.
+    "BECS 11431": "electronics",
+    "BECS 12451": "electronics",
+    "BECS 21431": "electronics",
+    "BECS 22451": "electronics",
+    "BECS 31421": "electronics",
+    "BECS 32451": "electronics",
 }
 
 LAB_SPLIT_LIMIT_BY_TYPE = {
@@ -91,6 +108,10 @@ def _stable_mod(value: str, divisor: int) -> int:
     return sum(ord(char) for char in value) % divisor
 
 
+def _is_default_mandatory_demo_course(course_code: str) -> bool:
+    return course_code not in OPTIONAL_MODULE_CODES
+
+
 def _synthetic_lecture_duration(course_code: str, audience_size: int) -> int:
     if audience_size >= 250 or _stable_mod(course_code, 4) == 0:
         return 120
@@ -98,6 +119,9 @@ def _synthetic_lecture_duration(course_code: str, audience_size: int) -> int:
 
 
 def _synthetic_lab_type(prefix: str, course_code: str, year: int, audience_size: int) -> str | None:
+    explicit_lab_type = EXPLICIT_LAB_MODULE_TYPES.get(course_code)
+    if explicit_lab_type:
+        return explicit_lab_type
     lab_type = LAB_TYPE_BY_PREFIX.get(prefix)
     if not lab_type:
         return None
@@ -382,6 +406,12 @@ def build_realistic_demo_dataset_from_enrollment_csv(
         for course_code, _ in ranked_courses[:MAX_COURSES_PER_STREAM_YEAR_SEMESTER]:
             selected_courses.add(course_code)
 
+    selected_courses = {
+        course_code
+        for course_code in selected_courses
+        if _is_default_mandatory_demo_course(course_code)
+    }
+
     modules = []
     lecturer_prefixes = sorted({_course_parts(course_code)[0] for course_code in selected_courses})
     course_session_minutes: dict[str, int] = {}
@@ -575,8 +605,62 @@ def build_realistic_demo_dataset_from_enrollment_csv(
             "year_restriction": None,
         },
         {
+            "client_key": "room_a7203",
+            "name": "A7 203",
+            "capacity": 120,
+            "room_type": "lecture",
+            "lab_type": None,
+            "location": "A7 Complex",
+            "year_restriction": None,
+        },
+        {
+            "client_key": "room_a7205",
+            "name": "A7 205",
+            "capacity": 120,
+            "room_type": "lecture",
+            "lab_type": None,
+            "location": "A7 Complex",
+            "year_restriction": None,
+        },
+        {
+            "client_key": "room_a11205",
+            "name": "A11 205",
+            "capacity": 100,
+            "room_type": "lecture",
+            "lab_type": None,
+            "location": "A11 Complex",
+            "year_restriction": None,
+        },
+        {
+            "client_key": "room_b1214",
+            "name": "B1 214",
+            "capacity": 120,
+            "room_type": "lecture",
+            "lab_type": None,
+            "location": "B1 Complex",
+            "year_restriction": None,
+        },
+        {
             "client_key": "room_chemistry_lab",
             "name": "Chemistry Lab",
+            "capacity": 30,
+            "room_type": "lab",
+            "lab_type": "chemistry",
+            "location": "Science Labs",
+            "year_restriction": None,
+        },
+        {
+            "client_key": "room_chemistry_lab_2",
+            "name": "Chemistry Lab 2",
+            "capacity": 30,
+            "room_type": "lab",
+            "lab_type": "chemistry",
+            "location": "Science Labs",
+            "year_restriction": None,
+        },
+        {
+            "client_key": "room_chemistry_lab_3",
+            "name": "Chemistry Lab 3",
             "capacity": 30,
             "room_type": "lab",
             "lab_type": "chemistry",
@@ -593,6 +677,24 @@ def build_realistic_demo_dataset_from_enrollment_csv(
             "year_restriction": None,
         },
         {
+            "client_key": "room_physics_lab_2",
+            "name": "Physics Lab 2",
+            "capacity": 40,
+            "room_type": "lab",
+            "lab_type": "physics",
+            "location": "Science Labs",
+            "year_restriction": None,
+        },
+        {
+            "client_key": "room_physics_lab_3",
+            "name": "Physics Lab 3",
+            "capacity": 40,
+            "room_type": "lab",
+            "lab_type": "physics",
+            "location": "Science Labs",
+            "year_restriction": None,
+        },
+        {
             "client_key": "room_electronics_lab",
             "name": "Electronics Lab",
             "capacity": 32,
@@ -602,8 +704,62 @@ def build_realistic_demo_dataset_from_enrollment_csv(
             "year_restriction": None,
         },
         {
+            "client_key": "room_electronics_lab_2",
+            "name": "Electronics Lab 2",
+            "capacity": 32,
+            "room_type": "lab",
+            "lab_type": "electronics",
+            "location": "Engineering Wing",
+            "year_restriction": None,
+        },
+        {
+            "client_key": "room_electronics_lab_3",
+            "name": "Electronics Lab 3",
+            "capacity": 32,
+            "room_type": "lab",
+            "lab_type": "electronics",
+            "location": "Engineering Wing",
+            "year_restriction": None,
+        },
+        {
+            "client_key": "room_electronics_lab_4",
+            "name": "Electronics Lab 4",
+            "capacity": 32,
+            "room_type": "lab",
+            "lab_type": "electronics",
+            "location": "Engineering Wing",
+            "year_restriction": None,
+        },
+        {
+            "client_key": "room_electronics_lab_5",
+            "name": "Electronics Lab 5",
+            "capacity": 32,
+            "room_type": "lab",
+            "lab_type": "electronics",
+            "location": "Engineering Wing",
+            "year_restriction": None,
+        },
+        {
             "client_key": "room_computer_lab_1",
             "name": "Computer Lab 1",
+            "capacity": 40,
+            "room_type": "lab",
+            "lab_type": "computer",
+            "location": "Computing Block",
+            "year_restriction": None,
+        },
+        {
+            "client_key": "room_computer_lab_3",
+            "name": "Computer Lab 3",
+            "capacity": 40,
+            "room_type": "lab",
+            "lab_type": "computer",
+            "location": "Computing Block",
+            "year_restriction": None,
+        },
+        {
+            "client_key": "room_computer_lab_4",
+            "name": "Computer Lab 4",
             "capacity": 40,
             "room_type": "lab",
             "lab_type": "computer",
@@ -631,6 +787,15 @@ def build_realistic_demo_dataset_from_enrollment_csv(
         {
             "client_key": "room_statistics_lab",
             "name": "Statistics Lab",
+            "capacity": 30,
+            "room_type": "lab",
+            "lab_type": "statistics",
+            "location": "A11 Complex",
+            "year_restriction": None,
+        },
+        {
+            "client_key": "room_statistics_lab_2",
+            "name": "Statistics Lab 2",
             "capacity": 30,
             "room_type": "lab",
             "lab_type": "statistics",
