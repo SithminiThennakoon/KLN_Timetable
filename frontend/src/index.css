@@ -581,15 +581,7 @@ select {
   filter: brightness(1.06);
 }
 
-.view-layout-toggle {
-  display: inline-flex;
-  gap: 8px;
-}
-
-.view-layout-toggle .ghost-btn,
-.calendar-day-tabs .ghost-btn {
-  padding: 11px 16px;
-}
+/* ── Active toggle state (shared) ─────────────────────── */
 
 .active-layout {
   background: #f6b35a;
@@ -597,312 +589,727 @@ select {
   color: #15191f;
 }
 
-.calendar-day-tabs {
+/* ═══════════════════════════════════════════════════════
+   VS TOOLBAR (two rows)
+   ═══════════════════════════════════════════════════════ */
+
+.vs-toolbar-row {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 16px;
+}
+
+.vs-toolbar-row-1 {
+  justify-content: space-between;
   flex-wrap: wrap;
-  margin-bottom: 14px;
 }
 
-.calendar-stage {
-  position: relative;
-  background: #22303b;
-  overflow: hidden;
-  border-radius: 12px;
+.vs-toolbar-row-2 {
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  flex-wrap: wrap;
+  gap: 12px 20px;
 }
 
-.calendar-days {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+.vs-title-block {
+  min-width: 0;
+}
+
+.vs-filter-controls {
+  display: flex;
+  align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
-.calendar-days.single-day {
-  grid-template-columns: minmax(0, 1fr);
+.vs-mode-group {
+  display: inline-flex;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.calendar-time-label {
-  position: absolute;
-  left: 0;
-  width: 58px;
-  transform: translateY(-50%);
-  padding-right: 10px;
-  color: #cbd6e1;
-  font-size: 0.82rem;
+.vs-mode-group .ghost-btn {
+  padding: 9px 16px;
+  font-size: 0.95rem;
+  border-radius: 7px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.vs-mode-group .ghost-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.vs-mode-group .active-layout {
+  background: #f6b35a;
+  border-color: transparent;
+  color: #15191f;
+}
+
+.vs-filter-select {
+  padding: 9px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  font-size: 0.95rem;
+  min-width: 160px;
+}
+
+.vs-filter-select:focus {
+  outline: none;
+  border-color: rgba(255, 138, 31, 0.7);
+  box-shadow: 0 0 0 3px rgba(255, 138, 31, 0.12);
+}
+
+.vs-apply-btn {
+  padding: 9px 20px;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.vs-control-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vs-control-label {
+  font-size: 0.78rem;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
+}
+
+.vs-toggle-group {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.vs-toggle-group .ghost-btn {
+  padding: 7px 13px;
+  font-size: 0.9rem;
+  border-radius: 7px;
+}
+
+.vs-export-group {
+  margin-left: auto;
+}
+
+.vs-export-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.vs-export-btn {
+  padding: 7px 13px;
+  font-size: 0.9rem;
+  border-radius: 7px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   VIEW INFO BAR
+   ═══════════════════════════════════════════════════════ */
+
+.vs-view-info-bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+
+.vs-view-title {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #ffffff;
+  margin-right: 12px;
+}
+
+.vs-view-subtitle {
+  font-size: 0.92rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.vs-entry-count {
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════════════
+   EMPTY STATE
+   ═══════════════════════════════════════════════════════ */
+
+.vs-empty-state {
+  text-align: center;
+  padding: 48px 32px;
+}
+
+.vs-empty-state h2 {
+  margin-bottom: 10px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   WEEK CALENDAR
+   ═══════════════════════════════════════════════════════ */
+
+.vs-calendar-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.week-cal-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  overflow: auto;
+  min-height: 0;
+}
+
+/* Sticky header */
+.week-cal-header {
+  display: grid;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(28, 34, 40, 0.98);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+}
+
+.week-cal-header-time {
+  padding: 14px 8px;
+}
+
+.week-cal-header-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 8px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 3px;
+}
+
+.week-cal-day-name {
+  font-size: 0.88rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.week-cal-day-meta {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 600;
+}
+
+.week-cal-day-meta-detail {
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+/* Scrollable body */
+.week-cal-body {
+  display: grid;
+  overflow-y: auto;
+  max-height: 72vh;
+}
+
+/* Time gutter */
+.week-cal-time-col {
+  position: relative;
+  width: 52px;
+  flex-shrink: 0;
+  background: rgba(20, 26, 32, 0.7);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.week-cal-time-label {
+  position: absolute;
+  right: 8px;
+  transform: translateY(-50%);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
   line-height: 1;
-  text-align: right;
   z-index: 1;
+  pointer-events: none;
 }
 
-.calendar-time-hour {
-  color: #f4f7fb;
+/* Day columns */
+.week-cal-day-col {
+  position: relative;
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(26, 32, 38, 0.6);
 }
 
-.calendar-time-mins {
-  color: rgba(219, 227, 234, 0.56);
+.week-cal-day-col:hover {
+  background: rgba(26, 32, 38, 0.85);
 }
 
-.calendar-hour-line {
+.week-cal-hour-line {
   position: absolute;
   left: 0;
   right: 0;
   height: 1px;
-  background: rgba(255, 255, 255, 0.11);
+  background: rgba(255, 255, 255, 0.1);
+  pointer-events: none;
 }
 
-.stage-line {
+.week-cal-halfhour-line {
+  position: absolute;
   left: 0;
   right: 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.04);
+  pointer-events: none;
 }
 
-.calendar-stage-divider {
+/* Entry blocks */
+.week-cal-entry {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 62px;
-  width: 1px;
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.calendar-event-layer {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 72px;
-}
-
-.entry-card.detailed {
-  display: grid;
-  gap: 4px;
-  padding: 12px;
-  border-radius: 8px;
-  background: #2d5f8b;
+  overflow: hidden;
+  border-radius: 5px;
   border: none;
-  box-shadow: none;
+  padding: 3px 6px;
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  transition: filter 0.1s ease, z-index 0s;
+  z-index: 2;
+  border-left: 3px solid rgba(255, 255, 255, 0.35);
+}
+
+.week-cal-entry:hover {
+  filter: brightness(1.18);
+  z-index: 8;
+}
+
+.week-cal-entry:focus-visible {
+  outline: 2px solid #f6b35a;
+  outline-offset: 1px;
+}
+
+.week-cal-entry.is-lecture {
+  background: #2d5f8b;
+}
+
+.week-cal-entry.is-lab {
+  background: #256870;
+}
+
+.wce-code-only,
+.wce-code,
+.wce-session,
+.wce-room,
+.wce-lecturer {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.wce-code-only {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.wce-code {
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.98);
+}
+
+.wce-session {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.82);
+  font-weight: 500;
+}
+
+.wce-room {
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.65);
+  font-weight: 500;
+  margin-top: 1px;
+}
+
+.wce-lecturer {
+  font-size: 0.64rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 1px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   AGENDA (compact table layout)
+   ═══════════════════════════════════════════════════════ */
+
+.vs-agenda-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.agenda-view {
+  display: flex;
+  flex-direction: column;
+}
+
+.agenda-day-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.agenda-day-section + .agenda-day-section {
+  border-top: 2px solid rgba(255, 255, 255, 0.07);
+}
+
+.agenda-day-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 14px 18px 10px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: rgba(28, 34, 40, 0.97);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.agenda-day-name {
+  font-size: 0.98rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   color: #ffffff;
 }
 
-.entry-card.detailed strong {
-  font-size: 1rem;
+.agenda-day-count {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.45);
 }
 
-.entry-card.detailed span,
-.entry-card.detailed p {
-  color: rgba(255, 255, 255, 0.92);
+.agenda-table {
+  display: flex;
+  flex-direction: column;
 }
 
-.entry-card.detailed.compact {
-  gap: 3px;
-  padding: 10px 11px;
-  border-radius: 7px;
+.agenda-table-head {
+  display: grid;
+  grid-template-columns: 90px 100px minmax(0, 2fr) 120px minmax(0, 1.4fr) 72px;
+  gap: 0 12px;
+  padding: 7px 18px;
+  background: rgba(255, 255, 255, 0.035);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
 
-.entry-card.detailed.compact strong {
-  font-size: 0.98rem;
-  line-height: 1.15;
+.agenda-table-head span {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(255, 255, 255, 0.38);
 }
 
-.calendar-entry {
-  position: absolute;
-  overflow: hidden;
-  z-index: 2;
-  border: 2px solid rgba(255, 255, 255, 0.22);
-  box-shadow:
-    0 14px 26px rgba(0, 0, 0, 0.24),
-    0 0 0 1px rgba(17, 22, 28, 0.42),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+.agenda-table-row {
+  display: grid;
+  grid-template-columns: 90px 100px minmax(0, 2fr) 120px minmax(0, 1.4fr) 72px;
+  gap: 0 12px;
+  padding: 8px 18px;
+  align-items: center;
+  text-align: left;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+  cursor: pointer;
+  transition: background 0.1s ease;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: inherit;
+  width: 100%;
 }
 
-.calendar-entry.simplified {
-  gap: 8px;
-  padding: 12px 12px 11px;
+.agenda-table-row:hover {
+  background: rgba(255, 255, 255, 0.05);
 }
 
-.calendar-entry.simplified strong {
-  font-size: 1.04rem;
-  line-height: 1.15;
+.agenda-table-row.is-lecture {
+  border-left-color: #4a8bbf;
 }
 
-.calendar-entry.simplified .entry-meta-line,
-.calendar-entry.simplified .entry-duration-line {
-  font-size: 0.98rem;
+.agenda-table-row.is-lab {
+  border-left-color: #3da8a8;
 }
 
-.entry-session-line,
-.entry-meta-line,
-.entry-audience-line,
-.entry-duration-line,
-.entry-student-line {
-  display: block;
-  font-size: 0.84rem;
-  line-height: 1.3;
+.at-time {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
-.entry-session-line {
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.96);
+.at-time strong {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.2;
 }
 
-.entry-meta-line,
-.entry-audience-line {
-  color: rgba(255, 255, 255, 0.8);
+.at-time small {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.45);
 }
 
-.entry-duration-line {
-  margin-top: auto;
+.at-code {
+  font-size: 0.82rem;
+  font-weight: 700;
   color: rgba(255, 255, 255, 0.9);
-  font-weight: 600;
-}
-
-.entry-audience-line {
-  display: -webkit-box;
   overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.entry-student-line {
-  margin-top: 2px;
+.at-session {
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.75);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.at-room {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.65);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.at-lecturer {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.55);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.at-students {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.55);
+  text-align: right;
+}
+
+/* ═══════════════════════════════════════════════════════
+   SESSION DETAIL MODAL
+   ═══════════════════════════════════════════════════════ */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.modal-card {
+  background: linear-gradient(160deg, #1e2730, #191f26);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6);
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-card.is-lecture {
+  border-top: 3px solid #4a8bbf;
+}
+
+.modal-card.is-lab {
+  border-top: 3px solid #3da8a8;
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.modal-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.modal-tone-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  width: fit-content;
+}
+
+.modal-tone-badge.is-lecture {
+  background: rgba(74, 139, 191, 0.2);
+  color: #7dbce8;
+  border: 1px solid rgba(74, 139, 191, 0.35);
+}
+
+.modal-tone-badge.is-lab {
+  background: rgba(61, 168, 168, 0.2);
+  color: #6dd9d9;
+  border: 1px solid rgba(61, 168, 168, 0.35);
+}
+
+.modal-module-code {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.1;
+  margin-bottom: 0;
+}
+
+.modal-session-name {
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.65);
+  line-height: 1.35;
+}
+
+.modal-close-btn {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 8px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.modal-close-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px 24px 24px;
+}
+
+.modal-time-row {
+  display: flex;
+  gap: 10px;
+}
+
+.modal-time-chip {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+}
+
+.modal-chip-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.modal-time-chip strong {
+  font-size: 0.92rem;
+  color: #ffffff;
+  line-height: 1.2;
+}
+
+.modal-detail-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.modal-detail-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  align-items: start;
+}
+
+.modal-detail-row:last-child {
+  border-bottom: none;
+}
+
+.modal-detail-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.42);
+  padding-top: 1px;
+}
+
+.modal-detail-value {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.88);
+  line-height: 1.45;
+}
+
+.modal-detail-value strong {
   color: #ffffff;
   font-weight: 700;
 }
 
-.agenda-card {
-  padding-top: 22px;
+.modal-location {
+  color: rgba(255, 255, 255, 0.5);
+  font-style: normal;
 }
 
-.agenda-days {
-  display: grid;
-  gap: 18px;
-}
-
-.agenda-day-section {
-  display: grid;
-  gap: 10px;
-}
-
-.agenda-day-section h3 {
-  font-size: 1rem;
-  color: #f8fbff;
-}
-
-.agenda-day-list {
-  display: grid;
-  gap: 10px;
-}
-
-.agenda-entry {
-  display: grid;
-  grid-template-columns: 92px minmax(0, 1fr);
-  gap: 14px;
-  align-items: start;
-  padding: 14px 16px;
-  border-radius: 12px;
-  background: rgba(40, 56, 69, 0.92);
-  border: 2px solid rgba(255, 255, 255, 0.14);
-  cursor: pointer;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
-}
-
-.calendar-entry.is-lecture,
-.agenda-entry.is-lecture {
-  background: #3a6793;
-}
-
-.calendar-entry.is-lab,
-.agenda-entry.is-lab {
-  background: #2d6f74;
-}
-
-.selected-entry {
-  box-shadow: 0 0 0 3px #f6b35a, 0 16px 30px rgba(0, 0, 0, 0.28);
-  background: #447aa8;
-}
-
-.agenda-entry-time {
-  display: grid;
-  gap: 4px;
-  color: #e8f0f7;
-  font-size: 0.84rem;
-}
-
-.agenda-entry-time strong {
-  font-size: 1.04rem;
-}
-
-.agenda-entry-body {
-  display: grid;
-  gap: 5px;
-}
-
-.agenda-entry-body strong {
+.modal-students-count {
+  font-size: 1.15rem;
+  font-weight: 700;
   color: #ffffff;
-  font-size: 1rem;
-}
-
-.agenda-entry-body span {
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 0.9rem;
-  line-height: 1.35;
-}
-
-.view-layout-grid {
-  align-items: start;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 16px;
-}
-
-.timetable-grid-card {
-  min-width: 0;
-  width: 100%;
-}
-
-.detail-drawer {
-  position: sticky;
-  top: 24px;
-  width: 320px;
-  max-width: 320px;
-  min-width: 320px;
-  justify-self: stretch;
-}
-
-.detail-drawer-body {
-  display: grid;
-  gap: 14px;
-}
-
-.detail-title {
-  color: #ffffff;
-  font-size: 1.08rem;
-  line-height: 1.3;
-}
-
-.detail-summary {
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.detail-pairs {
-  display: grid;
-  grid-template-columns: minmax(0, 120px) minmax(0, 1fr);
-  gap: 10px 14px;
-  align-items: start;
-}
-
-.detail-pairs span {
-  color: rgba(255, 255, 255, 0.68);
-  font-size: 0.82rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.detail-pairs strong {
-  color: #ffffff;
-  font-size: 0.92rem;
-  line-height: 1.4;
 }
 
 .empty-state {
@@ -960,20 +1367,64 @@ select {
     grid-template-columns: 1fr;
   }
 
-  .calendar-days {
-    grid-template-columns: minmax(220px, 1fr);
+  /* VS toolbar responsive */
+  .vs-toolbar-row-1 {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .vs-toolbar-row-2 {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .vs-export-group {
+    margin-left: 0;
+  }
+
+  /* Week calendar responsive: allow horizontal scroll */
+  .week-cal-body,
+  .week-cal-header {
+    min-width: 640px;
+  }
+
+  .week-cal-wrapper {
     overflow-x: auto;
   }
 
-  .agenda-entry {
-    grid-template-columns: 1fr;
+  /* Agenda table responsive: wrap to simple list */
+  .agenda-table-head {
+    display: none;
   }
 
-  .detail-drawer {
-    position: static;
+  .agenda-table-row {
+    grid-template-columns: 90px minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    gap: 2px 12px;
   }
 
-  .detail-pairs {
-    grid-template-columns: 1fr;
+  .at-time { grid-row: 1; grid-column: 1; }
+  .at-code { grid-row: 1; grid-column: 2; }
+  .at-session { grid-row: 2; grid-column: 2; }
+  .at-room { grid-row: 3; grid-column: 2; }
+  .at-lecturer { display: none; }
+  .at-students { display: none; }
+
+  /* Modal responsive */
+  .modal-card {
+    max-width: none;
+    border-radius: 14px;
+  }
+
+  .modal-time-row {
+    flex-wrap: wrap;
+  }
+
+  .modal-time-chip {
+    flex: 1 1 30%;
+  }
+
+  .modal-detail-row {
+    grid-template-columns: 90px minmax(0, 1fr);
   }
 }

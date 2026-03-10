@@ -26,3 +26,12 @@
 - Removed inactive legacy frontend pages, styles, services, and alternate entry files, keeping only the v2 studio flow and its minimal API client
 - Removed inactive legacy backend routes, schemas, models, old solver code, auth/security remnants, and the old timeslot startup seeding path
 - Updated README files so the repository documentation now matches the active v2 timetable product and current verification commands
+
+## 2026-03-10T19:45:00+05:30
+
+- Overhauled the Timetable Views page (ViewStudio.jsx) with a completely new UI: replaced the single-day calendar lane layout with a full 5-day week grid showing all days simultaneously (Google Calendar style), with time axis on left, one column per day, and sessions as absolutely-positioned blocks per column
+- Replaced the sparse agenda card list with a compact table-style agenda view showing time, module code, session name, room, lecturer, and student count as dense rows grouped by day with sticky day headers and colour-accent left borders
+- Replaced the collapsible side drawer with a centred modal overlay that appears when any session is clicked in either view, showing all session fields (module, time/duration, room+location, lecturers, groups, degree paths, student count) in a clean two-column detail grid; modal closes on Escape or overlay click
+- Reorganised the toolbar into two rows: Row 1 has the page title, Admin/Lecturer/Student mode toggles, and contextual filter dropdowns + Apply button; Row 2 has View (Calendar/Agenda), Density (Compact/Comfortable/Expanded), and Export (PDF/CSV/XLSX/PNG) controls
+- Rewrote all related CSS in index.css: removed old calendar-stage, agenda-entry, detail-drawer, day-load-strip, view-layout-grid, and density-toolbar blocks; added week-cal-*, agenda-table-*, modal-*, and vs-toolbar-* rulesets; confirmed production build passes with zero errors
+
