@@ -84,6 +84,7 @@
   --btn-ghost-text:   #ffffff;
   --btn-ghost-border: #52606a;
   --btn-danger-bg:    #8a2f2f;
+  --btn-danger-text:  #ffffff;
   --btn-danger-border: #a53d3d;
 
   /* Shadows */
@@ -157,6 +158,11 @@
   --banner-error-border: #ffb2a0;
   --banner-error-bar:   #c24d34;
 
+  /* Field validation */
+  --field-invalid-border: rgba(255, 107, 74, 0.75);
+  --field-invalid-shadow: rgba(255, 107, 74, 0.12);
+  --field-invalid-text:   #ff6b4a;
+
   /* Section title text-shadow */
   --section-title-shadow: rgba(255, 255, 255, 0.06);
 
@@ -204,7 +210,7 @@
   --ink-600: #475569;
   --ink-500: #64748b;
   --ink-400: #94a3b8;
-  --ink-300: #94a3b8;
+  --ink-300: #b8c5d3;
   --ink-200: #cbd5e1;
   --ink-muted: #64748b;
 
@@ -252,6 +258,7 @@
   --btn-ghost-text:   #0f172a;
   --btn-ghost-border: #94a3b8;
   --btn-danger-bg:    #fee2e2;
+  --btn-danger-text:  #7f1d1d;
   --btn-danger-border: #fca5a5;
 
   /* Shadows */
@@ -314,16 +321,21 @@
   /* VS mode group background */
   --vs-mode-bg: rgba(0, 0, 0, 0.05);
 
-  /* Info/error banners (same colors work in both themes) */
-  --banner-info-bg:     #064e3b;
-  --banner-info-text:   #6ee7b7;
-  --banner-info-border: #0f766e;
-  --banner-info-bar:    #2f8f54;
-  --banner-info-check:  #d1fae5;
-  --banner-error-bg:    #ffd2c8;
-  --banner-error-text:  #4a1f17;
-  --banner-error-border: #ffb2a0;
-  --banner-error-bar:   #c24d34;
+  /* Info/error banners (light-appropriate) */
+  --banner-info-bg:     #ecfdf5;
+  --banner-info-text:   #065f46;
+  --banner-info-border: #6ee7b7;
+  --banner-info-bar:    #10b981;
+  --banner-info-check:  #065f46;
+  --banner-error-bg:    #fef2f2;
+  --banner-error-text:  #7f1d1d;
+  --banner-error-border: #fca5a5;
+  --banner-error-bar:   #ef4444;
+
+  /* Field validation */
+  --field-invalid-border: rgba(220, 38, 38, 0.70);
+  --field-invalid-shadow: rgba(220, 38, 38, 0.10);
+  --field-invalid-text:   #dc2626;
 
   /* Section title text-shadow */
   --section-title-shadow: rgba(0, 0, 0, 0.06);
@@ -583,8 +595,8 @@ a {
 }
 
 .field-invalid {
-  border-color: rgba(255, 107, 74, 0.75) !important;
-  box-shadow: inset 0 0 0 1px rgba(255, 107, 74, 0.12);
+  border-color: var(--field-invalid-border) !important;
+  box-shadow: inset 0 0 0 1px var(--field-invalid-shadow);
 }
 
 .field-hint {
@@ -593,7 +605,7 @@ a {
 }
 
 .field-hint.invalid {
-  color: #ff6b4a;
+  color: var(--field-invalid-text);
 }
 
 .full-span {
@@ -878,13 +890,9 @@ select {
   border: 1px solid var(--btn-danger-border);
   padding: 10px 16px;
   background: var(--btn-danger-bg);
-  color: var(--btn-danger-text, #7f1d1d);
+  color: var(--btn-danger-text);
   font-weight: 700;
   transition: filter 0.12s ease;
-}
-
-[data-theme="dark"] .danger-btn {
-  color: #ffffff;
 }
 
 .danger-icon-btn {

@@ -89,3 +89,14 @@
 - Updated `MainNavbar.jsx`: converted from arrow-expression to function body, imported `useTheme`, wrapped nav in `.header-right` div, added `<button className="theme-toggle">` with ☀/☾ icon and aria-label
 - Light mode accent: deep navy `#1d4ed8`; light surfaces: page `#f0f4f8`, cards `#ffffff` with subtle shadows
 - Production build passes with zero errors
+
+## 2026-03-10T23:55:00+05:30
+
+- Audited every CSS variable and hard-coded color value across both [data-theme] blocks and all rule declarations
+- Fixed light-mode info banner: was copying dark theme's `#064e3b` dark-green background/`#6ee7b7` text (unreadable on white); replaced with `#ecfdf5` bg / `#065f46` text / `#10b981` bar — standard Tailwind emerald light style
+- Fixed light-mode error banner: tightened to `#fef2f2` / `#7f1d1d` / `#ef4444` for correct light-surface contrast
+- Added `--btn-danger-text` to both theme blocks (dark: `#ffffff`, light: `#7f1d1d`); removed the `[data-theme="dark"] .danger-btn { color:#ffffff }` override rule — now fully token-driven
+- Added `--field-invalid-border`, `--field-invalid-shadow`, `--field-invalid-text` to both theme blocks; dark uses warm orange-red, light uses clean red (`#dc2626`); replaced three hard-coded color literals in `.field-invalid` and `.field-hint.invalid` rules with `var(--)`
+- Fixed `--ink-300` duplicate in light block: was same value as `--ink-400` (`#94a3b8`); corrected to `#b8c5d3` so the ink hierarchy is visually distinct
+- Production build passes with zero errors
+
