@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { timetableStudioService } from "../services/timetableStudioService";
+import SearchableMultiSelect from "../components/SearchableMultiSelect";
 
 const steps = [
   { key: "structure", label: "Structure" },
@@ -51,6 +52,7 @@ function makeBaseCohortName(degree, year, path) {
 }
 
 function syncBaseCohorts(draft) {
+  const currentYear = new Date().getFullYear();
   const expected = [];
 
   draft.degrees.forEach((degree) => {
@@ -105,6 +107,7 @@ function syncBaseCohorts(draft) {
       pathId: item.pathId || "",
       name: existing?.name || makeBaseCohortName(degree, item.year, path),
       size: existing?.size ?? "",
+      cohort_year: existing?.cohort_year ?? currentYear,
     };
   });
 
@@ -216,6 +219,7 @@ function normalizeDataset(dataset) {
         pathId: pathId || "",
         name: group.name || "",
         size: group.size || "",
+        cohort_year: group.cohort_year || new Date().getFullYear(),
       });
     });
   });
@@ -335,6 +339,7 @@ function buildPayload(draft) {
       year: Number(cohort.year),
       name: cohort.name.trim(),
       size: Number(cohort.size),
+      cohort_year: cohort.cohort_year ? Number(cohort.cohort_year) : null,
     };
   });
 
@@ -607,6 +612,7 @@ function invalidClass(message) {
 
 function SetupStudio() {
   const INITIAL_VISIBLE_RECORDS = 4;
+  const currentYear = new Date().getFullYear();
   const [draft, setDraft] = useState(emptyDraft);
   const [summary, setSummary] = useState(toSummary(emptyDraft));
   const [activeStep, setActiveStep] = useState(0);
@@ -654,10 +660,12 @@ function SetupStudio() {
     pathId: "",
     name: "",
     size: "",
+    cohort_year: currentYear,
   });
   const [sessionYearFilter, setSessionYearFilter] = useState("all");
   const [visibleSessionCount, setVisibleSessionCount] = useState(INITIAL_VISIBLE_RECORDS);
   const [showSessionModal, setShowSessionModal] = useState(false);
+  const [sessionCohortYearFilter, setSessionCohortYearFilter] = useState(currentYear);
   const [tempSession, setTempSession] = useState({
     moduleId: "",
     name: "",
@@ -713,6 +721,10 @@ function SetupStudio() {
     }
     return draft.sessions.filter((s) => String(moduleYear(s)) === sessionYearFilter);
   }, [draft.sessions, draft.modules, sessionYearFilter]);
+
+  const filteredCohortsByYear = useMemo(() => {
+    return draft.cohorts.filter((c) => String(c.cohort_year) === String(sessionCohortYearFilter));
+  }, [draft.cohorts, sessionCohortYearFilter]);
 
   const validation = useMemo(() => validateDraft(draft), [draft]);
 
@@ -1913,6 +1925,19 @@ function SetupStudio() {
                         <div className="chip-row">
                           <span className="tag-chip">{degree?.code || "Degree"}</span>
                           <span className="tag-chip">Year {cohort.year}</span>
+                          <select
+                            className="cohort-year-select"
+                            value={cohort.cohort_year || currentYear}
+                            onChange={(event) =>
+                              updateRecord("cohorts", cohort.id, "cohort_year", event.target.value)
+                            }
+                          >
+                            {[2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015].map((y) => (
+                              <option key={y} value={y}>
+                                {y}
+                              </option>
+                            ))}
+                          </select>
                           <span className="tag-chip">{path?.code || "General"}</span>
                         </div>
                         <div className="form-grid two-column">
@@ -2080,6 +2105,21 @@ function SetupStudio() {
                                 }
                               />
                               {overrideSizeIssue && <small className="field-hint invalid">{overrideSizeIssue}</small>}
+                            </label>
+                            <label>
+                              <span>Calendar year</span>
+                              <select
+                                value={cohort.cohort_year || currentYear}
+                                onChange={(event) =>
+                                  updateRecord("cohorts", cohort.id, "cohort_year", event.target.value)
+                                }
+                              >
+                                {[2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015].map((y) => (
+                                  <option key={y} value={y}>
+                                    {y}
+                                  </option>
+                                ))}
+                              </select>
                             </label>
                             <label className="full-span">
                               <span>Override name</span>
@@ -2595,34 +2635,36 @@ function SetupStudio() {
                     <div className="selection-grid">
                       <div>
                         <h3>Lecturers</h3>
-                        <div className="check-grid">
-                          {lecturerOptions.map((lecturer) => (
-                            <label key={lecturer.id} className="check-chip">
-                              <input
-                                type="checkbox"
-                                checked={session.lecturerIds.includes(lecturer.id)}
-                                onChange={() => toggleSessionLink(session.id, "lecturerIds", lecturer.id)}
-                              />
-                              <span>{lecturer.name}</span>
-                            </label>
-                          ))}
-                        </div>
+                        <SearchableMultiSelect
+                          options={lecturerOptions}
+                          selectedIds={session.lecturerIds}
+                          onChange={(ids) => updateRecord("sessions", session.id, "lecturerIds", ids)}
+                          getLabel={(l) => l.name}
+                          placeholder="Search lecturers..."
+                        />
                       </div>
                       <div>
                         <h3>Attending cohorts</h3>
-                        {sessionCohortIssue && <p className="field-hint invalid">{sessionCohortIssue}</p>}
-                        <div className="check-grid">
-                          {cohortOptions.map((cohort) => (
-                            <label key={cohort.id} className="check-chip">
-                              <input
-                                type="checkbox"
-                                checked={session.cohortIds.includes(cohort.id)}
-                                onChange={() => toggleSessionLink(session.id, "cohortIds", cohort.id)}
-                              />
-                              <span>{cohort.name || "Unnamed cohort"}</span>
-                            </label>
-                          ))}
+                        <div className="session-cohort-year-filter">
+                          <select
+                            value={sessionCohortYearFilter}
+                            onChange={(e) => setSessionCohortYearFilter(Number(e.target.value))}
+                          >
+                            {[2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015].map((y) => (
+                              <option key={y} value={y}>
+                                {y}
+                              </option>
+                            ))}
+                          </select>
                         </div>
+                        {sessionCohortIssue && <p className="field-hint invalid">{sessionCohortIssue}</p>}
+                        <SearchableMultiSelect
+                          options={filteredCohortsByYear}
+                          selectedIds={session.cohortIds}
+                          onChange={(ids) => updateRecord("sessions", session.id, "cohortIds", ids)}
+                          getLabel={(c) => c.name || "Unnamed cohort"}
+                          placeholder="Search cohorts..."
+                        />
                       </div>
                     </div>
 
@@ -3285,6 +3327,19 @@ function SetupStudio() {
                     onChange={(e) => setTempOverrideCohort({ ...tempOverrideCohort, size: e.target.value })}
                   />
                 </label>
+                <label>
+                  <span>Calendar year</span>
+                  <select
+                    value={tempOverrideCohort.cohort_year || currentYear}
+                    onChange={(e) => setTempOverrideCohort({ ...tempOverrideCohort, cohort_year: Number(e.target.value) })}
+                  >
+                    {[2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015].map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <label className="full-span">
                   <span>Override name</span>
                   <input
@@ -3316,6 +3371,7 @@ function SetupStudio() {
                       pathId: tempOverrideCohort.pathId,
                       name: tempOverrideCohort.name,
                       size: tempOverrideCohort.size,
+                      cohort_year: tempOverrideCohort.cohort_year || currentYear,
                     };
                     const saved = await persistAddedRecord(
                       "cohorts",
