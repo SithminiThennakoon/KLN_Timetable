@@ -137,6 +137,11 @@ function toSummary(draft) {
   };
 }
 
+function academicYearStart(academicYear) {
+  const match = String(academicYear || "").match(/^(\d{4})/);
+  return match ? Number(match[1]) : new Date().getFullYear();
+}
+
 function normalizeDataset(dataset) {
   const degreeIdByKey = new Map();
   const pathIdByKey = new Map();
@@ -261,6 +266,156 @@ function normalizeDataset(dataset) {
       .map((key) => cohortIdByKey.get(key))
       .filter(Boolean),
   }));
+
+  return syncBaseCohorts({
+    degrees,
+    paths,
+    lecturers,
+    rooms,
+    cohorts,
+    modules,
+    sessions,
+  });
+}
+
+function normalizeImportWorkspace(workspace) {
+  const degreeIdBySource = new Map();
+  const pathIdBySource = new Map();
+  const lecturerIdBySource = new Map();
+  const roomIdBySource = new Map();
+  const cohortIdBySource = new Map();
+  const moduleIdBySource = new Map();
+  const groupedAttendanceGroups = new Map();
+  const defaultCohortYear = academicYearStart(workspace.selected_academic_year);
+
+  const degrees = (workspace.programmes || []).map((programme) => {
+    const id = makeId("degree");
+    degreeIdBySource.set(programme.id, id);
+    return {
+      id,
+      sourceProgrammeId: programme.id,
+      code: programme.code || "",
+      name: programme.name || "",
+      duration_years: programme.duration_years || 3,
+      intake_label: programme.intake_label || `${programme.code || "Programme"} Intake`,
+    };
+  });
+
+  const paths = (workspace.programme_paths || []).map((path) => {
+    const id = makeId("path");
+    pathIdBySource.set(path.id, id);
+    return {
+      id,
+      sourcePathId: path.id,
+      degreeId: degreeIdBySource.get(path.programme_id) || "",
+      year: path.study_year || 1,
+      code: path.code || "",
+      name: path.name || "",
+      is_common: Boolean(path.is_common),
+    };
+  });
+
+  const lecturers = (workspace.lecturers || []).map((lecturer) => {
+    const id = makeId("lecturer");
+    lecturerIdBySource.set(lecturer.id, id);
+    return {
+      id,
+      snapshotId: lecturer.id,
+      name: lecturer.name || "",
+      email: lecturer.email || "",
+      notes: lecturer.notes || "",
+    };
+  });
+
+  const rooms = (workspace.rooms || []).map((room) => {
+    const id = makeId("room");
+    roomIdBySource.set(room.id, id);
+    return {
+      id,
+      snapshotId: room.id,
+      name: room.name || "",
+      capacity: room.capacity || "",
+      room_type: room.room_type || "lecture",
+      lab_type: room.lab_type || "",
+      location: room.location || "",
+      year_restriction: room.year_restriction || "",
+      notes: room.notes || "",
+    };
+  });
+
+  (workspace.attendance_groups || []).forEach((group) => {
+    const key = [
+      degreeIdBySource.get(group.programme_id) || "",
+      group.study_year || 1,
+      pathIdBySource.get(group.programme_path_id) || "",
+    ].join("::");
+    const next = groupedAttendanceGroups.get(key) || [];
+    next.push(group);
+    groupedAttendanceGroups.set(key, next);
+  });
+
+  const cohorts = [];
+  groupedAttendanceGroups.forEach((groups, compositeKey) => {
+    groups.forEach((group, index) => {
+      const id = makeId("cohort");
+      cohortIdBySource.set(group.id, id);
+      const [degreeId, year, pathId] = compositeKey.split("::");
+      cohorts.push({
+        id,
+        sourceAttendanceGroupId: group.id,
+        kind: index === 0 ? "base" : "override",
+        degreeId,
+        year: Number(year) || 1,
+        pathId: pathId || "",
+        name: group.label || "",
+        size: group.student_count || "",
+        cohort_year: defaultCohortYear,
+      });
+    });
+  });
+
+  const modules = (workspace.curriculum_modules || []).map((module) => {
+    const id = makeId("module");
+    moduleIdBySource.set(module.id, id);
+    return {
+      id,
+      sourceModuleId: module.id,
+      code: module.code || "",
+      name: module.name || "",
+      subject_name: module.subject_name || "",
+      year: module.nominal_year || 1,
+      semester: module.semester_bucket || 1,
+      is_full_year: Boolean(module.is_full_year),
+    };
+  });
+
+  const sessions = (workspace.shared_sessions || []).map((session) => {
+    const moduleIds = (session.curriculum_module_ids || [])
+      .map((id) => moduleIdBySource.get(id))
+      .filter(Boolean);
+    return {
+      id: makeId("session"),
+      sourceSharedSessionId: session.id,
+      moduleId: moduleIds[0] || "",
+      linkedModuleIds: moduleIds.slice(1),
+      name: session.name || "",
+      session_type: session.session_type || "lecture",
+      duration_minutes: session.duration_minutes || 60,
+      occurrences_per_week: session.occurrences_per_week || 1,
+      required_room_type: session.required_room_type || "",
+      required_lab_type: session.required_lab_type || "",
+      specific_room_id: roomIdBySource.get(session.specific_room_id) || "",
+      max_students_per_group: session.max_students_per_group || "",
+      allow_parallel_rooms: Boolean(session.allow_parallel_rooms),
+      notes: session.notes || "",
+      lecturerIds: (session.lecturer_ids || [])
+        .map((id) => lecturerIdBySource.get(id))
+        .filter(Boolean),
+      cohortIds: (session.attendance_group_ids || [])
+        .map((id) => cohortIdBySource.get(id))
+        .filter(Boolean),
+    };
+  });
 
   return syncBaseCohorts({
     degrees,
@@ -696,8 +851,14 @@ function SetupStudio() {
   });
   const [importAnalysis, setImportAnalysis] = useState(null);
   const [importProjection, setImportProjection] = useState(null);
+  const [materializedImport, setMaterializedImport] = useState(null);
+  const [legacyManualMode, setLegacyManualMode] = useState(false);
   const [importRuleActions, setImportRuleActions] = useState({});
   const [importLoading, setImportLoading] = useState(false);
+  const activeImportRunId = materializedImport?.import_run_id || null;
+  const snapshotDerivedEditingDisabled = Boolean(activeImportRunId);
+  const usingLegacyManualMode = legacyManualMode && !activeImportRunId;
+  const showSetupWizard = Boolean(activeImportRunId || legacyManualMode);
 
   const filteredModules = useMemo(() => {
     if (!moduleSearchQuery.trim()) {
@@ -792,6 +953,198 @@ function SetupStudio() {
     }
   };
 
+  const loadImportWorkspace = async (importRunId, nextStatus = "") => {
+    setLoading(true);
+    setError("");
+    try {
+      const workspace = await timetableStudioService.getImportWorkspace(importRunId);
+      const normalized = normalizeImportWorkspace(workspace);
+      setDraft(normalized);
+      setSummary(toSummary(normalized));
+      setVisibleDegreeCount(INITIAL_VISIBLE_RECORDS);
+      setVisiblePathCount(INITIAL_VISIBLE_RECORDS);
+      setVisibleLecturerCount(INITIAL_VISIBLE_RECORDS);
+      setVisibleBaseCohortCount(INITIAL_VISIBLE_RECORDS);
+      setVisibleOverrideCohortCount(INITIAL_VISIBLE_RECORDS);
+      setCohortYearFilter("all");
+      setVisibleRoomCount(INITIAL_VISIBLE_RECORDS);
+      setVisibleModuleCount(INITIAL_VISIBLE_RECORDS);
+      setSessionYearFilter("all");
+      setVisibleSessionCount(INITIAL_VISIBLE_RECORDS);
+      setStatus(nextStatus);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const buildSnapshotSharedSessionPayload = (session, sourceDraft = draft) => {
+    const lecturerSourceIds = (session.lecturerIds || [])
+      .map((id) => sourceDraft.lecturers.find((entry) => entry.id === id)?.snapshotId)
+      .filter(Boolean);
+    const roomSourceId = session.specific_room_id
+      ? sourceDraft.rooms.find((entry) => entry.id === session.specific_room_id)?.snapshotId
+      : null;
+    const moduleSourceIds = [session.moduleId, ...(session.linkedModuleIds || [])]
+      .map((id) => sourceDraft.modules.find((entry) => entry.id === id)?.sourceModuleId)
+      .filter(Boolean);
+    const attendanceGroupSourceIds = (session.cohortIds || [])
+      .map((id) => sourceDraft.cohorts.find((entry) => entry.id === id)?.sourceAttendanceGroupId)
+      .filter(Boolean);
+
+    if (!moduleSourceIds.length) {
+      throw new Error(
+        "Imported shared sessions must point to modules loaded from the materialized import snapshot."
+      );
+    }
+    return {
+      client_key: `session_${session.id}`,
+      name: session.name.trim(),
+      session_type: session.session_type.trim(),
+      duration_minutes: Number(session.duration_minutes),
+      occurrences_per_week: Number(session.occurrences_per_week),
+      required_room_type: session.required_room_type.trim() || null,
+      required_lab_type: session.required_lab_type.trim() || null,
+      specific_room_id: roomSourceId || null,
+      max_students_per_group: session.max_students_per_group
+        ? Number(session.max_students_per_group)
+        : null,
+      allow_parallel_rooms: Boolean(session.allow_parallel_rooms),
+      notes: session.notes.trim() || null,
+      lecturer_ids: lecturerSourceIds,
+      curriculum_module_ids: moduleSourceIds,
+      attendance_group_ids: attendanceGroupSourceIds,
+    };
+  };
+
+  const createSnapshotRecord = async (collection, record, sourceDraft = draft) => {
+    if (collection === "lecturers") {
+      await timetableStudioService.createSnapshotLecturer(activeImportRunId, {
+        client_key: `lecturer_${record.id}`,
+        name: record.name.trim(),
+        email: record.email.trim() || null,
+        notes: record.notes?.trim() || null,
+      });
+      return;
+    }
+
+    if (collection === "rooms") {
+      await timetableStudioService.createSnapshotRoom(activeImportRunId, {
+        client_key: `room_${record.id}`,
+        name: record.name.trim(),
+        capacity: Number(record.capacity),
+        room_type: record.room_type || "lecture",
+        lab_type: record.lab_type?.trim() || null,
+        location: record.location.trim(),
+        year_restriction: record.year_restriction ? Number(record.year_restriction) : null,
+        notes: record.notes?.trim() || null,
+      });
+      return;
+    }
+
+    if (collection === "sessions") {
+      await timetableStudioService.createSnapshotSharedSession(
+        activeImportRunId,
+        buildSnapshotSharedSessionPayload(record, sourceDraft)
+      );
+    }
+  };
+
+  const persistSnapshotBatch = async (collection, records, successMessage) => {
+    if (!activeImportRunId || records.length === 0) {
+      return false;
+    }
+
+    setSaving(true);
+    setError("");
+    setStatus("");
+
+    try {
+      for (const record of records) {
+        await createSnapshotRecord(collection, record);
+      }
+      await loadImportWorkspace(activeImportRunId, successMessage);
+      return true;
+    } catch (err) {
+      setError(err.message);
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const persistSnapshotRecordUpdate = async (collection, record) => {
+    if (!activeImportRunId) {
+      return;
+    }
+
+    try {
+      if (collection === "lecturers" && record.snapshotId) {
+        await timetableStudioService.updateSnapshotLecturer(
+          activeImportRunId,
+          record.snapshotId,
+          {
+            client_key: `lecturer_${record.id}`,
+            name: record.name.trim(),
+            email: record.email.trim() || null,
+            notes: record.notes?.trim() || null,
+          }
+        );
+      } else if (collection === "rooms" && record.snapshotId) {
+        await timetableStudioService.updateSnapshotRoom(activeImportRunId, record.snapshotId, {
+          client_key: `room_${record.id}`,
+          name: record.name.trim(),
+          capacity: Number(record.capacity),
+          room_type: record.room_type || "lecture",
+          lab_type: record.lab_type?.trim() || null,
+          location: record.location.trim(),
+          year_restriction: record.year_restriction ? Number(record.year_restriction) : null,
+          notes: record.notes?.trim() || null,
+        });
+      } else if (collection === "sessions" && record.sourceSharedSessionId) {
+        await timetableStudioService.updateSnapshotSharedSession(
+          activeImportRunId,
+          record.sourceSharedSessionId,
+          buildSnapshotSharedSessionPayload(record)
+        );
+      } else {
+        return;
+      }
+      setStatus(`Saved ${collection.slice(0, -1)} changes to import snapshot #${activeImportRunId}.`);
+    } catch (err) {
+      await loadImportWorkspace(activeImportRunId);
+      setError(err.message);
+    }
+  };
+
+  const deleteSnapshotRecord = async (collection, record) => {
+    if (!activeImportRunId) {
+      return false;
+    }
+
+    try {
+      if (collection === "lecturers" && record.snapshotId) {
+        await timetableStudioService.deleteSnapshotLecturer(activeImportRunId, record.snapshotId);
+      } else if (collection === "rooms" && record.snapshotId) {
+        await timetableStudioService.deleteSnapshotRoom(activeImportRunId, record.snapshotId);
+      } else if (collection === "sessions" && record.sourceSharedSessionId) {
+        await timetableStudioService.deleteSnapshotSharedSession(
+          activeImportRunId,
+          record.sourceSharedSessionId
+        );
+      } else {
+        return false;
+      }
+      setStatus(`Removed ${collection.slice(0, -1)} from import snapshot #${activeImportRunId}.`);
+      return true;
+    } catch (err) {
+      await loadImportWorkspace(activeImportRunId);
+      setError(err.message);
+      return false;
+    }
+  };
+
   useEffect(() => {
     loadDataset();
   }, []);
@@ -823,10 +1176,30 @@ function SetupStudio() {
     setActiveStep((current) => Math.max(current - 1, 0));
   };
 
+  const enableLegacyManualMode = () => {
+    setLegacyManualMode(true);
+    setActiveStep(0);
+    setError("");
+    setStatus(
+      "Legacy manual setup mode enabled. CSV-first import is still the recommended path."
+    );
+  };
+
+  const returnToCsvFirstFlow = () => {
+    setLegacyManualMode(false);
+    setActiveStep(0);
+    setError("");
+    setStatus(
+      "CSV-first setup is active. Materialize a reviewed import snapshot to unlock manual completion."
+    );
+  };
+
   const handleLoadDemo = async (profile) => {
     setSaving(true);
     setError("");
     try {
+      setLegacyManualMode(true);
+      setMaterializedImport(null);
       await timetableStudioService.loadDemoDataset(profile);
       await loadDataset(
         profile === "tuned"
@@ -846,6 +1219,17 @@ function SetupStudio() {
     setError("");
     setStatus("");
     try {
+      if (activeImportRunId) {
+        const response = await timetableStudioService.publishImportWorkspaceToLegacyDataset(
+          activeImportRunId
+        );
+        setStatus(
+          `Import snapshot #${activeImportRunId} published to the generator dataset. ${response.summary.sessions} sessions are ready for generation.`
+        );
+        return;
+      }
+
+      setMaterializedImport(null);
       const payload = buildPayload(draft);
       const response = await timetableStudioService.saveDataset(payload);
       await loadDataset("Dataset saved. The new setup flow is now ready for generation.");
@@ -863,6 +1247,12 @@ function SetupStudio() {
     setStatus("");
 
     try {
+      if (activeImportRunId && ["lecturers", "rooms", "sessions"].includes(collection)) {
+        await createSnapshotRecord(collection, record);
+        await loadImportWorkspace(activeImportRunId, successMessage);
+        return true;
+      }
+
       const nextDraft = syncBaseCohorts({
         ...draft,
         [collection]: [...draft[collection], record],
@@ -887,6 +1277,7 @@ function SetupStudio() {
       const response = await timetableStudioService.analyzeEnrollmentImport();
       setImportAnalysis(response);
       setImportProjection(null);
+      setMaterializedImport(null);
       setImportRuleActions({});
       setStatus("Enrollment CSV analyzed. Review the flagged buckets before previewing the import.");
     } catch (err) {
@@ -905,7 +1296,8 @@ function SetupStudio() {
         rules: buildImportRulePayload(importRuleActions),
       });
       setImportProjection(response);
-      setStatus("Reviewed import preview is ready. Check the projected counts before loading it into Setup Studio.");
+      setMaterializedImport(null);
+      setStatus("Reviewed import preview is ready. Check the projected counts before materializing the import snapshot.");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -919,12 +1311,16 @@ function SetupStudio() {
     setError("");
     setStatus("");
     try {
-      await timetableStudioService.loadEnrollmentImport({
+      const response = await timetableStudioService.materializeEnrollmentImport({
         rules: buildImportRulePayload(importRuleActions),
       });
-      await loadDataset("Reviewed enrollment import loaded into Setup Studio.");
-      setImportProjection(null);
-      setActiveStep(steps.length - 1);
+      setLegacyManualMode(false);
+      setMaterializedImport(response);
+      await loadImportWorkspace(
+        response.import_run_id,
+        `Reviewed enrollment import materialized as snapshot #${response.import_run_id}.`
+      );
+      setActiveStep(1);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -940,26 +1336,72 @@ function SetupStudio() {
     }));
   };
 
-  const duplicateRecord = (collection, id) => {
+  const duplicateRecord = async (collection, id) => {
+    const source = draft[collection].find((record) => record.id === id);
+    if (!source) {
+      return;
+    }
+
+    const duplicate = {
+      ...source,
+      id: makeId(collection.slice(0, -1) || "item"),
+    };
+
+    if (activeImportRunId && ["lecturers", "rooms", "sessions"].includes(collection)) {
+      await persistAddedRecord(
+        collection,
+        duplicate,
+        `${collection.slice(0, -1)} duplicated into import snapshot #${activeImportRunId}.`
+      );
+      return;
+    }
+
     updateDraft((current) => {
-      const source = current[collection].find((record) => record.id === id);
-      if (!source) {
-        return current;
-      }
       return {
         ...current,
         [collection]: [
           ...current[collection],
-          {
-            ...source,
-            id: makeId(collection.slice(0, -1) || "item"),
-          },
+          duplicate,
         ],
       };
     });
   };
 
-  const addStarterSessionsFromModules = () => {
+  const addStarterSessionsFromModules = async () => {
+    const moduleIdsWithSessions = new Set(draft.sessions.map((session) => session.moduleId));
+    const starterSessions = draft.modules
+      .filter((module) => module.id && !moduleIdsWithSessions.has(module.id))
+      .map((module) => ({
+        id: makeId("session"),
+        moduleId: module.id,
+        name: `${module.name || module.code || "Module"} Session`,
+        session_type: "lecture",
+        duration_minutes: 60,
+        occurrences_per_week: 1,
+        linkedModuleIds: [],
+        required_room_type: "lecture",
+        required_lab_type: "",
+        specific_room_id: "",
+        max_students_per_group: "",
+        allow_parallel_rooms: false,
+        notes: "",
+        lecturerIds: [],
+        cohortIds: [],
+      }));
+
+    if (starterSessions.length === 0) {
+      return;
+    }
+
+    if (activeImportRunId) {
+      await persistSnapshotBatch(
+        "sessions",
+        starterSessions,
+        `Starter sessions saved into import snapshot #${activeImportRunId}.`
+      );
+      return;
+    }
+
     updateDraft((current) => {
       const moduleIdsWithSessions = new Set(current.sessions.map((session) => session.moduleId));
       const starterSessions = current.modules
@@ -993,7 +1435,7 @@ function SetupStudio() {
     });
   };
 
-  const addSessionPatternFromModules = (patternKey) => {
+  const addSessionPatternFromModules = async (patternKey) => {
     const patterns = {
       lectureTutorial: [
         {
@@ -1038,6 +1480,42 @@ function SetupStudio() {
 
     const selectedPattern = patterns[patternKey] || [];
     if (selectedPattern.length === 0) {
+      return;
+    }
+
+    const moduleIdsWithSessions = new Set(draft.sessions.map((session) => session.moduleId));
+    const generatedSessions = draft.modules
+      .filter((module) => module.id && !moduleIdsWithSessions.has(module.id))
+      .flatMap((module) =>
+        selectedPattern.map((template) => ({
+          id: makeId("session"),
+          moduleId: module.id,
+          name: `${module.name || module.code || "Module"} ${template.suffix}`,
+          session_type: template.session_type,
+          duration_minutes: template.duration_minutes,
+          occurrences_per_week: template.occurrences_per_week,
+          linkedModuleIds: [],
+          required_room_type: template.required_room_type,
+          required_lab_type: "",
+          specific_room_id: "",
+          max_students_per_group: "",
+          allow_parallel_rooms: false,
+          notes: "",
+          lecturerIds: [],
+          cohortIds: [],
+        }))
+      );
+
+    if (generatedSessions.length === 0) {
+      return;
+    }
+
+    if (activeImportRunId) {
+      await persistSnapshotBatch(
+        "sessions",
+        generatedSessions,
+        `Session pattern saved into import snapshot #${activeImportRunId}.`
+      );
       return;
     }
 
@@ -1117,7 +1595,7 @@ function SetupStudio() {
     });
   };
 
-  const addRoomTemplateBatch = (templateKey) => {
+  const addRoomTemplateBatch = async (templateKey) => {
     const templates = {
       lectureHalls: [
         {
@@ -1162,6 +1640,29 @@ function SetupStudio() {
       return;
     }
 
+    const existingRoomNames = new Set(
+      draft.rooms.map((room) => room.name.trim().toLowerCase()).filter(Boolean)
+    );
+    const roomsToAdd = selectedTemplate
+      .filter((room) => !existingRoomNames.has(room.name.trim().toLowerCase()))
+      .map((room) => ({
+        id: makeId("room"),
+        ...room,
+      }));
+
+    if (roomsToAdd.length === 0) {
+      return;
+    }
+
+    if (activeImportRunId) {
+      await persistSnapshotBatch(
+        "rooms",
+        roomsToAdd,
+        `Room templates saved into import snapshot #${activeImportRunId}.`
+      );
+      return;
+    }
+
     updateDraft((current) => {
       const existingRoomNames = new Set(
         current.rooms.map((room) => room.name.trim().toLowerCase()).filter(Boolean)
@@ -1185,13 +1686,37 @@ function SetupStudio() {
     });
   };
 
-  const addLecturerTemplateBatch = () => {
+  const addLecturerTemplateBatch = async () => {
     const templates = [
       { name: "Dr. Perera", email: "dr.perera@science.kln.ac.lk" },
       { name: "Dr. Silva", email: "dr.silva@science.kln.ac.lk" },
       { name: "Prof. Fernando", email: "prof.fernando@science.kln.ac.lk" },
       { name: "Ms. Jayasinghe", email: "ms.jayasinghe@science.kln.ac.lk" },
     ];
+
+    const existingNames = new Set(
+      draft.lecturers.map((lecturer) => lecturer.name.trim().toLowerCase()).filter(Boolean)
+    );
+
+    const lecturersToAdd = templates
+      .filter((lecturer) => !existingNames.has(lecturer.name.trim().toLowerCase()))
+      .map((lecturer) => ({
+        id: makeId("lecturer"),
+        ...lecturer,
+      }));
+
+    if (lecturersToAdd.length === 0) {
+      return;
+    }
+
+    if (activeImportRunId) {
+      await persistSnapshotBatch(
+        "lecturers",
+        lecturersToAdd,
+        `Lecturer templates saved into import snapshot #${activeImportRunId}.`
+      );
+      return;
+    }
 
     updateDraft((current) => {
       const existingNames = new Set(
@@ -1317,7 +1842,15 @@ function SetupStudio() {
     }));
   };
 
-  const removeRecord = (collection, id) => {
+  const removeRecord = async (collection, id) => {
+    const record = draft[collection]?.find((entry) => entry.id === id);
+    if (record && ["lecturers", "rooms", "sessions"].includes(collection) && activeImportRunId) {
+      const deleted = await deleteSnapshotRecord(collection, record);
+      if (!deleted) {
+        return;
+      }
+    }
+
     updateDraft((current) => {
       const next = { ...current, [collection]: current[collection].filter((record) => record.id !== id) };
 
@@ -1402,6 +1935,204 @@ function SetupStudio() {
   const roomOptions = draft.rooms;
 
   const currentStep = steps[activeStep].key;
+  const importStageSection = (
+    <section className="studio-card">
+      <div className="section-row">
+        <div>
+          <h2>Stage 1. Enrollment Import</h2>
+          <p>
+            Start with the reviewed enrollment CSV. After materializing the import snapshot,
+            use the manual wizard only to complete the missing timetable metadata.
+          </p>
+        </div>
+        <div className="record-actions">
+          <button
+            className="ghost-btn"
+            type="button"
+            onClick={handleAnalyzeEnrollmentImport}
+            disabled={importLoading || saving || loading}
+          >
+            {importLoading ? "Analyzing..." : "Analyze Enrollment CSV"}
+          </button>
+          <button
+            className="ghost-btn"
+            type="button"
+            onClick={handlePreviewEnrollmentImport}
+            disabled={importLoading || !importAnalysis}
+          >
+            Preview Reviewed Import
+          </button>
+          <button
+            className="primary-btn"
+            type="button"
+            onClick={handleLoadEnrollmentImport}
+            disabled={importLoading || saving || !importProjection}
+          >
+            Materialize Reviewed Import
+          </button>
+        </div>
+      </div>
+
+      {!importAnalysis ? (
+        <div className="future-card">
+          <strong>No CSV analysis yet</strong>
+          <span>
+            Analyze the enrollment CSV first. That unlocks preview, review decisions, and the
+            normalized import snapshot used by the manual completion wizard.
+          </span>
+        </div>
+      ) : (
+        <>
+          <div className="summary-grid">
+            {Object.entries(importAnalysis.summary || {}).map(([key, value]) => (
+              <div key={key} className="summary-item">
+                <span>{key.replace(/_/g, " ")}</span>
+                <strong>{value}</strong>
+              </div>
+            ))}
+          </div>
+
+          <div className="schema-notes">
+            <h3>Review Buckets</h3>
+            {importBuckets.length === 0 ? (
+              <p className="empty-state">No review buckets were generated for the current CSV snapshot.</p>
+            ) : (
+              <div className="editor-list">
+                {importBuckets.slice(0, 24).map((bucket) => {
+                  const bucketId = `${bucket.bucket_type}::${bucket.bucket_key}`;
+                  return (
+                    <div key={bucketId} className="editor-card">
+                      <div className="section-row">
+                        <div>
+                          <h3>{bucket.bucket_type.replace(/_/g, " ")}</h3>
+                          <p>{bucket.description}</p>
+                        </div>
+                        <span className="tag-chip">{bucket.row_count} rows</span>
+                      </div>
+                      <label>
+                        <span>Decision</span>
+                        <select
+                          value={importRuleActions[bucketId] || ""}
+                          onChange={(event) =>
+                            setImportRuleActions((current) => ({
+                              ...current,
+                              [bucketId]: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Leave unresolved</option>
+                          <option value="accept_exception">Accept exception</option>
+                          <option value="treat_as_common">Treat as common module</option>
+                          <option value="exclude">Exclude bucket</option>
+                        </select>
+                      </label>
+                      {bucket.sample_rows?.length > 0 && (
+                        <div className="schema-notes compact">
+                          <h3>Sample rows</h3>
+                          <ul>
+                            {bucket.sample_rows.map((row) => (
+                              <li key={`${bucketId}-${row.row_number}`}>
+                                Row {row.row_number}: {row.course_code} | {row.stream} | Year{" "}
+                                {row.year} | Batch {row.batch || "-"} | Path{" "}
+                                {row.course_path_no || "blank"}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {importProjection && (
+            <div className="schema-notes">
+              <h3>Projection Preview</h3>
+              <div className="summary-grid">
+                {Object.entries(importProjection.projection_summary || {}).map(([key, value]) => (
+                  <div key={key} className="summary-item">
+                    <span>{key.replace(/_/g, " ")}</span>
+                    <strong>{value}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {materializedImport && (
+            <div className="schema-notes">
+              <h3>Materialized Import Snapshot</h3>
+              <div className="summary-grid">
+                {Object.entries(materializedImport.counts || {}).map(([key, value]) => (
+                  <div key={key} className="summary-item">
+                    <span>{key.replace(/_/g, " ")}</span>
+                    <strong>{value}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="schema-notes">
+            <h3>How this import behaves</h3>
+            <ul>
+              <li>CSV `Year` is treated as the teaching year unless a review rule says otherwise.</li>
+              <li>Unresolved buckets stay visible and are excluded from the imported dataset by default.</li>
+              <li>Exact student memberships are preserved so shared students cannot be double-booked later.</li>
+              <li>Materializing the import creates a normalized snapshot instead of overwriting the old flat setup dataset.</li>
+            </ul>
+          </div>
+        </>
+      )}
+
+      <div className="schema-notes">
+        <h3>Other starting points</h3>
+        <p>
+          These are fallback or development paths. The intended production flow is still CSV
+          import first, then manual completion.
+        </p>
+        <div className="record-actions">
+          <button
+            className="ghost-btn"
+            type="button"
+            onClick={() => handleLoadDemo("realistic")}
+            disabled={saving || loading}
+          >
+            Load Realistic Demo
+          </button>
+          <button
+            className="ghost-btn"
+            type="button"
+            onClick={() => handleLoadDemo("tuned")}
+            disabled={saving || loading}
+          >
+            Load Tuned Demo
+          </button>
+          {usingLegacyManualMode ? (
+            <button
+              className="ghost-btn"
+              type="button"
+              onClick={returnToCsvFirstFlow}
+              disabled={saving || loading || importLoading}
+            >
+              Return To CSV-First Flow
+            </button>
+          ) : (
+            <button
+              className="ghost-btn"
+              type="button"
+              onClick={enableLegacyManualMode}
+              disabled={saving || loading || importLoading}
+            >
+              Use Legacy Manual Setup
+            </button>
+          )}
+        </div>
+      </div>
+    </section>
+  );
 
   return (
     <div className="page-shell">
@@ -1410,7 +2141,9 @@ function SetupStudio() {
           <div>
             <h1 className="section-title">Setup Studio</h1>
             <p className="section-subtitle">
-              Build the v2 timetable dataset through guided steps, then save one validated draft for generation.
+              {activeImportRunId
+                ? `Working on normalized import snapshot #${activeImportRunId} through the setup wizard bridge.`
+                : "Build the v2 timetable dataset through guided steps, then save one validated draft for generation."}
             </p>
           </div>
           <div className="studio-actions wrap">
@@ -1433,14 +2166,20 @@ function SetupStudio() {
               onClick={handleSave}
               disabled={saving || loading || validation.blocking.length > 0}
             >
-              {saving ? "Saving..." : "Save Dataset"}
+              {saving ? "Saving..." : activeImportRunId ? "Publish To Generator" : "Save Dataset"}
             </button>
           </div>
         </div>
 
         {status && <div className="info-banner valid">{status}</div>}
         {error && <div className="error-banner">{error}</div>}
-        {loading && <div className="info-banner">Loading existing v2 dataset...</div>}
+        {loading && (
+          <div className="info-banner">
+            {activeImportRunId
+              ? `Loading normalized import workspace #${activeImportRunId}...`
+              : "Loading existing v2 dataset..."}
+          </div>
+        )}
 
         <div className="wizard-steps">
           {steps.map((step, index) => (
@@ -1478,7 +2217,11 @@ function SetupStudio() {
                   <p>Enter each Faculty of Science degree and its duration.</p>
                 </div>
                 <div className="record-actions">
-                  <button className="ghost-btn" onClick={addScienceStructureTemplates}>
+                  <button
+                    className="ghost-btn"
+                    onClick={addScienceStructureTemplates}
+                    disabled={snapshotDerivedEditingDisabled}
+                  >
                     Load Science Structure Templates
                   </button>
                   <button
@@ -1487,11 +2230,17 @@ function SetupStudio() {
                       setTempDegree({ code: "", name: "", duration_years: 3, intake_label: "" });
                       setShowDegreeModal(true);
                     }}
+                    disabled={snapshotDerivedEditingDisabled}
                   >
                     Add Degree
                   </button>
                 </div>
               </div>
+              {snapshotDerivedEditingDisabled && (
+                <div className="info-banner">
+                  Degrees and paths are loaded from the import snapshot and are read-only in this bridge.
+                </div>
+              )}
               <div className="editor-list">
                 {draft.degrees.length === 0 ? (
                   <p className="empty-state">No degrees added yet.</p>
@@ -1514,6 +2263,7 @@ function SetupStudio() {
                             <input
                               className={invalidClass(degreeIssue)}
                               value={degree.code}
+                              disabled={snapshotDerivedEditingDisabled}
                               onChange={(event) =>
                                 updateRecord("degrees", degree.id, "code", event.target.value)
                               }
@@ -1525,6 +2275,7 @@ function SetupStudio() {
                             <input
                               className={invalidClass(degreeIssue)}
                               value={degree.name}
+                              disabled={snapshotDerivedEditingDisabled}
                               onChange={(event) =>
                                 updateRecord("degrees", degree.id, "name", event.target.value)
                               }
@@ -1539,6 +2290,7 @@ function SetupStudio() {
                               min="1"
                               max="6"
                               value={degree.duration_years}
+                              disabled={snapshotDerivedEditingDisabled}
                               onChange={(event) =>
                                 updateRecord("degrees", degree.id, "duration_years", event.target.value)
                               }
@@ -1552,6 +2304,7 @@ function SetupStudio() {
                             <input
                               className={invalidClass(degreeIssue)}
                               value={degree.intake_label}
+                              disabled={snapshotDerivedEditingDisabled}
                               onChange={(event) =>
                                 updateRecord("degrees", degree.id, "intake_label", event.target.value)
                               }
@@ -1562,6 +2315,7 @@ function SetupStudio() {
                             <button
                               className="danger-btn danger-icon-btn"
                               onClick={() => removeRecord("degrees", degree.id)}
+                              disabled={snapshotDerivedEditingDisabled}
                               aria-label={`Remove ${degree.code || degree.name || "degree"}`}
                               title="Remove degree"
                               type="button"
@@ -1605,7 +2359,7 @@ function SetupStudio() {
                     setTempPath({ degreeId: degreeOptions[0]?.id || "", year: 1, code: "", name: "" });
                     setShowPathModal(true);
                   }}
-                  disabled={degreeOptions.length === 0}
+                  disabled={degreeOptions.length === 0 || snapshotDerivedEditingDisabled}
                 >
                   Add Path
                 </button>
@@ -1628,6 +2382,7 @@ function SetupStudio() {
                             <select
                               className={invalidClass(pathIssue)}
                               value={path.degreeId}
+                              disabled={snapshotDerivedEditingDisabled}
                               onChange={(event) =>
                                 updateRecord("paths", path.id, "degreeId", event.target.value)
                               }
@@ -1648,6 +2403,7 @@ function SetupStudio() {
                               min="1"
                               max="6"
                               value={path.year}
+                              disabled={snapshotDerivedEditingDisabled}
                               onChange={(event) =>
                                 updateRecord("paths", path.id, "year", event.target.value)
                               }
@@ -1658,6 +2414,7 @@ function SetupStudio() {
                             <input
                               className={invalidClass(pathIssue)}
                               value={path.code}
+                              disabled={snapshotDerivedEditingDisabled}
                               onChange={(event) =>
                                 updateRecord("paths", path.id, "code", event.target.value)
                               }
@@ -1669,6 +2426,7 @@ function SetupStudio() {
                             <input
                               className={invalidClass(pathIssue)}
                               value={path.name}
+                              disabled={snapshotDerivedEditingDisabled}
                               onChange={(event) =>
                                 updateRecord("paths", path.id, "name", event.target.value)
                               }
@@ -1676,7 +2434,11 @@ function SetupStudio() {
                             {pathIssue && <small className="field-hint invalid">{pathIssue}</small>}
                           </label>
                         </div>
-                        <button className="danger-btn" onClick={() => removeRecord("paths", path.id)}>
+                        <button
+                          className="danger-btn"
+                          onClick={() => removeRecord("paths", path.id)}
+                          disabled={snapshotDerivedEditingDisabled}
+                        >
                           Remove Path
                         </button>
                       </div>
@@ -1742,6 +2504,7 @@ function SetupStudio() {
                             onChange={(event) =>
                               updateRecord("lecturers", lecturer.id, "name", event.target.value)
                             }
+                            onBlur={() => persistSnapshotRecordUpdate("lecturers", lecturer)}
                           />
                         </label>
                         <label>
@@ -1751,6 +2514,7 @@ function SetupStudio() {
                             onChange={(event) =>
                               updateRecord("lecturers", lecturer.id, "email", event.target.value)
                             }
+                            onBlur={() => persistSnapshotRecordUpdate("lecturers", lecturer)}
                           />
                         </label>
                       </div>
@@ -1849,6 +2613,7 @@ function SetupStudio() {
                           onChange={(event) =>
                             updateRecord("rooms", room.id, "name", event.target.value)
                           }
+                          onBlur={() => persistSnapshotRecordUpdate("rooms", room)}
                         />
                         {roomNameIssue && <small className="field-hint invalid">{roomNameIssue}</small>}
                       </label>
@@ -1862,6 +2627,7 @@ function SetupStudio() {
                           onChange={(event) =>
                             updateRecord("rooms", room.id, "capacity", event.target.value)
                           }
+                          onBlur={() => persistSnapshotRecordUpdate("rooms", room)}
                         />
                         {roomCapacityIssue && <small className="field-hint invalid">{roomCapacityIssue}</small>}
                       </label>
@@ -1872,6 +2638,7 @@ function SetupStudio() {
                           onChange={(event) =>
                             updateRecord("rooms", room.id, "room_type", event.target.value)
                           }
+                          onBlur={() => persistSnapshotRecordUpdate("rooms", room)}
                         >
                           <option value="lecture">Lecture</option>
                           <option value="lab">Lab</option>
@@ -1885,6 +2652,7 @@ function SetupStudio() {
                           onChange={(event) =>
                             updateRecord("rooms", room.id, "lab_type", event.target.value)
                           }
+                          onBlur={() => persistSnapshotRecordUpdate("rooms", room)}
                         />
                       </label>
                       <label>
@@ -1895,6 +2663,7 @@ function SetupStudio() {
                           onChange={(event) =>
                             updateRecord("rooms", room.id, "location", event.target.value)
                           }
+                          onBlur={() => persistSnapshotRecordUpdate("rooms", room)}
                         />
                         {roomNameIssue && <small className="field-hint invalid">{roomNameIssue}</small>}
                       </label>
@@ -1908,6 +2677,7 @@ function SetupStudio() {
                           onChange={(event) =>
                             updateRecord("rooms", room.id, "year_restriction", event.target.value)
                           }
+                          onBlur={() => persistSnapshotRecordUpdate("rooms", room)}
                         />
                       </label>
                     </div>
@@ -1972,6 +2742,11 @@ function SetupStudio() {
                   </select>
                 </div>
               </div>
+              {snapshotDerivedEditingDisabled && (
+                <div className="info-banner">
+                  Attendance groups are loaded from the import snapshot and are read-only in this bridge.
+                </div>
+              )}
               <div className="editor-list">
                 {filteredBaseCohorts.length === 0 ? (
                   <p className="empty-state">
@@ -2001,6 +2776,7 @@ function SetupStudio() {
                           <select
                             className="cohort-year-select"
                             value={cohort.cohort_year || currentYear}
+                            disabled={snapshotDerivedEditingDisabled}
                             onChange={(event) =>
                               updateRecord("cohorts", cohort.id, "cohort_year", event.target.value)
                             }
@@ -2019,6 +2795,7 @@ function SetupStudio() {
                             <input
                               className={invalidClass(cohortNameIssue)}
                               value={cohort.name}
+                              disabled={snapshotDerivedEditingDisabled}
                               onChange={(event) =>
                                 updateRecord("cohorts", cohort.id, "name", event.target.value)
                               }
@@ -2032,6 +2809,7 @@ function SetupStudio() {
                               type="number"
                               min="1"
                               value={cohort.size}
+                              disabled={snapshotDerivedEditingDisabled}
                               onChange={(event) =>
                                 updateRecord("cohorts", cohort.id, "size", event.target.value)
                               }
@@ -2075,7 +2853,10 @@ function SetupStudio() {
                   <button
                     className="ghost-btn"
                     onClick={addOverrideTemplatesFromBaseCohorts}
-                    disabled={draft.cohorts.filter((cohort) => cohort.kind === "base").length === 0}
+                    disabled={
+                      draft.cohorts.filter((cohort) => cohort.kind === "base").length === 0 ||
+                      snapshotDerivedEditingDisabled
+                    }
                   >
                     Create Override Templates
                   </button>
@@ -2091,7 +2872,7 @@ function SetupStudio() {
                       });
                       setShowOverrideCohortModal(true);
                     }}
-                    disabled={degreeOptions.length === 0}
+                    disabled={degreeOptions.length === 0 || snapshotDerivedEditingDisabled}
                   >
                     Add Override
                   </button>
@@ -2123,6 +2904,7 @@ function SetupStudio() {
                               <select
                                 className={invalidClass(overrideIdentityIssue)}
                                 value={cohort.degreeId}
+                                disabled={snapshotDerivedEditingDisabled}
                                 onChange={(event) =>
                                   updateRecord("cohorts", cohort.id, "degreeId", event.target.value)
                                 }
@@ -2143,6 +2925,7 @@ function SetupStudio() {
                                 min="1"
                                 max="6"
                                 value={cohort.year}
+                                disabled={snapshotDerivedEditingDisabled}
                                 onChange={(event) =>
                                   updateRecord("cohorts", cohort.id, "year", event.target.value)
                                 }
@@ -2152,6 +2935,7 @@ function SetupStudio() {
                               <span>Path</span>
                               <select
                                 value={cohort.pathId}
+                                disabled={snapshotDerivedEditingDisabled}
                                 onChange={(event) =>
                                   updateRecord("cohorts", cohort.id, "pathId", event.target.value)
                                 }
@@ -2173,6 +2957,7 @@ function SetupStudio() {
                                 type="number"
                                 min="1"
                                 value={cohort.size}
+                                disabled={snapshotDerivedEditingDisabled}
                                 onChange={(event) =>
                                   updateRecord("cohorts", cohort.id, "size", event.target.value)
                                 }
@@ -2183,6 +2968,7 @@ function SetupStudio() {
                               <span>Calendar year</span>
                               <select
                                 value={cohort.cohort_year || currentYear}
+                                disabled={snapshotDerivedEditingDisabled}
                                 onChange={(event) =>
                                   updateRecord("cohorts", cohort.id, "cohort_year", event.target.value)
                                 }
@@ -2199,6 +2985,7 @@ function SetupStudio() {
                               <input
                                 className={invalidClass(overrideIdentityIssue)}
                                 value={cohort.name}
+                                disabled={snapshotDerivedEditingDisabled}
                                 onChange={(event) =>
                                   updateRecord("cohorts", cohort.id, "name", event.target.value)
                                 }
@@ -2207,10 +2994,18 @@ function SetupStudio() {
                             </label>
                           </div>
                           <div className="record-actions">
-                            <button className="ghost-btn" onClick={() => duplicateRecord("cohorts", cohort.id)}>
+                            <button
+                              className="ghost-btn"
+                              onClick={() => duplicateRecord("cohorts", cohort.id)}
+                              disabled={snapshotDerivedEditingDisabled}
+                            >
                               Duplicate Override
                             </button>
-                            <button className="danger-btn" onClick={() => removeRecord("cohorts", cohort.id)}>
+                            <button
+                              className="danger-btn"
+                              onClick={() => removeRecord("cohorts", cohort.id)}
+                              disabled={snapshotDerivedEditingDisabled}
+                            >
                               Remove Override
                             </button>
                           </div>
@@ -2255,14 +3050,20 @@ function SetupStudio() {
                   <button
                     className="ghost-btn"
                     onClick={() => addModuleShellsForSemester(1)}
-                    disabled={draft.cohorts.filter((cohort) => cohort.kind === "base").length === 0}
+                    disabled={
+                      draft.cohorts.filter((cohort) => cohort.kind === "base").length === 0 ||
+                      snapshotDerivedEditingDisabled
+                    }
                   >
                     Create Semester 1 Module Shells
                   </button>
                   <button
                     className="ghost-btn"
                     onClick={() => addModuleShellsForSemester(2)}
-                    disabled={draft.cohorts.filter((cohort) => cohort.kind === "base").length === 0}
+                    disabled={
+                      draft.cohorts.filter((cohort) => cohort.kind === "base").length === 0 ||
+                      snapshotDerivedEditingDisabled
+                    }
                   >
                     Create Semester 2 Module Shells
                   </button>
@@ -2279,11 +3080,17 @@ function SetupStudio() {
                       });
                       setShowModuleModal(true);
                     }}
+                    disabled={snapshotDerivedEditingDisabled}
                   >
                     Add Module
                   </button>
                 </div>
               </div>
+              {snapshotDerivedEditingDisabled && (
+                <div className="info-banner">
+                  Modules are loaded from the import snapshot and are read-only in this bridge.
+                </div>
+              )}
               <div className="module-search-wrap">
                 <input
                   type="text"
@@ -2313,6 +3120,7 @@ function SetupStudio() {
                           <input
                             className={invalidClass(moduleIssue)}
                             value={module.code}
+                            disabled={snapshotDerivedEditingDisabled}
                             onChange={(event) =>
                               updateRecord("modules", module.id, "code", event.target.value)
                             }
@@ -2324,6 +3132,7 @@ function SetupStudio() {
                           <input
                             className={invalidClass(moduleIssue)}
                             value={module.name}
+                            disabled={snapshotDerivedEditingDisabled}
                             onChange={(event) =>
                               updateRecord("modules", module.id, "name", event.target.value)
                             }
@@ -2335,6 +3144,7 @@ function SetupStudio() {
                           <input
                             className={invalidClass(moduleIssue)}
                             value={module.subject_name}
+                            disabled={snapshotDerivedEditingDisabled}
                             onChange={(event) =>
                               updateRecord("modules", module.id, "subject_name", event.target.value)
                             }
@@ -2348,6 +3158,7 @@ function SetupStudio() {
                             min="1"
                             max="6"
                             value={module.year}
+                            disabled={snapshotDerivedEditingDisabled}
                             onChange={(event) =>
                               updateRecord("modules", module.id, "year", event.target.value)
                             }
@@ -2357,6 +3168,7 @@ function SetupStudio() {
                           <span>Semester</span>
                           <select
                             value={module.semester}
+                            disabled={snapshotDerivedEditingDisabled}
                             onChange={(event) =>
                               updateRecord("modules", module.id, "semester", event.target.value)
                             }
@@ -2369,6 +3181,7 @@ function SetupStudio() {
                           <input
                             type="checkbox"
                             checked={module.is_full_year}
+                            disabled={snapshotDerivedEditingDisabled}
                             onChange={(event) =>
                               updateRecord("modules", module.id, "is_full_year", event.target.checked)
                             }
@@ -2377,10 +3190,18 @@ function SetupStudio() {
                         </label>
                       </div>
                       <div className="record-actions">
-                        <button className="ghost-btn" onClick={() => duplicateRecord("modules", module.id)}>
+                        <button
+                          className="ghost-btn"
+                          onClick={() => duplicateRecord("modules", module.id)}
+                          disabled={snapshotDerivedEditingDisabled}
+                        >
                           Duplicate Module
                         </button>
-                        <button className="danger-btn" onClick={() => removeRecord("modules", module.id)}>
+                        <button
+                          className="danger-btn"
+                          onClick={() => removeRecord("modules", module.id)}
+                          disabled={snapshotDerivedEditingDisabled}
+                        >
                           Remove Module
                         </button>
                       </div>
@@ -2523,9 +3344,13 @@ function SetupStudio() {
                         <select
                           className={invalidClass(sessionIdentityIssue)}
                           value={session.moduleId}
-                          onChange={(event) =>
-                            updateRecord("sessions", session.id, "moduleId", event.target.value)
-                          }
+                          onChange={async (event) => {
+                            updateRecord("sessions", session.id, "moduleId", event.target.value);
+                            await persistSnapshotRecordUpdate("sessions", {
+                              ...session,
+                              moduleId: event.target.value,
+                            });
+                          }}
                         >
                           <option value="">Select module</option>
                           {moduleOptions.map((module) => (
@@ -2544,6 +3369,7 @@ function SetupStudio() {
                           onChange={(event) =>
                             updateRecord("sessions", session.id, "name", event.target.value)
                           }
+                          onBlur={() => persistSnapshotRecordUpdate("sessions", session)}
                         />
                         {sessionIdentityIssue && <small className="field-hint invalid">{sessionIdentityIssue}</small>}
                       </label>
@@ -2555,6 +3381,7 @@ function SetupStudio() {
                           onChange={(event) =>
                             updateRecord("sessions", session.id, "session_type", event.target.value)
                           }
+                          onBlur={() => persistSnapshotRecordUpdate("sessions", session)}
                         />
                         {sessionIdentityIssue && <small className="field-hint invalid">{sessionIdentityIssue}</small>}
                       </label>
@@ -2569,6 +3396,7 @@ function SetupStudio() {
                           onChange={(event) =>
                             updateRecord("sessions", session.id, "duration_minutes", event.target.value)
                           }
+                          onBlur={() => persistSnapshotRecordUpdate("sessions", session)}
                         />
                         {sessionDurationIssue && (
                           <small className="field-hint invalid">{sessionDurationIssue}</small>
@@ -2584,6 +3412,7 @@ function SetupStudio() {
                           onChange={(event) =>
                             updateRecord("sessions", session.id, "occurrences_per_week", event.target.value)
                           }
+                          onBlur={() => persistSnapshotRecordUpdate("sessions", session)}
                         />
                         {sessionOccurrenceIssue && (
                           <small className="field-hint invalid">{sessionOccurrenceIssue}</small>
@@ -2593,9 +3422,13 @@ function SetupStudio() {
                         <span>Required room type</span>
                         <select
                           value={session.required_room_type}
-                          onChange={(event) =>
-                            updateRecord("sessions", session.id, "required_room_type", event.target.value)
-                          }
+                          onChange={async (event) => {
+                            updateRecord("sessions", session.id, "required_room_type", event.target.value);
+                            await persistSnapshotRecordUpdate("sessions", {
+                              ...session,
+                              required_room_type: event.target.value,
+                            });
+                          }}
                         >
                           <option value="">Any</option>
                           <option value="lecture">Lecture</option>
@@ -2608,14 +3441,17 @@ function SetupStudio() {
                         <select
                           multiple
                           value={session.linkedModuleIds || []}
-                          onChange={(event) =>
-                            updateRecord(
-                              "sessions",
-                              session.id,
-                              "linkedModuleIds",
-                              Array.from(event.target.selectedOptions, (option) => option.value)
-                            )
-                          }
+                          onChange={async (event) => {
+                            const linkedModuleIds = Array.from(
+                              event.target.selectedOptions,
+                              (option) => option.value
+                            );
+                            updateRecord("sessions", session.id, "linkedModuleIds", linkedModuleIds);
+                            await persistSnapshotRecordUpdate("sessions", {
+                              ...session,
+                              linkedModuleIds,
+                            });
+                          }}
                         >
                           {moduleOptions
                             .filter((module) => module.id !== session.moduleId)
@@ -2640,9 +3476,13 @@ function SetupStudio() {
                           <span>Specific room</span>
                           <select
                             value={session.specific_room_id}
-                            onChange={(event) =>
-                              updateRecord("sessions", session.id, "specific_room_id", event.target.value)
-                            }
+                            onChange={async (event) => {
+                              updateRecord("sessions", session.id, "specific_room_id", event.target.value);
+                              await persistSnapshotRecordUpdate("sessions", {
+                                ...session,
+                                specific_room_id: event.target.value,
+                              });
+                            }}
                           >
                             <option value="">Any matching room</option>
                             {roomOptions.map((room) => (
@@ -2659,6 +3499,7 @@ function SetupStudio() {
                             onChange={(event) =>
                               updateRecord("sessions", session.id, "required_lab_type", event.target.value)
                             }
+                            onBlur={() => persistSnapshotRecordUpdate("sessions", session)}
                           />
                         </label>
                         <label>
@@ -2675,20 +3516,25 @@ function SetupStudio() {
                                 event.target.value
                               )
                             }
+                            onBlur={() => persistSnapshotRecordUpdate("sessions", session)}
                           />
                         </label>
                         <label className="checkbox-field">
                           <input
                             type="checkbox"
                             checked={session.allow_parallel_rooms}
-                            onChange={(event) =>
+                            onChange={async (event) => {
                               updateRecord(
                                 "sessions",
                                 session.id,
                                 "allow_parallel_rooms",
                                 event.target.checked
-                              )
-                            }
+                              );
+                              await persistSnapshotRecordUpdate("sessions", {
+                                ...session,
+                                allow_parallel_rooms: event.target.checked,
+                              });
+                            }}
                           />
                           <span>Same-time parallel rooms for all split parts</span>
                         </label>
@@ -2700,6 +3546,7 @@ function SetupStudio() {
                             onChange={(event) =>
                               updateRecord("sessions", session.id, "notes", event.target.value)
                             }
+                            onBlur={() => persistSnapshotRecordUpdate("sessions", session)}
                           />
                         </label>
                       </div>
@@ -2711,7 +3558,13 @@ function SetupStudio() {
                         <SearchableMultiSelect
                           options={lecturerOptions}
                           selectedIds={session.lecturerIds}
-                          onChange={(ids) => updateRecord("sessions", session.id, "lecturerIds", ids)}
+                          onChange={async (ids) => {
+                            updateRecord("sessions", session.id, "lecturerIds", ids);
+                            await persistSnapshotRecordUpdate("sessions", {
+                              ...session,
+                              lecturerIds: ids,
+                            });
+                          }}
                           getLabel={(l) => l.name}
                           placeholder="Search lecturers..."
                         />
@@ -2734,7 +3587,13 @@ function SetupStudio() {
                         <SearchableMultiSelect
                           options={filteredCohortsByYear}
                           selectedIds={session.cohortIds}
-                          onChange={(ids) => updateRecord("sessions", session.id, "cohortIds", ids)}
+                          onChange={async (ids) => {
+                            updateRecord("sessions", session.id, "cohortIds", ids);
+                            await persistSnapshotRecordUpdate("sessions", {
+                              ...session,
+                              cohortIds: ids,
+                            });
+                          }}
                           getLabel={(c) => c.name || "Unnamed cohort"}
                           placeholder="Search cohorts..."
                         />
@@ -2853,7 +3712,7 @@ function SetupStudio() {
                   onClick={handleLoadEnrollmentImport}
                   disabled={importLoading || saving || !importProjection}
                 >
-                  Load Reviewed Import
+                  Materialize Reviewed Import
                 </button>
               </div>
 
@@ -2940,12 +3799,27 @@ function SetupStudio() {
                     </div>
                   )}
 
+                  {materializedImport && (
+                    <div className="schema-notes">
+                      <h3>Materialized Import Snapshot</h3>
+                      <div className="summary-grid">
+                        {Object.entries(materializedImport.counts || {}).map(([key, value]) => (
+                          <div key={key} className="summary-item">
+                            <span>{key.replace(/_/g, " ")}</span>
+                            <strong>{value}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="schema-notes">
                     <h3>How this import behaves</h3>
                     <ul>
                       <li>CSV `Year` is treated as the teaching year unless a review rule says otherwise.</li>
                       <li>Unresolved buckets stay visible and are excluded from the imported dataset by default.</li>
                       <li>Exact student memberships are preserved so shared students cannot be double-booked later.</li>
+                      <li>Materializing the import creates a normalized snapshot instead of overwriting the old flat setup dataset.</li>
                     </ul>
                   </div>
                 </>
@@ -3150,7 +4024,11 @@ function SetupStudio() {
               <div className="setup-add-modal-title-block">
                 <span className="setup-add-modal-kicker">Lecturer setup</span>
                 <h3>Add New Lecturer</h3>
-                <p>Enter the lecturer details and save directly into the current setup dataset.</p>
+                <p>
+                  {activeImportRunId
+                    ? "Enter the lecturer details and save them into the active import snapshot."
+                    : "Enter the lecturer details and save directly into the current setup dataset."}
+                </p>
               </div>
               <button type="button" className="setup-add-modal-close" onClick={() => setShowLecturerModal(false)}>
                 Close
@@ -3181,7 +4059,11 @@ function SetupStudio() {
             </div>
 
             <div className="setup-add-modal-footer">
-              <p>Save writes the lecturer to the current setup dataset.</p>
+              <p>
+                {activeImportRunId
+                  ? "Save writes the lecturer to the active import snapshot."
+                  : "Save writes the lecturer to the current setup dataset."}
+              </p>
               <div className="modal-actions">
                 <button type="button" className="ghost-btn" onClick={() => setShowLecturerModal(false)} disabled={saving}>
                   Cancel
@@ -3222,7 +4104,11 @@ function SetupStudio() {
               <div className="setup-add-modal-title-block">
                 <span className="setup-add-modal-kicker">Room setup</span>
                 <h3>Add New Room</h3>
-                <p>Capture the room details and save them directly into the current setup dataset.</p>
+                <p>
+                  {activeImportRunId
+                    ? "Capture the room details and save them into the active import snapshot."
+                    : "Capture the room details and save them directly into the current setup dataset."}
+                </p>
               </div>
               <button type="button" className="setup-add-modal-close" onClick={() => setShowRoomModal(false)}>
                 Close
@@ -3292,7 +4178,11 @@ function SetupStudio() {
             </div>
 
             <div className="setup-add-modal-footer">
-              <p>Save writes the room to the current setup dataset.</p>
+              <p>
+                {activeImportRunId
+                  ? "Save writes the room to the active import snapshot."
+                  : "Save writes the room to the current setup dataset."}
+              </p>
               <div className="modal-actions">
                 <button type="button" className="ghost-btn" onClick={() => setShowRoomModal(false)} disabled={saving}>
                   Cancel
@@ -3580,7 +4470,11 @@ function SetupStudio() {
               <div className="setup-add-modal-title-block">
                 <span className="setup-add-modal-kicker">Session setup</span>
                 <h3>Add New Session</h3>
-                <p>Enter the session details and save them directly into the current setup dataset.</p>
+                <p>
+                  {activeImportRunId
+                    ? "Enter the shared session details and save them into the active import snapshot."
+                    : "Enter the session details and save them directly into the current setup dataset."}
+                </p>
               </div>
               <button type="button" className="setup-add-modal-close" onClick={() => setShowSessionModal(false)}>
                 Close
@@ -3682,7 +4576,11 @@ function SetupStudio() {
             </div>
 
             <div className="setup-add-modal-footer">
-              <p>Save writes the session to the current setup dataset.</p>
+              <p>
+                {activeImportRunId
+                  ? "Save writes the shared session to the active import snapshot."
+                  : "Save writes the session to the current setup dataset."}
+              </p>
               <div className="modal-actions">
                 <button type="button" className="ghost-btn" onClick={() => setShowSessionModal(false)} disabled={saving}>
                   Cancel

@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.database import Base, engine
 from app.core.config import settings
+import app.models as _models  # noqa: F401
 from app.routes import timetable_v2
 
 

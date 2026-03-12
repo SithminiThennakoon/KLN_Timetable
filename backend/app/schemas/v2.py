@@ -320,3 +320,160 @@ class ImportProjectionResponse(BaseModel):
     allowed_attempts: list[str] = Field(default_factory=list)
     projection_summary: ImportProjectionSummary
     dataset: FullDatasetResponse
+
+
+class MaterializedImportCounts(BaseModel):
+    rows: int
+    students: int
+    enrollments: int
+    programmes: int
+    programme_paths: int
+    curriculum_modules: int
+    student_programme_contexts: int
+    student_module_memberships: int
+    attendance_groups: int
+
+
+class MaterializedImportResponse(BaseModel):
+    import_run_id: int
+    source_file: str
+    status: str
+    selected_academic_year: str | None = None
+    allowed_attempts: list[str] = Field(default_factory=list)
+    counts: MaterializedImportCounts
+
+
+class SnapshotLecturerInput(BaseModel):
+    client_key: str | None = Field(default=None, min_length=1)
+    name: str = Field(..., min_length=1)
+    email: str | None = None
+    notes: str | None = None
+
+
+class SnapshotLecturerResponse(BaseModel):
+    id: int
+    import_run_id: int
+    client_key: str | None = None
+    name: str
+    email: str | None = None
+    notes: str | None = None
+
+
+class SnapshotRoomInput(BaseModel):
+    client_key: str | None = Field(default=None, min_length=1)
+    name: str = Field(..., min_length=1)
+    capacity: int = Field(..., gt=0)
+    room_type: str = Field(..., min_length=1)
+    lab_type: str | None = None
+    location: str = Field(..., min_length=1)
+    year_restriction: int | None = Field(default=None, ge=1, le=6)
+    notes: str | None = None
+
+
+class SnapshotRoomResponse(BaseModel):
+    id: int
+    import_run_id: int
+    client_key: str | None = None
+    name: str
+    capacity: int
+    room_type: str
+    lab_type: str | None = None
+    location: str
+    year_restriction: int | None = None
+    notes: str | None = None
+
+
+class SnapshotSharedSessionInput(BaseModel):
+    client_key: str | None = Field(default=None, min_length=1)
+    name: str = Field(..., min_length=1)
+    session_type: str = Field(..., min_length=1)
+    duration_minutes: int = Field(..., gt=0, multiple_of=30)
+    occurrences_per_week: int = Field(..., gt=0, le=10)
+    required_room_type: str | None = None
+    required_lab_type: str | None = None
+    specific_room_id: int | None = Field(default=None, gt=0)
+    max_students_per_group: int | None = Field(default=None, gt=0)
+    allow_parallel_rooms: bool = False
+    notes: str | None = None
+    lecturer_ids: list[int] = Field(default_factory=list)
+    curriculum_module_ids: list[int] = Field(default_factory=list)
+    attendance_group_ids: list[int] = Field(default_factory=list)
+
+
+class SnapshotSharedSessionResponse(BaseModel):
+    id: int
+    import_run_id: int
+    client_key: str | None = None
+    name: str
+    session_type: str
+    duration_minutes: int
+    occurrences_per_week: int
+    required_room_type: str | None = None
+    required_lab_type: str | None = None
+    specific_room_id: int | None = None
+    max_students_per_group: int | None = None
+    allow_parallel_rooms: bool
+    notes: str | None = None
+    lecturer_ids: list[int] = Field(default_factory=list)
+    curriculum_module_ids: list[int] = Field(default_factory=list)
+    attendance_group_ids: list[int] = Field(default_factory=list)
+
+
+class SnapshotCompletionResponse(BaseModel):
+    import_run_id: int
+    lecturers: list[SnapshotLecturerResponse] = Field(default_factory=list)
+    rooms: list[SnapshotRoomResponse] = Field(default_factory=list)
+    shared_sessions: list[SnapshotSharedSessionResponse] = Field(default_factory=list)
+
+
+class ImportWorkspaceProgrammeResponse(BaseModel):
+    id: int
+    code: str
+    name: str
+    duration_years: int | None = None
+    intake_label: str | None = None
+
+
+class ImportWorkspaceProgrammePathResponse(BaseModel):
+    id: int
+    programme_id: int
+    study_year: int
+    code: str
+    name: str
+    is_common: bool = False
+
+
+class ImportWorkspaceCurriculumModuleResponse(BaseModel):
+    id: int
+    code: str
+    name: str
+    subject_name: str
+    nominal_year: int | None = None
+    semester_bucket: int | None = None
+    is_full_year: bool = False
+
+
+class ImportWorkspaceAttendanceGroupResponse(BaseModel):
+    id: int
+    programme_id: int | None = None
+    programme_path_id: int | None = None
+    academic_year: str | None = None
+    study_year: int | None = None
+    label: str
+    student_count: int
+
+
+class ImportWorkspaceResponse(BaseModel):
+    import_run_id: int
+    selected_academic_year: str | None = None
+    programmes: list[ImportWorkspaceProgrammeResponse] = Field(default_factory=list)
+    programme_paths: list[ImportWorkspaceProgrammePathResponse] = Field(default_factory=list)
+    curriculum_modules: list[ImportWorkspaceCurriculumModuleResponse] = Field(
+        default_factory=list
+    )
+    attendance_groups: list[ImportWorkspaceAttendanceGroupResponse] = Field(
+        default_factory=list
+    )
+    lecturers: list[SnapshotLecturerResponse] = Field(default_factory=list)
+    rooms: list[SnapshotRoomResponse] = Field(default_factory=list)
+    shared_sessions: list[SnapshotSharedSessionResponse] = Field(default_factory=list)
