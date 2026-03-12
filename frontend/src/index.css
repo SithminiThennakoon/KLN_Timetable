@@ -505,6 +505,114 @@ a {
   gap: 14px;
 }
 
+.module-search-wrap {
+  margin-bottom: 14px;
+  display: flex;
+  justify-content: center;
+}
+
+.module-search-input {
+  width: 100%;
+  max-width: 400px;
+  border-radius: 8px;
+  border: 2px solid var(--input-border);
+  padding: 12px 14px;
+  background: var(--input-bg);
+  color: var(--ink-900);
+  font-size: 1rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.module-search-input:focus {
+  outline: none;
+  border-color: var(--accent-focus);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+}
+
+.module-search-input::placeholder {
+  color: var(--helper-text);
+}
+
+.list-see-more-wrap {
+  display: flex;
+  justify-content: center;
+  padding-top: 6px;
+}
+
+.cohort-year-filter {
+  border-radius: 8px;
+  border: 2px solid var(--input-border);
+  padding: 10px 14px;
+  background: var(--input-bg);
+  color: var(--ink-900);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cohort-year-select {
+  border-radius: 4px;
+  border: 1px solid var(--input-border);
+  padding: 4px 8px;
+  background: var(--input-bg);
+  color: var(--ink-900);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.session-cohort-year-filter {
+  margin-bottom: 10px;
+}
+
+.session-cohort-year-filter select {
+  border-radius: 6px;
+  border: 2px solid var(--input-border);
+  padding: 8px 12px;
+  background: var(--input-bg);
+  color: var(--ink-900);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cohort-year-filter:focus {
+  outline: none;
+  border-color: var(--accent-focus);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+}
+
+.list-see-more-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--btn-primary-border);
+  font-size: 0.96rem;
+  font-weight: 800;
+  padding: 8px 14px;
+  border-radius: 999px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.list-see-more-btn:hover {
+  background: color-mix(in srgb, var(--btn-primary-bg) 10%, transparent);
+}
+
+.list-see-more-arrow {
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg) translateY(-1px);
+  transition: transform 0.15s ease;
+}
+
+.list-see-more-arrow.is-open {
+  transform: rotate(-135deg) translateY(-1px);
+}
+
 .editor-card,
 .future-card {
   border: none;
@@ -615,8 +723,25 @@ a {
 .checkbox-field {
   display: flex !important;
   align-items: center;
-  gap: 10px;
+  justify-content: flex-start;
+  gap: 6px;
   padding-top: 24px;
+  white-space: nowrap;
+}
+
+.checkbox-field input[type="checkbox"] {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border-radius: 4px;
+  flex: 0 0 auto;
+}
+
+.checkbox-field span {
+  display: inline;
+  line-height: 1.2;
 }
 
 .chip-row,
@@ -1267,13 +1392,13 @@ select {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  transition: filter 0.1s ease, z-index 0s;
+  transition: background-color 0.12s ease, box-shadow 0.12s ease, z-index 0s;
   z-index: 2;
   border-left: 3px solid var(--cal-entry-border-left);
 }
 
 .week-cal-entry:hover {
-  filter: brightness(1.12);
+  box-shadow: 0 8px 18px var(--shadow);
   z-index: 8;
 }
 
@@ -1757,7 +1882,6 @@ select {
   inset: 0;
   z-index: 1000;
   background: var(--overlay-bg);
-  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1768,7 +1892,7 @@ select {
   background: linear-gradient(160deg, var(--modal-bg-from), var(--modal-bg-to));
   border: 1px solid var(--line);
   border-radius: 18px;
-  box-shadow: 0 32px 80px var(--shadow-modal);
+  box-shadow: 0 20px 44px var(--shadow-modal);
   width: 100%;
   max-width: 520px;
   max-height: 90vh;
@@ -2771,129 +2895,269 @@ select {
   }
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   Setup Studio — Phase 2/3 additions
-   ───────────────────────────────────────────────────────────────────────────── */
+.modal-card h3 {
+  margin: 0 0 20px;
+  font-size: 1.25rem;
+  color: var(--ink-900);
+}
 
-/* ── Inline delete confirmation strip ──────────────────────────────────────── */
-.confirm-strip {
-  display: inline-flex;
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.setup-add-modal {
+  max-width: 640px;
+  border-radius: 24px;
+  border: 1px solid color-mix(in srgb, var(--line) 74%, white 26%);
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--btn-primary-bg) 12%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--modal-bg-from) 92%, white 8%), var(--modal-bg-to));
+  overflow: hidden;
+}
+
+.setup-add-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 24px 18px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.setup-add-modal-title-block {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.setup-add-modal-kicker {
+  width: fit-content;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--btn-primary-bg) 12%, white 88%);
+  border: 1px solid color-mix(in srgb, var(--btn-primary-border) 28%, white 72%);
+  color: var(--btn-primary-border);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.setup-add-modal-header h3 {
+  margin: 0;
+  font-size: 1.6rem;
+  line-height: 1.1;
+}
+
+.setup-add-modal-header p,
+.setup-add-modal-footer p {
+  margin: 0;
+  color: var(--helper-text);
+  line-height: 1.5;
+}
+
+.setup-add-modal-close {
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--input-bg) 88%, white 12%);
+  color: var(--ink-900);
+  font-weight: 700;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.setup-add-modal-close:hover {
+  background: color-mix(in srgb, var(--btn-primary-bg) 8%, white 92%);
+  border-color: var(--btn-primary-border);
+  transform: translateY(-1px);
+}
+
+.setup-add-modal-body {
+  padding: 22px 24px 0;
+}
+
+.setup-add-modal .form-grid {
+  gap: 16px;
+}
+
+.setup-add-modal .form-grid label {
+  gap: 10px;
+}
+
+.setup-add-modal .form-grid input,
+.setup-add-modal .form-grid select {
+  min-height: 52px;
+  border-radius: 14px;
+  border-color: color-mix(in srgb, var(--input-border) 80%, white 20%);
+  background: color-mix(in srgb, var(--input-bg) 94%, white 6%);
+}
+
+.setup-add-modal-footer {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 24px 24px;
+  margin-top: 22px;
+  border-top: 1px solid var(--line-soft);
+  background: color-mix(in srgb, var(--modal-bg-to) 84%, white 16%);
+}
+
+.setup-add-modal .modal-actions {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .setup-add-modal {
+    max-width: 100%;
+  }
+
+  .setup-add-modal-header,
+  .setup-add-modal-footer {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .setup-add-modal-body {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .setup-add-modal-header,
+  .setup-add-modal-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .setup-add-modal .modal-actions {
+    justify-content: stretch;
+  }
+
+  .setup-add-modal .modal-actions button,
+  .setup-add-modal-close {
+    width: 100%;
+  }
+}
+
+.searchable-multi-select {
+  border: 2px solid var(--input-border);
+  border-radius: 8px;
+  background: var(--input-bg);
+}
+
+.sms-chips {
+  display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 6px 10px;
-  background: var(--color-error-bg, #fff5f5);
-  border: 1px solid var(--color-error-border, #feb2b2);
-  border-radius: 8px;
-  font-size: 0.85rem;
+  padding: 10px;
+  background: color-mix(in srgb, var(--btn-primary-bg) 8%, transparent);
+  border-bottom: 1px solid var(--line-soft);
+  min-height: 40px;
 }
 
-.confirm-strip-msg {
-  color: var(--color-text, #1a1a1a);
-}
-
-.confirm-strip-note {
-  color: var(--color-text-muted, #6b7280);
-}
-
-.confirm-strip-yes {
-  font-size: 0.8rem;
-  padding: 3px 10px;
-}
-
-.confirm-strip-cancel {
-  font-size: 0.8rem;
-  padding: 3px 10px;
-}
-
-/* ── Empty state with an inline action button ───────────────────────────────── */
-.empty-state-with-action {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 28px 16px;
-  text-align: center;
-}
-
-/* ── editor-card header row (label + badge) ─────────────────────────────────── */
-.editor-card-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.editor-card-label {
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: var(--color-text, #1a1a1a);
-}
-
-/* ── Session count badge on tag-chip ─────────────────────────────────────────── */
-.tag-chip-count {
-  background: var(--color-primary-muted, #e0e7ff);
-  color: var(--color-primary, #4f46e5);
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 99px;
-}
-
-/* ── Rooms two-row grid ──────────────────────────────────────────────────────── */
-.rooms-primary-row {
-  grid-template-columns: minmax(140px, 2fr) minmax(140px, 2fr) 100px;
-}
-
-.rooms-secondary-row {
-  grid-template-columns: 140px 160px 120px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--color-border-subtle, #e5e7eb);
-}
-
-/* ── Advanced options accordion toggle ───────────────────────────────────────── */
-.advanced-toggle {
+.sms-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background: none;
-  border: none;
-  padding: 6px 0;
-  cursor: pointer;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--btn-primary-bg);
+  color: white;
+  border-radius: 4px;
   font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--color-text-muted, #6b7280);
-  margin-top: 4px;
-}
-
-.advanced-toggle:hover {
-  color: var(--color-text, #1a1a1a);
-}
-
-/* ── Cohort group header in session checklist ────────────────────────────────── */
-.group-header-chip {
-  display: inline-block;
-  font-size: 0.78rem;
   font-weight: 600;
-  color: var(--color-text-muted, #6b7280);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 2px 0;
-  border-bottom: 1px solid var(--color-border-subtle, #e5e7eb);
+}
+
+.sms-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  background: rgba(255, 255, 255, 0.3);
+  color: white;
+  border-radius: 50%;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sms-chip-remove:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.sms-search {
   width: 100%;
-  margin-bottom: 4px;
+  padding: 10px 12px;
+  border: none;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+  font-size: 0.95rem;
+  color: var(--ink-900);
+  cursor: text;
 }
 
-/* ── Session type accent left-border ─────────────────────────────────────────── */
-.session-type-accent {
-  border-left: 4px solid transparent;
-  padding-left: 12px;
+.sms-search:focus {
+  outline: none;
+  background: color-mix(in srgb, var(--accent-focus) 5%, transparent);
+  cursor: text;
 }
 
-.session-accent-lecture   { border-left-color: #6366f1; }
-.session-accent-tutorial  { border-left-color: #0ea5e9; }
-.session-accent-seminar   { border-left-color: #10b981; }
-.session-accent-practical { border-left-color: #f59e0b; }
-.session-accent-lab       { border-left-color: #ef4444; }
-.session-accent-other     { border-left-color: #9ca3af; }
+.sms-search::placeholder {
+  color: var(--helper-text);
+}
+
+.sms-dropdown {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--input-bg);
+  border-top: 1px solid var(--line-soft);
+}
+
+.sms-dropdown:hover {
+  background: color-mix(in srgb, var(--btn-primary-bg) 4%, var(--input-bg));
+}
+
+.sms-empty {
+  padding: 12px;
+  text-align: center;
+  color: var(--helper-text);
+  font-size: 0.9rem;
+}
+
+.sms-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.sms-option:hover {
+  background: color-mix(in srgb, var(--btn-primary-bg) 10%, transparent);
+}
+
+.sms-option input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--btn-primary-border);
+}
+
+.sms-option span {
+  font-size: 0.9rem;
+  color: var(--ink-900);
+}

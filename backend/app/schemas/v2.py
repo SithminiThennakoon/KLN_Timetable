@@ -58,6 +58,7 @@ class StudentGroupInput(BaseModel):
     year: int = Field(..., ge=1, le=6)
     name: str = Field(..., min_length=1)
     size: int = Field(..., gt=0)
+    student_hashes: list[str] = Field(default_factory=list)
 
 
 class ModuleInput(BaseModel):
@@ -245,3 +246,77 @@ class ExportResponse(BaseModel):
     filename: str
     content_type: str
     content: str
+
+
+class ImportAnalysisSampleRow(BaseModel):
+    row_number: int
+    course_code: str
+    stream: str
+    year: str
+    academic_year: str
+    batch: str
+    course_path_no: str
+    student_hash: str
+    anomaly_codes: list[str] = Field(default_factory=list)
+
+
+class ImportAnalysisBucket(BaseModel):
+    bucket_type: str
+    bucket_key: str
+    description: str
+    status: str
+    row_count: int
+    sample_rows: list[ImportAnalysisSampleRow] = Field(default_factory=list)
+
+
+class ImportAnalysisSummary(BaseModel):
+    total_rows: int
+    valid_rows: int
+    valid_exception_rows: int
+    ambiguous_rows: int
+    invalid_rows: int
+    included_rows: int
+    excluded_rows: int
+    unique_students: int
+    review_bucket_count: int
+
+
+class ImportAnalysisResponse(BaseModel):
+    source_file: str
+    summary: ImportAnalysisSummary
+    anomaly_counts: dict[str, int] = Field(default_factory=dict)
+    semester_digit_counts: dict[str, int] = Field(default_factory=dict)
+    buckets: list[ImportAnalysisBucket] = Field(default_factory=list)
+
+
+class ImportReviewRuleInput(BaseModel):
+    bucket_type: str = Field(..., min_length=1)
+    bucket_key: str = Field(..., min_length=1)
+    action: Literal["accept_exception", "exclude", "treat_as_common"]
+    label: str | None = None
+
+
+class ImportProjectionRequest(BaseModel):
+    rules: list[ImportReviewRuleInput] = Field(default_factory=list)
+    target_academic_year: str | None = None
+    allowed_attempts: list[str] = Field(default_factory=lambda: ["1"])
+
+
+class ImportProjectionSummary(BaseModel):
+    projected_rows: int
+    excluded_rows: int
+    degrees: int
+    paths: int
+    lecturers: int
+    rooms: int
+    student_groups: int
+    modules: int
+    sessions: int
+
+
+class ImportProjectionResponse(BaseModel):
+    analysis: ImportAnalysisResponse
+    target_academic_year: str | None = None
+    allowed_attempts: list[str] = Field(default_factory=list)
+    projection_summary: ImportProjectionSummary
+    dataset: FullDatasetResponse

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { timetableStudioService } from "../services/timetableStudioService";
 
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
@@ -373,7 +373,7 @@ async function exportPng(view, entryMap, selectedDay) {
 
 // ─── Session Detail Modal ──────────────────────────────────────────────────────
 
-function SessionModal({ entry, onClose }) {
+function SessionModalInner({ entry, onClose }) {
   const overlayRef = useRef(null);
 
   useEffect(() => {
@@ -381,6 +381,15 @@ function SessionModal({ entry, onClose }) {
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
   }, [onClose]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || typeof window === "undefined") return;
+    const startedAt = window.__viewStudioSessionClickStartedAt;
+    if (!startedAt) return;
+    const elapsed = performance.now() - startedAt;
+    console.debug(`[ViewStudio] Session modal visible in ${elapsed.toFixed(1)}ms`);
+    window.__viewStudioSessionClickStartedAt = 0;
+  }, []);
 
   const handleOverlayClick = (e) => {
     if (e.target === overlayRef.current) onClose();
@@ -462,9 +471,11 @@ function SessionModal({ entry, onClose }) {
   );
 }
 
+const SessionModal = memo(SessionModalInner);
+
 // ─── Slot Popover ──────────────────────────────────────────────────────────────
 
-function SlotPopover({ entries, anchorStyle, onSelectEntry, onClose }) {
+function SlotPopoverInner({ entries, anchorStyle, onSelectEntry, onClose }) {
   const popoverRef = useRef(null);
 
   useEffect(() => {
@@ -516,9 +527,11 @@ function SlotPopover({ entries, anchorStyle, onSelectEntry, onClose }) {
   );
 }
 
+const SlotPopover = memo(SlotPopoverInner);
+
 // ─── Admin Day Calendar (multi-lane, horizontally scrollable) ─────────────────
 
-function AdminDayCalendar({ entries, selectedDay, minuteHeight, onEntryClick }) {
+function AdminDayCalendarInner({ entries, selectedDay, minuteHeight, onEntryClick }) {
   const hourCount = (calendarEndMinute - calendarStartMinute) / 60;
   const totalHeight = (calendarEndMinute - calendarStartMinute) * minuteHeight;
   const timeColWidth = 52;
@@ -666,9 +679,11 @@ function AdminDayCalendar({ entries, selectedDay, minuteHeight, onEntryClick }) 
   );
 }
 
+const AdminDayCalendar = memo(AdminDayCalendarInner);
+
 // ─── Day Picker ────────────────────────────────────────────────────────────────
 
-function DayPicker({ selectedDay, onSelectDay, dayLoad }) {
+function DayPickerInner({ selectedDay, onSelectDay, dayLoad }) {
   return (
     <div className="day-picker" role="tablist" aria-label="Select day">
       {days.map((day) => {
@@ -694,9 +709,11 @@ function DayPicker({ selectedDay, onSelectDay, dayLoad }) {
   );
 }
 
+const DayPicker = memo(DayPickerInner);
+
 // ─── Day Calendar Component ────────────────────────────────────────────────────
 
-function DayCalendar({ entries, selectedDay, minuteHeight, onEntryClick }) {
+function DayCalendarInner({ entries, selectedDay, minuteHeight, onEntryClick }) {
   const hourCount = (calendarEndMinute - calendarStartMinute) / 60;
   const totalHeight = (calendarEndMinute - calendarStartMinute) * minuteHeight;
   const timeColWidth = 52;
@@ -861,9 +878,11 @@ function DayCalendar({ entries, selectedDay, minuteHeight, onEntryClick }) {
   );
 }
 
+const DayCalendar = memo(DayCalendarInner);
+
 // ─── Agenda Component ──────────────────────────────────────────────────────────
 
-function AgendaView({ agendaDays, onEntryClick }) {
+function AgendaViewInner({ agendaDays, onEntryClick }) {
   return (
     <div className="agenda-view">
       {agendaDays.map(({ day, entries }) => (
@@ -927,6 +946,8 @@ function AgendaView({ agendaDays, onEntryClick }) {
     </div>
   );
 }
+
+const AgendaView = memo(AgendaViewInner);
 
 // ─── Main Page Component ───────────────────────────────────────────────────────
 
@@ -1048,6 +1069,10 @@ function ViewStudio() {
   };
 
   const handleEntryClick = useCallback((entry) => {
+    if (import.meta.env.DEV && typeof window !== "undefined") {
+      window.__viewStudioSessionClickStartedAt = performance.now();
+      console.debug(`[ViewStudio] Session click received for ${entry.module_code} ${entry.session_name}`);
+    }
     setModalEntry(entry);
   }, []);
 

@@ -29,6 +29,7 @@ from app.models.v2 import (
     V2TimetableSolution,
 )
 from app.schemas.v2 import ExportResponse, SoftConstraintOption
+from app.services.csv_import_analysis import decode_student_hashes, encode_student_hashes
 from app.services.enrollment_inference import (
     build_realistic_demo_dataset_from_enrollment_csv,
 )
@@ -140,6 +141,7 @@ class SessionTask:
     specific_room_id: int | None
     lecturer_ids: tuple[int, ...]
     student_group_ids: tuple[int, ...]
+    student_membership_keys: tuple[str, ...]
     student_count: int
     root_session_id: int
     bundle_key: tuple[int, int] | None
@@ -355,6 +357,15 @@ def _build_tasks(db: Session) -> list[SessionTask]:
     for session in sessions:
         lecturer_ids = tuple(sorted(int(item.id) for item in session.lecturers))
         split_assignments = _build_split_assignments(session)
+        student_membership_keys = tuple(
+            sorted(
+                {
+                    student_hash
+                    for group in session.student_groups
+                    for student_hash in decode_student_hashes(group.student_hashes_json)
+                }
+            )
+        )
         lecturer_chunks = (
             _partition_lecturers(lecturer_ids, len(split_assignments))
             if session.allow_parallel_rooms
@@ -382,6 +393,7 @@ def _build_tasks(db: Session) -> list[SessionTask]:
                         else None,
                         lecturer_ids=assigned_lecturers,
                         student_group_ids=split.student_group_ids,
+                        student_membership_keys=student_membership_keys,
                         student_count=split.student_count,
                         root_session_id=int(session.id),
                         bundle_key=(int(session.id), occurrence_index)
@@ -567,6 +579,7 @@ def _estimate_candidate_sizing(
     for day in DAY_ORDER:
         for minute in range(START_MINUTE, END_MINUTE, 30):
             blockers_by_group: dict[int, int] = defaultdict(int)
+            blockers_by_student: dict[str, int] = defaultdict(int)
             for task_index, task in enumerate(tasks):
                 overlaps = 0
                 for _, candidate_day, candidate_start in candidates_by_task[task_index]:
@@ -579,7 +592,9 @@ def _estimate_candidate_sizing(
                     continue
                 for student_group_id in task.student_group_ids:
                     blockers_by_group[student_group_id] += overlaps
-            group_slot_blocker_count += sum(blockers_by_group.values())
+                for student_key in task.student_membership_keys:
+                    blockers_by_student[student_key] += overlaps
+            group_slot_blocker_count += sum(blockers_by_group.values()) + sum(blockers_by_student.values())
 
     return CandidateSizing(
         assignment_variable_count=assignment_variable_count,
@@ -1081,6 +1096,7 @@ def _solve_internal_legacy(
         for minute in range(START_MINUTE, END_MINUTE, 30):
             lecturer_blockers: dict[int, list[cp_model.IntVar]] = defaultdict(list)
             student_blockers: dict[int, list[cp_model.IntVar]] = defaultdict(list)
+            student_membership_blockers: dict[str, list[cp_model.IntVar]] = defaultdict(list)
             for task_index, task in enumerate(tasks):
                 for room_id, candidate_day, candidate_start in candidates_by_task[
                     task_index
@@ -1101,11 +1117,22 @@ def _solve_internal_legacy(
                                 student_blockers[student_group_id].append(bundle_var)
                                 continue
                         student_blockers[student_group_id].append(var)
+                    for student_key in task.student_membership_keys:
+                        if task.bundle_key is not None:
+                            bundle_var = bundle_slot_vars.get((task.bundle_key, candidate_day, candidate_start))
+                            if bundle_var is not None:
+                                student_membership_blockers[student_key].append(bundle_var)
+                                continue
+                        student_membership_blockers[student_key].append(var)
             for vars_for_lecturer in lecturer_blockers.values():
                 if vars_for_lecturer:
                     model.Add(sum(vars_for_lecturer) <= 1)
             for blockers_for_group in student_blockers.values():
                 unique_vars = list(dict.fromkeys(blockers_for_group))
+                if unique_vars:
+                    model.Add(sum(unique_vars) <= 1)
+            for blockers_for_student in student_membership_blockers.values():
+                unique_vars = list(dict.fromkeys(blockers_for_student))
                 if unique_vars:
                     model.Add(sum(unique_vars) <= 1)
 
@@ -1701,6 +1728,7 @@ def _solve_internal_decomposed(
             for minute in range(START_MINUTE, END_MINUTE, 30):
                 lecturer_blockers: dict[int, list[cp_model.IntVar]] = defaultdict(list)
                 student_blockers: dict[int, list[cp_model.IntVar]] = defaultdict(list)
+                student_membership_blockers: dict[str, list[cp_model.IntVar]] = defaultdict(list)
                 singleton_room_blockers: dict[int, list[cp_model.IntVar]] = defaultdict(list)
                 room_pool_blockers: dict[tuple[str, str | None], list[cp_model.IntVar]] = defaultdict(list)
                 for task_index, task in enumerate(tasks):
@@ -1714,6 +1742,8 @@ def _solve_internal_decomposed(
                             lecturer_blockers[lecturer_id].append(var)
                         for student_group_id in task.student_group_ids:
                             student_blockers[student_group_id].append(var)
+                        for student_key in task.student_membership_keys:
+                            student_membership_blockers[student_key].append(var)
                         eligible_rooms = eligible_rooms_by_task[task_index]
                         if len(eligible_rooms) == 1:
                             singleton_room_blockers[eligible_rooms[0]].append(var)
@@ -1725,6 +1755,10 @@ def _solve_internal_decomposed(
                         model.Add(sum(dict.fromkeys(vars_for_lecturer)) <= 1)
                 for blockers_for_group in student_blockers.values():
                     unique_vars = list(dict.fromkeys(blockers_for_group))
+                    if unique_vars:
+                        model.Add(sum(unique_vars) <= 1)
+                for blockers_for_student in student_membership_blockers.values():
+                    unique_vars = list(dict.fromkeys(blockers_for_student))
                     if unique_vars:
                         model.Add(sum(unique_vars) <= 1)
                 for blockers_for_room in singleton_room_blockers.values():
@@ -2708,6 +2742,7 @@ def read_dataset(db: Session) -> dict:
                 "year": int(item.year),
                 "name": item.name,
                 "size": int(item.size),
+                "student_hashes": decode_student_hashes(item.student_hashes_json),
             }
             for item in student_groups
         ],
@@ -2855,6 +2890,7 @@ def replace_dataset(db: Session, payload) -> dict:
             year=item.year,
             name=item.name,
             size=item.size,
+            student_hashes_json=encode_student_hashes(item.student_hashes),
         )
         db.add(row)
         db.flush()

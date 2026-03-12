@@ -13,8 +13,16 @@ from app.schemas.v2 import (
     FullDatasetResponse,
     GenerationRequest,
     GenerationResponse,
+    ImportAnalysisResponse,
+    ImportProjectionRequest,
+    ImportProjectionResponse,
     LookupResponse,
     ViewResponse,
+)
+from app.services.csv_import_analysis import (
+    analyze_enrollment_csv,
+    build_reviewed_import_projection,
+    parse_review_rules,
 )
 from app.services.timetable_v2 import (
     build_demo_dataset,
@@ -61,6 +69,44 @@ def load_demo_dataset(
 @router.get("/lookups", response_model=LookupResponse)
 def get_lookups(db: Session = Depends(get_db)):
     return lookup_options(db)
+
+
+@router.get("/imports/enrollment-analysis", response_model=ImportAnalysisResponse)
+def get_enrollment_import_analysis():
+    try:
+        return analyze_enrollment_csv()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/imports/enrollment-projection", response_model=ImportProjectionResponse)
+def build_enrollment_projection(payload: ImportProjectionRequest):
+    try:
+        return build_reviewed_import_projection(
+            rules=parse_review_rules([rule.model_dump() for rule in payload.rules]),
+            target_academic_year=payload.target_academic_year,
+            allowed_attempts=tuple(payload.allowed_attempts),
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/imports/enrollment-load", response_model=DatasetResponse)
+def load_enrollment_projection(
+    payload: ImportProjectionRequest,
+    db: Session = Depends(get_db),
+):
+    try:
+        projection = build_reviewed_import_projection(
+            rules=parse_review_rules([rule.model_dump() for rule in payload.rules]),
+            target_academic_year=payload.target_academic_year,
+            allowed_attempts=tuple(payload.allowed_attempts),
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    summary = replace_dataset(db, DatasetUpsertRequest(**projection["dataset"]))
+    return {"summary": DatasetSummary(**summary)}
 
 
 @router.post("/generate", response_model=GenerationResponse)
