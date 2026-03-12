@@ -33,11 +33,12 @@ const STEPS = [
         <div className="ob-info-box">
           <strong>Three pages, in order.</strong> Start with Setup to enter all faculty data.
           Then Generate to run the solver and find valid timetables. Then View to inspect,
-          filter by lecturer or degree, and export the final schedule.
+          filter by lecturer or by degree plus path/cohort for students, and export the final schedule.
         </div>
         <p className="ob-note">
-          Everything is saved to the backend as you go. You can close this tutorial at any time
-          and reopen it using the <strong>Help</strong> button in the top navigation bar.
+          The tutorial can be closed at any time and reopened using the <strong>?</strong>{" "}
+          help icon in the top navigation bar. Your setup changes are only persisted when you click{" "}
+          <strong>Save Dataset</strong>.
         </p>
       </div>
     ),
@@ -73,8 +74,8 @@ const STEPS = [
         </div>
         <div className="ob-tip-box">
           <strong>Shortcut:</strong> Use <em>Load Realistic Demo</em> or <em>Load Tuned Demo</em> at
-          the top of the Setup page to pre-fill everything with real Faculty of Science data. This is
-          the fastest way to see a working timetable.
+          the top of the Setup page to load a ready-made demo dataset into the wizard. This replaces
+          the current setup state shown on the page and is the fastest way to see a working timetable.
         </div>
       </div>
     ),
@@ -267,9 +268,9 @@ const STEPS = [
             <div className="ob-field-row">
               <span className="ob-field-name">Year restriction</span>
               <span className="ob-field-desc">
-                Optional. If set to <code>1</code>, only Year 1 sessions are placed here. Use
-                this for rooms physically allocated to a specific year group. Leave blank for
-                unrestricted rooms.
+                Optional. Stored with the dataset, but the current solver does not enforce it
+                during timetable generation. Use it as reference data only unless solver support
+                is added later.
               </span>
             </div>
           </div>
@@ -392,8 +393,9 @@ const STEPS = [
             <div className="ob-field-row">
               <span className="ob-field-name">Full-year module</span>
               <span className="ob-field-desc">
-                Check this if the module runs across both semesters. Sessions under a full-year
-                module are included in both semester timetables.
+                Check this if the module runs across both semesters. It is stored on the module,
+                but it is not a substitute for entering the correct sessions for the semester you
+                are scheduling.
               </span>
             </div>
           </div>
@@ -439,9 +441,10 @@ const STEPS = [
             <div className="ob-field-row">
               <span className="ob-field-name">Type</span>
               <span className="ob-field-desc">
-                Free-text session type. Conventional values: <code>lecture</code>,{" "}
-                <code>tutorial</code>, <code>lab</code>. The timetable card colour (blue vs teal)
-                is driven by whether the session name or type contains "lab".
+                Choose one of the supported types: <code>lecture</code>, <code>tutorial</code>,{" "}
+                <code>seminar</code>, <code>practical</code>, <code>lab</code>, or{" "}
+                <code>laboratory</code>. Use the closest real teaching mode — the setup page no
+                longer accepts arbitrary free-text values.
               </span>
             </div>
             <div className="ob-field-row">
@@ -449,7 +452,7 @@ const STEPS = [
               <span className="ob-field-desc">
                 Length in minutes. Must be a positive multiple of 30. The solver works in 30-minute
                 slots. Common values: <code>60</code> (1 h), <code>90</code> (1.5 h),{" "}
-                <code>120</code> (2 h). Labs are typically 120 minutes.
+                <code>120</code> (2 h). Lab-style sessions must be entered as one <code>180</code> minute block.
               </span>
             </div>
             <div className="ob-field-row">
@@ -485,9 +488,9 @@ const STEPS = [
             <div className="ob-field-row">
               <span className="ob-field-name">Specific room</span>
               <span className="ob-field-desc">
-                Pin this session to one particular room (overrides room type matching). Use only
-                when a session must always happen in a specific space — e.g. a dedicated computing
-                lab.
+                Pin this session to one particular room. Use only when a session must always happen
+                in a specific space — e.g. a dedicated computing lab. The room still has to match
+                the session's room type, lab type, and capacity requirements.
               </span>
             </div>
             <div className="ob-field-row">
@@ -603,15 +606,18 @@ const STEPS = [
       <div className="ob-step-body">
         <p className="ob-lead">
           Once the dataset is saved, go to the <strong>Generate</strong> page. The solver will
-          enumerate every valid weekly timetable that satisfies all hard constraints — no room
-          clashes, no lecturer double-bookings, no cohort conflicts, all room capacities respected.
+          search for valid weekly timetables that satisfy all hard constraints — no room clashes,
+          no lecturer double-bookings, no cohort conflicts, all room capacities respected. Large
+          runs are bounded by time and resource limits, so the result may be a complete enumeration,
+          a capped preview set, or a resource-limited outcome.
         </p>
 
         <div className="ob-field-group">
           <h4>Nice-to-have (soft) constraints</h4>
           <p className="ob-sub">
-            These are optional preferences that filter or rank solutions. They do not invalidate
-            timetables on their own — they reduce a large solution set to a more manageable one.
+            These are optional preferences that narrow or reshape the search. They are not hard
+            timetable rules, but some selected combinations may still produce no solutions within
+            the current run. In that case the Generate page suggests viable subsets.
           </p>
           <div className="ob-constraint-list">
             {[
@@ -634,15 +640,15 @@ const STEPS = [
 
         <div className="ob-tip-box">
           <strong>Start without constraints</strong> to see how many valid timetables exist.
-          If the count is very high (100+), add constraints to narrow it down. If no solutions
-          are found with your constraints, the solver suggests which subset of them can be
-          satisfied together.
+          If the count is very high (100+), add constraints to narrow it down. If the selected set
+          cannot be satisfied together, the Generate page suggests better combinations and keeps
+          preview solutions for review.
         </div>
 
         <div className="ob-field-group">
           <h4>After generation</h4>
           <ul className="ob-checklist">
-            <li>The result shows total solutions found and up to 5 preview solutions.</li>
+            <li>The result shows total solutions found and a stored preview subset.</li>
             <li>Click <em>Set as Default</em> on the solution you want to use in Views.</li>
             <li>You can re-run generation as many times as you like — old preview solutions are replaced.</li>
           </ul>
@@ -676,8 +682,9 @@ const STEPS = [
         </div>
         <div className="ob-mode-card ob-mode-card-wide">
           <strong>Student</strong>
-          <p>Timetable for a specific degree and path. Select the degree, then the path (Year 1,
-          Year 2, etc.), then click Apply. This is the view to share with students.</p>
+          <p>Timetable for a specific degree and saved path/cohort option. Select the degree,
+          then choose the matching path option shown by the dataset, then click Apply. This is the
+          view to share with students.</p>
         </div>
 
         <div className="ob-field-group">
@@ -722,7 +729,7 @@ const STEPS = [
             <div>
               <strong>Duration must be a multiple of 30</strong>
               <p>The solver uses 30-minute time slots. 45-minute sessions are not supported.
-              Use 60 or 90 minutes.</p>
+              Use 60 or 90 minutes. Lab-style sessions must be entered as one 180-minute block.</p>
             </div>
           </div>
           <div className="ob-gotcha">
@@ -799,10 +806,21 @@ function ProgressDots({ total, current, onGoTo }) {
   );
 }
 
+function getFocusableElements(container) {
+  if (!container) return [];
+  return Array.from(
+    container.querySelectorAll(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )
+  ).filter((element) => !element.hasAttribute("disabled") && element.getAttribute("aria-hidden") !== "true");
+}
+
 // ─── Main modal ────────────────────────────────────────────────────────────────
 
-function OnboardingTutorial({ onClose }) {
-  const [current, setCurrent] = useState(0);
+function OnboardingTutorial({ onClose, onComplete, initialStep = 0, onStepChange }) {
+  const [current, setCurrent] = useState(() =>
+    Math.max(0, Math.min(initialStep, STEPS.length - 1))
+  );
   const modalRef = useRef(null);
   const contentRef = useRef(null);
 
@@ -810,16 +828,44 @@ function OnboardingTutorial({ onClose }) {
   const isFirst = current === 0;
   const isLast = current === STEPS.length - 1;
 
-  // Trap focus inside the modal
+  // Move initial focus into the modal and restore prior focus on close.
   useEffect(() => {
     const prev = document.activeElement;
-    modalRef.current?.focus();
+    const focusable = getFocusableElements(modalRef.current);
+    if (focusable.length > 0) {
+      focusable[0].focus();
+    } else {
+      modalRef.current?.focus();
+    }
     return () => prev?.focus();
   }, []);
 
-  // Keyboard navigation
+  // Keyboard navigation and focus containment for the modal dialog.
   useEffect(() => {
     const handle = (e) => {
+      if (e.key === "Tab") {
+        const focusable = getFocusableElements(modalRef.current);
+        if (focusable.length === 0) {
+          e.preventDefault();
+          modalRef.current?.focus();
+          return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        const active = document.activeElement;
+        if (e.shiftKey) {
+          if (active === first || !modalRef.current?.contains(active)) {
+            e.preventDefault();
+            last.focus();
+          }
+          return;
+        }
+        if (active === last || !modalRef.current?.contains(active)) {
+          e.preventDefault();
+          first.focus();
+        }
+        return;
+      }
       if (e.key === "Escape") { onClose(); return; }
       if (e.key === "ArrowRight" && !isLast) { next(); return; }
       if (e.key === "ArrowLeft" && !isFirst) { prev(); }
@@ -833,6 +879,10 @@ function OnboardingTutorial({ onClose }) {
   useEffect(() => {
     if (contentRef.current) contentRef.current.scrollTop = 0;
   }, [current]);
+
+  useEffect(() => {
+    onStepChange?.(current);
+  }, [current, onStepChange]);
 
   const next = () => setCurrent((c) => Math.min(c + 1, STEPS.length - 1));
   const prev = () => setCurrent((c) => Math.max(c - 1, 0));
@@ -896,7 +946,7 @@ function OnboardingTutorial({ onClose }) {
               <button
                 type="button"
                 className="primary-btn ob-nav-btn"
-                onClick={onClose}
+                onClick={onComplete || onClose}
               >
                 Get started
               </button>

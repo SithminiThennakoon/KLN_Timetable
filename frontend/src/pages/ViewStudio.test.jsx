@@ -25,7 +25,11 @@ vi.mock("xlsx", () => ({
 }));
 
 function MockJsPDF() {
+  this.internal = { pageSize: { width: 595, height: 842 } };
+  this.setFillColor = vi.fn();
   this.setFontSize = vi.fn();
+  this.setTextColor = vi.fn();
+  this.rect = vi.fn();
   this.text = vi.fn();
   this.autoTable = autoTableMock;
   this.save = saveMock;
@@ -109,7 +113,14 @@ describe("ViewStudio", () => {
             fillStyle: "",
             strokeStyle: "",
             font: "",
+            beginPath: vi.fn(),
+            moveTo: vi.fn(),
+            lineTo: vi.fn(),
+            stroke: vi.fn(),
+            fill: vi.fn(),
             fillRect: vi.fn(),
+            rect: vi.fn(),
+            roundRect: vi.fn(),
             strokeRect: vi.fn(),
             fillText: vi.fn(),
           })),
@@ -240,6 +251,26 @@ describe("ViewStudio", () => {
     expect(saveMock).not.toHaveBeenCalled();
   });
 
+  it("shows density controls and allows collapsing the detail drawer", async () => {
+    timetableStudioService.getLookups.mockResolvedValue({
+      lecturers: [],
+      degrees: [],
+      student_paths: [],
+    });
+    timetableStudioService.view.mockResolvedValue(buildViewResponse());
+
+    render(<ViewStudio />);
+
+    await screen.findByText("Faculty Timetable");
+    expect(screen.getByRole("button", { name: "Compact" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Comfortable" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Expanded" })).toBeInTheDocument();
+
+    const collapseButton = screen.getByRole("button", { name: "Collapse" });
+    fireEvent.click(collapseButton);
+    expect(screen.getByRole("button", { name: "Expand" })).toBeInTheDocument();
+  });
+
   it("exports xlsx locally without calling backend export", async () => {
     timetableStudioService.getLookups.mockResolvedValue({
       lecturers: [],
@@ -285,15 +316,15 @@ describe("ViewStudio", () => {
     await screen.findByText("Faculty Timetable");
     fireEvent.click(screen.getByRole("button", { name: "PDF" }));
 
-    await waitFor(() => expect(saveMock).toHaveBeenCalledWith("admin-timetable.pdf"));
+    await waitFor(() => expect(saveMock).toHaveBeenCalledWith("admin-Monday-timetable.pdf"));
     expect(pdfInstances).toHaveLength(1);
-    expect(pdfInstances[0].text).toHaveBeenCalledWith("Faculty Timetable", 40, 36);
+    expect(pdfInstances[0].text).toHaveBeenCalledWith("Faculty Timetable", 40, 50);
     expect(pdfInstances[0].text).toHaveBeenCalledWith(
-      "Default faculty timetable with all session details.",
+      "Default faculty timetable with all session details. - Monday",
       40,
-      54
+      70
     );
-    expect(autoTableMock).toHaveBeenCalledTimes(2);
+    expect(autoTableMock).toHaveBeenCalledTimes(1);
     expect(timetableStudioService.exportView).not.toHaveBeenCalled();
   });
 

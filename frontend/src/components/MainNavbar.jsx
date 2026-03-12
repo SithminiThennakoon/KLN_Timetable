@@ -3,7 +3,7 @@ import { NavLink } from "react-router-dom";
 import "../styles/App.css";
 import { useTheme } from "../hooks/useTheme";
 
-const MainNavbar = () => {
+const MainNavbar = ({ onHelp }) => {
   const { theme, toggle } = useTheme();
   return (
     <header className="main-header">
@@ -20,6 +20,14 @@ const MainNavbar = () => {
           <NavLink to="/generate" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Generate</NavLink>
           <NavLink to="/views" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Views</NavLink>
         </nav>
+        <button
+          className="help-btn"
+          onClick={onHelp}
+          title="Open tutorial"
+          aria-label="Open tutorial"
+        >
+          ?
+        </button>
         <button
           className="theme-toggle"
           onClick={toggle}
