@@ -610,6 +610,19 @@ function invalidClass(message) {
   return message ? "field-invalid" : "";
 }
 
+function buildImportRulePayload(bucketActions) {
+  return Object.entries(bucketActions)
+    .filter(([, action]) => action)
+    .map(([compositeKey, action]) => {
+      const [bucketType, bucketKey] = compositeKey.split("::", 2);
+      return {
+        bucket_type: bucketType,
+        bucket_key: bucketKey,
+        action,
+      };
+    });
+}
+
 function SetupStudio() {
   const INITIAL_VISIBLE_RECORDS = 4;
   const currentYear = new Date().getFullYear();
@@ -681,6 +694,10 @@ function SetupStudio() {
     lecturerIds: [],
     cohortIds: [],
   });
+  const [importAnalysis, setImportAnalysis] = useState(null);
+  const [importProjection, setImportProjection] = useState(null);
+  const [importRuleActions, setImportRuleActions] = useState({});
+  const [importLoading, setImportLoading] = useState(false);
 
   const filteredModules = useMemo(() => {
     if (!moduleSearchQuery.trim()) {
@@ -721,6 +738,8 @@ function SetupStudio() {
     }
     return draft.sessions.filter((s) => String(moduleYear(s)) === sessionYearFilter);
   }, [draft.sessions, draft.modules, sessionYearFilter]);
+
+  const importBuckets = useMemo(() => importAnalysis?.buckets || [], [importAnalysis]);
 
   const filteredCohortsByYear = useMemo(() => {
     return draft.cohorts.filter((c) => String(c.cohort_year) === String(sessionCohortYearFilter));
@@ -856,6 +875,60 @@ function SetupStudio() {
       setError(err.message);
       return false;
     } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAnalyzeEnrollmentImport = async () => {
+    setImportLoading(true);
+    setError("");
+    setStatus("");
+    try {
+      const response = await timetableStudioService.analyzeEnrollmentImport();
+      setImportAnalysis(response);
+      setImportProjection(null);
+      setImportRuleActions({});
+      setStatus("Enrollment CSV analyzed. Review the flagged buckets before previewing the import.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handlePreviewEnrollmentImport = async () => {
+    setImportLoading(true);
+    setError("");
+    setStatus("");
+    try {
+      const response = await timetableStudioService.previewEnrollmentImport({
+        rules: buildImportRulePayload(importRuleActions),
+      });
+      setImportProjection(response);
+      setStatus("Reviewed import preview is ready. Check the projected counts before loading it into Setup Studio.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handleLoadEnrollmentImport = async () => {
+    setImportLoading(true);
+    setSaving(true);
+    setError("");
+    setStatus("");
+    try {
+      await timetableStudioService.loadEnrollmentImport({
+        rules: buildImportRulePayload(importRuleActions),
+      });
+      await loadDataset("Reviewed enrollment import loaded into Setup Studio.");
+      setImportProjection(null);
+      setActiveStep(steps.length - 1);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setImportLoading(false);
       setSaving(false);
     }
   };
@@ -2753,22 +2826,130 @@ function SetupStudio() {
             </section>
 
             <section className="studio-card">
-              <h2>Manual Entry First</h2>
+              <h2>Reviewed Enrollment Import</h2>
               <p>
-                CSV import will come later once the exact university source format is confirmed.
+                Use the lecturer-provided enrollment CSV through the new reviewed import flow. Unresolved buckets stay out of the generated dataset by default.
               </p>
-              <div className="schema-notes">
-                <h3>Split behavior</h3>
-                <ul>
-                  <li>Use `Split limit per room` when one room cannot fit an entire cohort.</li>
-                  <li>The generator can divide a single cohort into internal parts automatically.</li>
-                  <li>Create override groups only when attendance itself is different, such as electives.</li>
-                </ul>
+              <div className="record-actions">
+                <button
+                  className="ghost-btn"
+                  type="button"
+                  onClick={handleAnalyzeEnrollmentImport}
+                  disabled={importLoading || saving || loading}
+                >
+                  {importLoading ? "Analyzing..." : "Analyze Enrollment CSV"}
+                </button>
+                <button
+                  className="ghost-btn"
+                  type="button"
+                  onClick={handlePreviewEnrollmentImport}
+                  disabled={importLoading || !importAnalysis}
+                >
+                  Preview Reviewed Import
+                </button>
+                <button
+                  className="primary-btn"
+                  type="button"
+                  onClick={handleLoadEnrollmentImport}
+                  disabled={importLoading || saving || !importProjection}
+                >
+                  Load Reviewed Import
+                </button>
               </div>
-              <div className="future-card">
-                <strong>Future CSV import</strong>
-                <span>Disabled for now. This wizard remains the supported path for setup data.</span>
-              </div>
+
+              {!importAnalysis ? (
+                <div className="future-card">
+                  <strong>No CSV analysis yet</strong>
+                  <span>Start by analyzing the built-in enrollment CSV, then resolve any important buckets before loading the reviewed dataset.</span>
+                </div>
+              ) : (
+                <>
+                  <div className="summary-grid">
+                    {Object.entries(importAnalysis.summary || {}).map(([key, value]) => (
+                      <div key={key} className="summary-item">
+                        <span>{key.replace(/_/g, " ")}</span>
+                        <strong>{value}</strong>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="schema-notes">
+                    <h3>Review Buckets</h3>
+                    {importBuckets.length === 0 ? (
+                      <p className="empty-state">No review buckets were generated for the current CSV snapshot.</p>
+                    ) : (
+                      <div className="editor-list">
+                        {importBuckets.slice(0, 24).map((bucket) => {
+                          const bucketId = `${bucket.bucket_type}::${bucket.bucket_key}`;
+                          return (
+                            <div key={bucketId} className="editor-card">
+                              <div className="section-row">
+                                <div>
+                                  <h3>{bucket.bucket_type.replace(/_/g, " ")}</h3>
+                                  <p>{bucket.description}</p>
+                                </div>
+                                <span className="tag-chip">{bucket.row_count} rows</span>
+                              </div>
+                              <label>
+                                <span>Decision</span>
+                                <select
+                                  value={importRuleActions[bucketId] || ""}
+                                  onChange={(event) =>
+                                    setImportRuleActions((current) => ({
+                                      ...current,
+                                      [bucketId]: event.target.value,
+                                    }))
+                                  }
+                                >
+                                  <option value="">Leave unresolved</option>
+                                  <option value="accept_exception">Accept exception</option>
+                                  <option value="treat_as_common">Treat as common module</option>
+                                  <option value="exclude">Exclude bucket</option>
+                                </select>
+                              </label>
+                              {bucket.sample_rows?.length > 0 && (
+                                <div className="schema-notes compact">
+                                  <h3>Sample rows</h3>
+                                  <ul>
+                                    {bucket.sample_rows.map((row) => (
+                                      <li key={`${bucketId}-${row.row_number}`}>
+                                        Row {row.row_number}: {row.course_code} | {row.stream} | Year {row.year} | Batch {row.batch || "-"} | Path {row.course_path_no || "blank"}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {importProjection && (
+                    <div className="schema-notes">
+                      <h3>Projection Preview</h3>
+                      <div className="summary-grid">
+                        {Object.entries(importProjection.projection_summary || {}).map(([key, value]) => (
+                          <div key={key} className="summary-item">
+                            <span>{key.replace(/_/g, " ")}</span>
+                            <strong>{value}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="schema-notes">
+                    <h3>How this import behaves</h3>
+                    <ul>
+                      <li>CSV `Year` is treated as the teaching year unless a review rule says otherwise.</li>
+                      <li>Unresolved buckets stay visible and are excluded from the imported dataset by default.</li>
+                      <li>Exact student memberships are preserved so shared students cannot be double-booked later.</li>
+                    </ul>
+                  </div>
+                </>
+              )}
             </section>
           </div>
         )}

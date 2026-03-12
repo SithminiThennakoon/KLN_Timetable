@@ -10,6 +10,9 @@ vi.mock("../services/timetableStudioService", () => ({
     getFullDataset: vi.fn(),
     saveDataset: vi.fn(),
     loadDemoDataset: vi.fn(),
+    analyzeEnrollmentImport: vi.fn(),
+    previewEnrollmentImport: vi.fn(),
+    loadEnrollmentImport: vi.fn(),
   },
 }));
 
@@ -94,17 +97,25 @@ describe("SetupStudio", () => {
           intake_label: "PS Intake",
         },
       ],
+      rooms: [
+        {
+          client_key: "room_invalid",
+          name: "Room 1",
+          capacity: 0,
+          room_type: "lecture",
+          lab_type: null,
+          location: "Science Block",
+          year_restriction: null,
+        },
+      ],
     });
 
     render(<SetupStudio />);
 
     await screen.findByDisplayValue("PS");
     fireEvent.click(screen.getByRole("button", { name: "3. Rooms" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add Room" }));
-
-    const roomEditor = screen.getByText("Capacity").closest("label");
-    const capacityInput = within(roomEditor).getByRole("spinbutton");
-    fireEvent.change(capacityInput, { target: { value: "0" } });
+    const roomCard = screen.getByDisplayValue("Room 1").closest(".editor-card");
+    const capacityInput = within(within(roomCard).getByText("Capacity").closest("label")).getByRole("spinbutton");
 
     expect(await screen.findAllByText(/Room 1 needs a positive capacity/i)).not.toHaveLength(0);
     expect(capacityInput.className).toContain("field-invalid");
@@ -197,6 +208,7 @@ describe("SetupStudio", () => {
     expect(within(degreesSection).getAllByDisplayValue("BS")).toHaveLength(1);
     expect(within(degreesSection).getAllByDisplayValue("ENCM")).toHaveLength(1);
     expect(within(degreesSection).getAllByDisplayValue("AC")).toHaveLength(1);
+    fireEvent.click(within(degreesSection).getByRole("button", { name: /See more/i }));
     expect(within(degreesSection).getAllByDisplayValue("ECS")).toHaveLength(1);
     expect(within(degreesSection).getAllByDisplayValue("PE")).toHaveLength(1);
     expect(within(pathsSection).getAllByDisplayValue("PHY-CHEM-MATH")).toHaveLength(1);
@@ -810,29 +822,32 @@ describe("SetupStudio", () => {
     await screen.findByText("No degrees added yet.");
 
     fireEvent.click(screen.getByRole("button", { name: "Add Degree" }));
-    const degreeCodeInput = within(screen.getByText("Code").closest("label")).getByRole("textbox");
-    const degreeNameInput = within(screen.getByText("Name").closest("label")).getByRole("textbox");
-    const degreeDurationInput = within(screen.getByText("Duration").closest("label")).getByRole("spinbutton");
-    const intakeLabelInput = within(screen.getByText("Intake label").closest("label")).getByRole("textbox");
+    const degreeDialog = screen.getByText("Add New Degree").closest(".modal-card");
+    const degreeCodeInput = within(within(degreeDialog).getByText("Code").closest("label")).getByRole("textbox");
+    const degreeNameInput = within(within(degreeDialog).getByText("Name").closest("label")).getByRole("textbox");
+    const degreeDurationInput = within(within(degreeDialog).getByText(/Duration \(years\)/i).closest("label")).getByRole("spinbutton");
+    const intakeLabelInput = within(within(degreeDialog).getByText("Intake Label").closest("label")).getByRole("textbox");
     fireEvent.change(degreeCodeInput, { target: { value: "PS" } });
     fireEvent.change(degreeNameInput, { target: { value: "Physical Science" } });
     fireEvent.change(degreeDurationInput, { target: { value: "1" } });
     fireEvent.change(intakeLabelInput, { target: { value: "PS Intake" } });
+    fireEvent.click(within(degreeDialog).getByRole("button", { name: "Save Degree" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Add Path" }));
-    const pathSection = screen.getByText("Paths").closest("section");
-    const pathDegreeLabel = within(pathSection).getByText("Degree").closest("label");
+    const pathDialog = screen.getByText("Add New Path").closest(".modal-card");
+    const pathDegreeLabel = within(pathDialog).getByText("Degree").closest("label");
     const degreeSelect = within(pathDegreeLabel).getByRole("combobox");
-    const degreeOption = within(pathSection).getAllByRole("option").find((option) => option.textContent === "PS");
+    const degreeOption = within(pathDialog).getAllByRole("option").find((option) => option.textContent?.includes("PS - Physical Science"));
     fireEvent.change(degreeSelect, {
       target: { value: degreeOption.value },
     });
-    fireEvent.change(within(within(pathSection).getByText("Code").closest("label")).getByRole("textbox"), {
+    fireEvent.change(within(within(pathDialog).getByText("Code").closest("label")).getByRole("textbox"), {
       target: { value: "PHY-MATH-STAT" },
     });
-    fireEvent.change(within(within(pathSection).getByText("Name").closest("label")).getByRole("textbox"), {
+    fireEvent.change(within(within(pathDialog).getByText("Name").closest("label")).getByRole("textbox"), {
       target: { value: "Physics Mathematics Statistics" },
     });
+    fireEvent.click(within(pathDialog).getByRole("button", { name: "Save Path" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
@@ -1033,5 +1048,86 @@ describe("SetupStudio", () => {
     expect(savedPayload.sessions[0].lecturer_client_keys).toHaveLength(1);
     expect(savedPayload.sessions[0].student_group_client_keys).toHaveLength(1);
     expect(await screen.findByText(/Dataset saved\. The new setup flow is now ready for generation/i)).toBeInTheDocument();
+  });
+
+  it("analyzes and previews the reviewed enrollment import flow", async () => {
+    timetableStudioService.getFullDataset.mockResolvedValue(emptyDataset());
+    timetableStudioService.analyzeEnrollmentImport.mockResolvedValue({
+      source_file: "students_processed_TT_J.csv",
+      summary: {
+        total_rows: 10,
+        valid_rows: 4,
+        valid_exception_rows: 0,
+        ambiguous_rows: 6,
+        invalid_rows: 0,
+        included_rows: 4,
+        excluded_rows: 6,
+        unique_students: 3,
+        review_bucket_count: 1,
+      },
+      anomaly_counts: { year_code_mismatch: 6 },
+      semester_digit_counts: { 1: 4, 4: 6 },
+      buckets: [
+        {
+          bucket_type: "year_code_mismatch",
+          bucket_key: "year=2|nominal_year=1",
+          description: "CSV Year 2 does not match nominal module year 1.",
+          status: "ambiguous",
+          row_count: 6,
+          sample_rows: [
+            {
+              row_number: 2,
+              course_code: "MGMT 11022",
+              stream: "BS",
+              year: "2",
+              academic_year: "2022/2023",
+              batch: "2021",
+              course_path_no: "",
+              student_hash: "student-1",
+              anomaly_codes: ["year_code_mismatch"],
+            },
+          ],
+        },
+      ],
+    });
+    timetableStudioService.previewEnrollmentImport.mockResolvedValue({
+      projection_summary: {
+        projected_rows: 6,
+        excluded_rows: 4,
+        degrees: 1,
+        paths: 0,
+        lecturers: 1,
+        rooms: 1,
+        student_groups: 2,
+        modules: 2,
+        sessions: 2,
+      },
+    });
+
+    render(<SetupStudio />);
+
+    await screen.findByText("Setup Studio");
+    fireEvent.click(screen.getByRole("button", { name: "7. Review & Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Analyze Enrollment CSV" }));
+
+    expect(await screen.findByText(/Enrollment CSV analyzed/i)).toBeInTheDocument();
+    expect(await screen.findByText(/CSV Year 2 does not match nominal module year 1/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Decision"), {
+      target: { value: "accept_exception" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview Reviewed Import" }));
+
+    await waitFor(() => expect(timetableStudioService.previewEnrollmentImport).toHaveBeenCalledTimes(1));
+    expect(timetableStudioService.previewEnrollmentImport).toHaveBeenCalledWith({
+      rules: [
+        {
+          bucket_type: "year_code_mismatch",
+          bucket_key: "year=2|nominal_year=1",
+          action: "accept_exception",
+        },
+      ],
+    });
+    expect(await screen.findByText("Projection Preview")).toBeInTheDocument();
   });
 });
