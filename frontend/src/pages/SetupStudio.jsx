@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { timetableStudioService } from "../services/timetableStudioService";
 import SearchableMultiSelect from "../components/SearchableMultiSelect";
 
@@ -11,7 +12,7 @@ const steps = [
   { key: "cohorts", label: "Student Cohorts" },
   { key: "modules", label: "Modules" },
   { key: "sessions", label: "Sessions" },
-  { key: "review", label: "Review & Save" },
+  { key: "review", label: "Review & Generate" },
 ];
 
 const emptyDraft = {
@@ -38,7 +39,7 @@ const stepGuidance = {
   sessions:
     "Create the actual weekly teaching activities here. Link each session to its lecturers and attending cohorts, then use advanced options only when delivery needs extra rules.",
   review:
-    "Use this review step before saving. Blocking issues must be fixed first. Warnings are allowed, but they usually indicate incomplete staffing or unusual delivery choices.",
+    "Use this review step before generation. Blocking issues must be fixed first. Warnings are allowed, but they usually indicate incomplete staffing or unusual delivery choices.",
 };
 
 function makeId(prefix) {
@@ -824,6 +825,7 @@ function buildImportRulePayload(bucketActions) {
 }
 
 function SetupStudio() {
+  const navigate = useNavigate();
   const INITIAL_VISIBLE_RECORDS = 4;
   const currentYear = new Date().getFullYear();
   const [draft, setDraft] = useState(emptyDraft);
@@ -881,6 +883,7 @@ function SetupStudio() {
   const [sessionCohortYearFilter, setSessionCohortYearFilter] = useState(currentYear);
   const [tempSession, setTempSession] = useState({
     moduleId: "",
+    linkedModuleIds: [],
     name: "",
     session_type: "lecture",
     duration_minutes: 60,
@@ -898,15 +901,13 @@ function SetupStudio() {
   const [importProjection, setImportProjection] = useState(null);
   const [materializedImport, setMaterializedImport] = useState(null);
   const [importAction, setImportAction] = useState("");
-  const [legacyManualMode, setLegacyManualMode] = useState(false);
   const [selectedImportFile, setSelectedImportFile] = useState(null);
   const [useBundledImportSample, setUseBundledImportSample] = useState(false);
   const [importRuleActions, setImportRuleActions] = useState({});
   const [importLoading, setImportLoading] = useState(false);
   const activeImportRunId = materializedImport?.import_run_id || null;
   const snapshotDerivedEditingDisabled = Boolean(activeImportRunId);
-  const usingLegacyManualMode = legacyManualMode && !activeImportRunId;
-  const showSetupWizard = Boolean(activeImportRunId || legacyManualMode);
+  const showSetupWizard = Boolean(activeImportRunId);
 
   const filteredModules = useMemo(() => {
     if (!moduleSearchQuery.trim()) {
@@ -977,35 +978,6 @@ function SetupStudio() {
       review: false,
     };
   }, [draft]);
-
-  const loadDataset = async (nextStatus = "") => {
-    setLoading(true);
-    setError("");
-    try {
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem(activeImportRunStorageKey);
-      }
-      const dataset = await timetableStudioService.getFullDataset();
-      const normalized = normalizeDataset(dataset);
-      setDraft(normalized);
-      setSummary(toSummary(normalized));
-      setVisibleDegreeCount(INITIAL_VISIBLE_RECORDS);
-      setVisiblePathCount(INITIAL_VISIBLE_RECORDS);
-      setVisibleLecturerCount(INITIAL_VISIBLE_RECORDS);
-      setVisibleBaseCohortCount(INITIAL_VISIBLE_RECORDS);
-      setVisibleOverrideCohortCount(INITIAL_VISIBLE_RECORDS);
-      setCohortYearFilter("all");
-      setVisibleRoomCount(INITIAL_VISIBLE_RECORDS);
-      setVisibleModuleCount(INITIAL_VISIBLE_RECORDS);
-      setSessionYearFilter("all");
-      setVisibleSessionCount(INITIAL_VISIBLE_RECORDS);
-      setStatus(nextStatus);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const loadImportWorkspace = async (importRunId, nextStatus = "") => {
     setLoading(true);
@@ -1244,7 +1216,38 @@ function SetupStudio() {
   };
 
   useEffect(() => {
-    loadDataset();
+    const restoreActiveImportWorkspace = async () => {
+      const savedImportRunId =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem(activeImportRunStorageKey)
+          : null;
+
+      if (!savedImportRunId) {
+        setDraft(emptyDraft);
+        setSummary(toSummary(emptyDraft));
+        setLoading(false);
+        return;
+      }
+
+      const importRunId = Number(savedImportRunId);
+      if (!Number.isFinite(importRunId) || importRunId <= 0) {
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem(activeImportRunStorageKey);
+        }
+        setDraft(emptyDraft);
+        setSummary(toSummary(emptyDraft));
+        setLoading(false);
+        return;
+      }
+
+      setMaterializedImport({ import_run_id: importRunId, counts: {} });
+      await loadImportWorkspace(
+        importRunId,
+        `Restored snapshot #${importRunId}. Continue completing the missing teaching details.`
+      );
+    };
+
+    restoreActiveImportWorkspace();
   }, []);
 
   const updateDraft = (updater) => {
@@ -1274,76 +1277,11 @@ function SetupStudio() {
     setActiveStep((current) => Math.max(current - 1, 0));
   };
 
-  const enableLegacyManualMode = () => {
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem(activeImportRunStorageKey);
+  const handleOpenGenerate = () => {
+    if (!activeImportRunId || validation.blocking.length > 0) {
+      return;
     }
-    setLegacyManualMode(true);
-    setActiveStep(0);
-    setError("");
-    setStatus(
-      "Legacy manual setup mode enabled. CSV-first import is still the recommended path."
-    );
-  };
-
-  const returnToCsvFirstFlow = () => {
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem(activeImportRunStorageKey);
-    }
-    setLegacyManualMode(false);
-    setActiveStep(0);
-    setError("");
-    setStatus(
-      "CSV-first setup is active. Materialize a reviewed import snapshot to unlock manual completion."
-    );
-  };
-
-  const handleLoadDemo = async (profile) => {
-    setSaving(true);
-    setError("");
-    try {
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem(activeImportRunStorageKey);
-      }
-      setLegacyManualMode(true);
-      setSelectedImportFile(null);
-      setMaterializedImport(null);
-      await timetableStudioService.loadDemoDataset(profile);
-      await loadDataset(
-        profile === "tuned"
-          ? "Tuned demo dataset loaded into the guided setup wizard."
-          : "Realistic demo dataset loaded from the real enrollment baseline into the guided setup wizard."
-      );
-      setActiveStep(steps.length - 1);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    setError("");
-    setStatus("");
-    try {
-      if (activeImportRunId) {
-        setStatus(
-          `Snapshot #${activeImportRunId} is ready. Open Generate to build timetable solutions directly from this imported setup.`
-        );
-        return;
-      }
-
-      setMaterializedImport(null);
-      const payload = buildPayload(draft);
-      const response = await timetableStudioService.saveDataset(payload);
-      await loadDataset("Dataset saved. The new setup flow is now ready for generation.");
-      setSummary(response.summary);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
+    navigate("/generate");
   };
 
   const persistAddedRecord = async (collection, record, successMessage) => {
@@ -1358,14 +1296,8 @@ function SetupStudio() {
         return true;
       }
 
-      const nextDraft = syncBaseCohorts({
-        ...draft,
-        [collection]: [...draft[collection], record],
-      });
-      const response = await timetableStudioService.saveDataset(buildPayload(nextDraft));
-      await loadDataset(successMessage);
-      setSummary(response.summary);
-      return true;
+      setError("This action only makes sense after a CSV import has been materialized.");
+      return false;
     } catch (err) {
       setError(err.message);
       return false;
@@ -1380,6 +1312,9 @@ function SetupStudio() {
     setError("");
     setStatus("");
     try {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(activeImportRunStorageKey);
+      }
       const response = await timetableStudioService.analyzeEnrollmentImport(selectedImportFile);
       setImportAnalysis(response);
       setImportProjection(null);
@@ -1404,6 +1339,9 @@ function SetupStudio() {
     setError("");
     setStatus("");
     try {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(activeImportRunStorageKey);
+      }
       const rules = buildImportRulePayload(importRuleActions);
       const response = await timetableStudioService.previewEnrollmentImport(
         {
@@ -1436,7 +1374,6 @@ function SetupStudio() {
         },
         selectedImportFile
       );
-      setLegacyManualMode(false);
       setMaterializedImport(response);
       if (typeof window !== "undefined") {
         window.localStorage.setItem(
@@ -1456,6 +1393,24 @@ function SetupStudio() {
       setImportLoading(false);
       setSaving(false);
     }
+  };
+
+  const handleTempSessionModuleChange = (moduleId) => {
+    const selectedModule = draft.modules.find((module) => module.id === moduleId);
+    setTempSession((current) => ({
+      ...current,
+      moduleId,
+      cohortIds:
+        current.cohortIds.length > 0
+          ? current.cohortIds
+          : selectedModule?.defaultCohortIds || current.cohortIds,
+      name:
+        current.name.trim().length > 0
+          ? current.name
+          : selectedModule
+            ? `${selectedModule.code} Session`
+            : current.name,
+    }));
   };
 
   const addRecord = (collection, record) => {
@@ -2371,19 +2326,17 @@ function SetupStudio() {
             <p className="section-subtitle">
               {activeImportRunId
                 ? `Student enrolments are loaded. Now complete the missing teaching details.`
-                : usingLegacyManualMode
-                  ? "You are entering everything manually. CSV import is still the recommended path."
-                  : "Start by importing the student enrolment CSV. After that, complete the missing timetable details."}
+                : "Start by importing the student enrolment CSV. After that, complete the missing timetable details."}
             </p>
           </div>
           {showSetupWizard && (
             <div className="studio-actions wrap">
               <button
                 className="primary-btn"
-                onClick={handleSave}
+                onClick={handleOpenGenerate}
                 disabled={saving || loading || validation.blocking.length > 0}
               >
-                {saving ? "Saving..." : activeImportRunId ? "Snapshot Ready" : "Save Dataset"}
+                Open Generate
               </button>
             </div>
           )}
@@ -2395,7 +2348,7 @@ function SetupStudio() {
           <div className="info-banner">
             {activeImportRunId
               ? `Loading normalized import workspace #${activeImportRunId}...`
-              : "Loading existing v2 dataset..."}
+              : "Preparing the CSV-first setup flow..."}
           </div>
         )}
 
@@ -3491,9 +3444,12 @@ function SetupStudio() {
                   <button
                     className="ghost-btn"
                     onClick={() => {
+                      const defaultModuleId = moduleOptions[0]?.id || "";
+                      const defaultModule = moduleOptions.find((module) => module.id === defaultModuleId);
                       setTempSession({
-                        moduleId: moduleOptions[0]?.id || "",
-                        name: "",
+                        moduleId: defaultModuleId,
+                        linkedModuleIds: [],
+                        name: defaultModule ? `${defaultModule.code} Session` : "",
                         session_type: "lecture",
                         duration_minutes: 60,
                         occurrences_per_week: 1,
@@ -3504,7 +3460,7 @@ function SetupStudio() {
                         allow_parallel_rooms: false,
                         notes: "",
                         lecturerIds: [],
-                        cohortIds: [],
+                        cohortIds: defaultModule?.defaultCohortIds || [],
                       });
                       setShowSessionModal(true);
                     }}
@@ -3657,32 +3613,30 @@ function SetupStudio() {
                           <option value="seminar">Seminar</option>
                         </select>
                       </label>
-                      <label>
-                        <span>Also counts as modules</span>
-                        <select
-                          multiple
-                          value={session.linkedModuleIds || []}
-                          onChange={async (event) => {
-                            const linkedModuleIds = Array.from(
-                              event.target.selectedOptions,
-                              (option) => option.value
-                            );
-                            updateRecord("sessions", session.id, "linkedModuleIds", linkedModuleIds);
-                            await persistSnapshotRecordUpdate("sessions", {
-                              ...session,
-                              linkedModuleIds,
-                            });
-                          }}
-                        >
-                          {moduleOptions
-                            .filter((module) => module.id !== session.moduleId)
-                            .map((module) => (
-                              <option key={module.id} value={module.id}>
-                                {module.code} - {module.name}
-                              </option>
-                            ))}
-                        </select>
-                      </label>
+                      <div className="full-span">
+                        <label>
+                          <span>Also counts as modules</span>
+                          <SearchableMultiSelect
+                            options={moduleOptions.filter(
+                              (module) => module.id !== session.moduleId
+                            )}
+                            selectedIds={session.linkedModuleIds || []}
+                            getLabel={(module) => `${module.code} - ${module.name}`}
+                            placeholder="Search linked modules..."
+                            onChange={async (linkedModuleIds) => {
+                              updateRecord("sessions", session.id, "linkedModuleIds", linkedModuleIds);
+                              await persistSnapshotRecordUpdate("sessions", {
+                                ...session,
+                                linkedModuleIds,
+                              });
+                            }}
+                          />
+                          <small className="field-hint">
+                            Use this when one real lecture, tutorial, or lab should appear under
+                            more than one module identity for different degree or path groups.
+                          </small>
+                        </label>
+                      </div>
                     </div>
 
                     <div className="advanced-session">
@@ -3860,10 +3814,10 @@ function SetupStudio() {
             <section className="studio-card">
               <h2>Readiness Review</h2>
               {validation.blocking.length === 0 ? (
-                <div className="info-banner">This setup is ready to publish for timetable generation.</div>
+                <div className="info-banner">This setup is ready for timetable generation.</div>
               ) : (
                 <div className="error-banner">
-                  <strong>Fix these blocking issues before saving:</strong>
+                  <strong>Fix these blocking issues before generation:</strong>
                   <ul>
                     {validation.blocking.map((issue) => (
                       <li key={issue}>{issue}</li>
@@ -3886,53 +3840,33 @@ function SetupStudio() {
               )}
 
               <div className="schema-notes">
-                <h3>What this save action will write</h3>
-                {activeImportRunId ? (
-                  <ul>
-                    <li>rooms and room capabilities</li>
-                    <li>lecturers used by generation, views, and verification</li>
-                    <li>shared teaching sessions linked to imported attendance groups</li>
-                    <li>delivery rules such as split limits, parallel rooms, and specific-room requirements</li>
-                  </ul>
-                ) : (
-                  <ul>
-                    <li>Degrees and year-specific paths</li>
-                    <li>Rooms and lecturers used by the timetable views</li>
-                    <li>Derived base cohorts plus any override groups</li>
-                    <li>Modules and weekly sessions with advanced delivery options</li>
-                    <li>Split limits that can auto-create internal session parts during generation</li>
-                  </ul>
-                )}
+                <h3>What this setup currently defines</h3>
+                <ul>
+                  <li>rooms and room capabilities</li>
+                  <li>lecturers used by generation, views, and verification</li>
+                  <li>shared teaching sessions linked to imported attendance groups</li>
+                  <li>delivery rules such as split limits, parallel rooms, and specific-room requirements</li>
+                </ul>
               </div>
             </section>
 
             <section className="studio-card">
               <h2>Where This Data Came From</h2>
-              {activeImportRunId ? (
-                <div className="schema-notes">
-                  <h3>Imported student enrolments</h3>
-                  <div className="summary-grid">
-                    {Object.entries(materializedImport?.counts || {}).map(([key, value]) => (
-                      <div key={key} className="summary-item">
-                        <span>{key.replace(/_/g, " ")}</span>
-                        <strong>{value}</strong>
-                      </div>
-                    ))}
-                  </div>
-                  <p>
-                    The CSV import flow lives at the top of the page. This step is only for the
-                    final check before generation.
-                  </p>
+              <div className="schema-notes">
+                <h3>Imported student enrolments</h3>
+                <div className="summary-grid">
+                  {Object.entries(materializedImport?.counts || {}).map(([key, value]) => (
+                    <div key={key} className="summary-item">
+                      <span>{key.replace(/_/g, " ")}</span>
+                      <strong>{value}</strong>
+                    </div>
+                  ))}
                 </div>
-              ) : (
-                <div className="schema-notes">
-                  <h3>Manual-only setup</h3>
-                  <p>
-                    This fallback path skips CSV import. It is useful for demos, but it is not the
-                    intended final operator flow.
-                  </p>
-                </div>
-              )}
+                <p>
+                  The CSV import flow lives at the top of the page. This step is the final check
+                  before moving to generation.
+                </p>
+              </div>
             </section>
           </div>
         )}
@@ -4606,7 +4540,7 @@ function SetupStudio() {
                   <span>Module</span>
                   <select
                     value={tempSession.moduleId}
-                    onChange={(e) => setTempSession({ ...tempSession, moduleId: e.target.value })}
+                    onChange={(e) => handleTempSessionModuleChange(e.target.value)}
                   >
                     <option value="">Select module</option>
                     {moduleOptions.map((module) => (
@@ -4692,13 +4626,120 @@ function SetupStudio() {
                   </select>
                 </label>
               </div>
+
+              <div className="schema-notes compact">
+                <h3>Shared teaching and attendance</h3>
+                <p>
+                  Define the real teaching event once, then link any extra curriculum modules and
+                  the attendance groups that actually attend it.
+                </p>
+              </div>
+
+              <div className="form-grid two-column">
+                <label>
+                  <span>Linked modules</span>
+                  <SearchableMultiSelect
+                    items={moduleOptions
+                      .filter((module) => module.id !== tempSession.moduleId)
+                      .map((module) => ({
+                        id: module.id,
+                        label: `${module.code} - ${module.name}`,
+                      }))}
+                    selectedIds={tempSession.linkedModuleIds || []}
+                    searchPlaceholder="Search linked modules"
+                    emptyMessage="No additional modules"
+                    onChange={(linkedModuleIds) =>
+                      setTempSession({ ...tempSession, linkedModuleIds })
+                    }
+                  />
+                  <small className="field-hint">
+                    Use this when one real lecture, tutorial, or lab should appear under more than
+                    one module identity.
+                  </small>
+                </label>
+                <label>
+                  <span>Lecturers</span>
+                  <SearchableMultiSelect
+                    items={lecturerOptions.map((lecturer) => ({
+                      id: lecturer.id,
+                      label: lecturer.name,
+                    }))}
+                    selectedIds={tempSession.lecturerIds || []}
+                    searchPlaceholder="Search lecturers"
+                    emptyMessage="No lecturers"
+                    onChange={(lecturerIds) => setTempSession({ ...tempSession, lecturerIds })}
+                  />
+                </label>
+                <label className="full-span">
+                  <span>Attendance groups</span>
+                  <SearchableMultiSelect
+                    items={cohortOptions.map((cohort) => ({
+                      id: cohort.id,
+                      label: `${cohort.name} (${cohort.size || "?"} students)`,
+                    }))}
+                    selectedIds={tempSession.cohortIds || []}
+                    searchPlaceholder="Search attendance groups"
+                    emptyMessage="No attendance groups"
+                    onChange={(cohortIds) => setTempSession({ ...tempSession, cohortIds })}
+                  />
+                </label>
+              </div>
+
+              <div className="schema-notes compact">
+                <h3>Delivery options</h3>
+                <p>
+                  Use split groups when one cohort must attend at different times. Use parallel
+                  rooms when the same session should run at the same time in multiple rooms with
+                  multiple lecturers.
+                </p>
+              </div>
+
+              <div className="form-grid two-column">
+                <label>
+                  <span>Max students per time-separated group</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={tempSession.max_students_per_group}
+                    onChange={(e) =>
+                      setTempSession({ ...tempSession, max_students_per_group: e.target.value })
+                    }
+                    placeholder="Leave blank for no split"
+                  />
+                  <small className="field-hint">
+                    Example: set `24` to let the solver split one large lab into multiple smaller
+                    lab groups at different times.
+                  </small>
+                </label>
+                <label className="checkbox-field full-span">
+                  <span>Same-time parallel rooms</span>
+                  <input
+                    type="checkbox"
+                    checked={tempSession.allow_parallel_rooms}
+                    onChange={(e) =>
+                      setTempSession({ ...tempSession, allow_parallel_rooms: e.target.checked })
+                    }
+                  />
+                  <small className="field-hint">
+                    Turn this on only when the session may run at the same time in multiple rooms
+                    with separate lecturers.
+                  </small>
+                </label>
+                <label className="full-span">
+                  <span>Notes</span>
+                  <textarea
+                    rows="3"
+                    value={tempSession.notes}
+                    onChange={(e) => setTempSession({ ...tempSession, notes: e.target.value })}
+                    placeholder="Optional delivery notes or room guidance"
+                  />
+                </label>
+              </div>
             </div>
 
             <div className="setup-add-modal-footer">
               <p>
-                {activeImportRunId
-                  ? "Save writes the shared session to the active import snapshot."
-                  : "Save writes the session to the current setup dataset."}
+                Save writes this shared teaching session into the active import snapshot.
               </p>
               <div className="modal-actions">
                 <button type="button" className="ghost-btn" onClick={() => setShowSessionModal(false)} disabled={saving}>
@@ -4712,6 +4753,7 @@ function SetupStudio() {
                     const session = {
                       id: makeId("session"),
                       moduleId: tempSession.moduleId,
+                      linkedModuleIds: tempSession.linkedModuleIds,
                       name: tempSession.name,
                       session_type: tempSession.session_type,
                       duration_minutes: tempSession.duration_minutes,
@@ -4728,7 +4770,7 @@ function SetupStudio() {
                     const saved = await persistAddedRecord(
                       "sessions",
                       session,
-                      "Session saved to the setup dataset."
+                      `Session saved to import snapshot #${activeImportRunId}.`
                     );
                     if (saved) {
                       setVisibleSessionCount((current) => current + 1);
