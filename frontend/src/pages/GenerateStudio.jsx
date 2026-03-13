@@ -80,6 +80,7 @@ const generationLimits = {
   preview_limit: { min: 1, max: 100 },
   time_limit_seconds: { min: 1, max: 600 },
 };
+const activeImportRunStorageKey = "kln_active_import_run_id";
 
 function formatMilliseconds(value) {
   if (!value) {
@@ -121,6 +122,14 @@ function formatCombinationCount(suggestion) {
 
 function GenerateStudio() {
   const [generation, setGeneration] = useState(null);
+  const [activeImportRunId, setActiveImportRunId] = useState(() => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    const raw = window.localStorage.getItem(activeImportRunStorageKey);
+    const parsed = Number(raw);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  });
   const [softConstraints, setSoftConstraints] = useState([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [settings, setSettings] = useState(defaultPerformanceSettings);
@@ -129,7 +138,7 @@ function GenerateStudio() {
 
   const loadLatest = async () => {
     try {
-      const response = await timetableStudioService.latestGeneration();
+      const response = await timetableStudioService.latestGeneration(activeImportRunId);
       setGeneration(response);
       setSoftConstraints(response.selected_soft_constraints || []);
       setSettings((prev) => ({
@@ -137,13 +146,13 @@ function GenerateStudio() {
         performance_preset: response.performance_preset || prev.performance_preset,
       }));
     } catch {
-      // ignore empty state
+      setGeneration(null);
     }
   };
 
   useEffect(() => {
     loadLatest();
-  }, []);
+  }, [activeImportRunId]);
 
   const handleToggle = (key) => {
     setSoftConstraints((prev) =>
@@ -175,6 +184,7 @@ function GenerateStudio() {
     setSettings((prev) => ({ ...prev, ...requestSettings }));
     try {
       const response = await timetableStudioService.generate({
+        import_run_id: activeImportRunId || undefined,
         soft_constraints: softConstraints,
         ...requestSettings,
       });
@@ -190,7 +200,10 @@ function GenerateStudio() {
     setLoading(true);
     setError("");
     try {
-      const response = await timetableStudioService.setDefault(solutionId);
+      const response = await timetableStudioService.setDefault(
+        solutionId,
+        activeImportRunId
+      );
       setGeneration(response);
     } catch (err) {
       setError(err.message);
@@ -230,8 +243,16 @@ function GenerateStudio() {
           <div>
             <h1 className="section-title">Generate Solutions</h1>
             <p className="section-subtitle">
-              Generate the full faculty timetable from the saved setup data. Hard constraints are always enforced. Nice-to-have constraints only help reduce large solution counts.
+              Generate the full faculty timetable from the active setup source. Hard constraints are always enforced. Nice-to-have constraints only help reduce large solution counts.
             </p>
+            {activeImportRunId && (
+              <>
+                <p className="helper-copy">Using import snapshot #{activeImportRunId} directly.</p>
+                <p className="helper-copy">
+                  This generation run uses the normalized snapshot data directly. The Views page still follows the published legacy dataset until snapshot-native views are finished.
+                </p>
+              </>
+            )}
           </div>
           <button className="primary-btn" onClick={handleGenerate} disabled={loading}>
             {loading ? "Generating..." : "Generate Timetable Solutions"}
@@ -333,7 +354,9 @@ function GenerateStudio() {
           <section className="studio-card">
             <h2>No generation run yet</h2>
             <p className="empty-state">
-              Save your faculty data in Setup, then generate timetable solutions here. The system will count valid solutions, stop at the configured threshold or time limit, and keep preview solutions for review.
+              {activeImportRunId
+                ? "Complete the snapshot-backed setup in Setup, then generate timetable solutions here."
+                : "Save your faculty data in Setup, then generate timetable solutions here. The system will count valid solutions, stop at the configured threshold or time limit, and keep preview solutions for review."}
             </p>
           </section>
         )}

@@ -74,13 +74,17 @@ from app.services.timetable_v2 import (
     build_view_payload,
     dataset_summary,
     export_view,
+    generate_snapshot_timetables,
     generate_timetables,
     get_latest_run,
+    get_latest_snapshot_run,
     lookup_options,
     read_dataset,
     replace_dataset,
     serialize_generation_run,
+    serialize_snapshot_generation_run,
     set_default_solution,
+    set_default_snapshot_solution,
 )
 
 router = APIRouter(prefix="/api/v2", tags=["timetable-v2"])
@@ -790,6 +794,17 @@ def delete_import_snapshot_shared_session(
 
 @router.post("/generate", response_model=GenerationResponse)
 def generate(payload: GenerationRequest, db: Session = Depends(get_db)):
+    if payload.import_run_id:
+        run = generate_snapshot_timetables(
+            db,
+            import_run_id=payload.import_run_id,
+            selected_soft_constraints=payload.soft_constraints,
+            performance_preset=payload.performance_preset,
+            max_solutions=payload.max_solutions,
+            preview_limit=payload.preview_limit,
+            time_limit_seconds=payload.time_limit_seconds,
+        )
+        return serialize_snapshot_generation_run(run)
     run = generate_timetables(
         db,
         selected_soft_constraints=payload.soft_constraints,
@@ -802,7 +817,15 @@ def generate(payload: GenerationRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/generate/latest", response_model=GenerationResponse)
-def latest_generation(db: Session = Depends(get_db)):
+def latest_generation(
+    import_run_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    if import_run_id:
+        run = get_latest_snapshot_run(db, import_run_id)
+        if not run:
+            raise HTTPException(status_code=404, detail="No generation run found")
+        return serialize_snapshot_generation_run(run)
     run = get_latest_run(db)
     if not run:
         raise HTTPException(status_code=404, detail="No generation run found")
@@ -811,6 +834,19 @@ def latest_generation(db: Session = Depends(get_db)):
 
 @router.post("/solutions/default", response_model=GenerationResponse)
 def set_default(payload: DefaultSelectionRequest, db: Session = Depends(get_db)):
+    if payload.import_run_id:
+        try:
+            set_default_snapshot_solution(
+                db,
+                import_run_id=payload.import_run_id,
+                solution_id=payload.solution_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        run = get_latest_snapshot_run(db, payload.import_run_id)
+        if not run:
+            raise HTTPException(status_code=404, detail="No generation run found")
+        return serialize_snapshot_generation_run(run)
     try:
         set_default_solution(db, payload.solution_id)
     except ValueError as exc:

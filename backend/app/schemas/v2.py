@@ -142,6 +142,7 @@ class SoftConstraintOption(BaseModel):
 
 
 class GenerationRequest(BaseModel):
+    import_run_id: int | None = Field(default=None, gt=0)
     soft_constraints: list[SoftConstraint] = Field(default_factory=list)
     performance_preset: PerformancePreset = "balanced"
     max_solutions: int = Field(default=1000, ge=1, le=5000)
@@ -233,6 +234,7 @@ class GenerationResponse(BaseModel):
 
 class DefaultSelectionRequest(BaseModel):
     solution_id: int
+    import_run_id: int | None = Field(default=None, gt=0)
 
 
 class ViewResponse(BaseModel):

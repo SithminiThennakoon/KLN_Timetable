@@ -3,6 +3,7 @@ import { timetableStudioService } from "../services/timetableStudioService";
 import SearchableMultiSelect from "../components/SearchableMultiSelect";
 
 const IMPORT_DEBUG_PREFIX = "[SetupImport]";
+const activeImportRunStorageKey = "kln_active_import_run_id";
 
 const steps = [
   { key: "structure", label: "Structure" },
@@ -946,6 +947,9 @@ function SetupStudio() {
     setLoading(true);
     setError("");
     try {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(activeImportRunStorageKey);
+      }
       const dataset = await timetableStudioService.getFullDataset();
       const normalized = normalizeDataset(dataset);
       setDraft(normalized);
@@ -972,6 +976,12 @@ function SetupStudio() {
     setLoading(true);
     setError("");
     try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(
+          activeImportRunStorageKey,
+          String(importRunId)
+        );
+      }
       const workspace = await timetableStudioService.getImportWorkspace(importRunId);
       const normalized = normalizeImportWorkspace(workspace);
       setDraft(normalized);
@@ -1230,6 +1240,9 @@ function SetupStudio() {
   };
 
   const enableLegacyManualMode = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(activeImportRunStorageKey);
+    }
     setLegacyManualMode(true);
     setActiveStep(0);
     setError("");
@@ -1239,6 +1252,9 @@ function SetupStudio() {
   };
 
   const returnToCsvFirstFlow = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(activeImportRunStorageKey);
+    }
     setLegacyManualMode(false);
     setActiveStep(0);
     setError("");
@@ -1251,6 +1267,9 @@ function SetupStudio() {
     setSaving(true);
     setError("");
     try {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(activeImportRunStorageKey);
+      }
       setLegacyManualMode(true);
       setSelectedImportFile(null);
       setMaterializedImport(null);
@@ -1425,6 +1444,12 @@ function SetupStudio() {
       });
       setLegacyManualMode(false);
       setMaterializedImport(response);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(
+          activeImportRunStorageKey,
+          String(response.import_run_id)
+        );
+      }
       await loadImportWorkspace(
         response.import_run_id,
         `Import loaded. Snapshot #${response.import_run_id} is ready for manual completion.`
@@ -2144,6 +2169,9 @@ function SetupStudio() {
                 setImportProjection(null);
                 setMaterializedImport(null);
                 setImportRuleActions({});
+                if (typeof window !== "undefined") {
+                  window.localStorage.removeItem(activeImportRunStorageKey);
+                }
                 setStatus(
                   nextFile
                     ? `${nextFile.name} selected. Analyze it to start the import flow.`
@@ -2163,6 +2191,9 @@ function SetupStudio() {
               setImportProjection(null);
               setMaterializedImport(null);
               setImportRuleActions({});
+              if (typeof window !== "undefined") {
+                window.localStorage.removeItem(activeImportRunStorageKey);
+              }
               setStatus("Built-in sample CSV selected. Analyze it to start the import flow.");
             }}
             disabled={importLoading || saving || loading}

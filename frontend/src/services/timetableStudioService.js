@@ -89,8 +89,17 @@ export const timetableStudioService = {
   loadEnrollmentImport: (payload) => apiClient.post("/v2/imports/enrollment-load", payload),
   saveDataset: (payload) => apiClient.post("/v2/dataset", payload),
   generate: (payload) => apiClient.post("/v2/generate", payload),
-  latestGeneration: () => apiClient.get("/v2/generate/latest"),
-  setDefault: (solutionId) => apiClient.post("/v2/solutions/default", { solution_id: solutionId }),
+  latestGeneration: (importRunId = null) => {
+    if (!importRunId) {
+      return apiClient.get("/v2/generate/latest");
+    }
+    return apiClient.get(`/v2/generate/latest?import_run_id=${importRunId}`);
+  },
+  setDefault: (solutionId, importRunId = null) =>
+    apiClient.post("/v2/solutions/default", {
+      solution_id: solutionId,
+      import_run_id: importRunId || undefined,
+    }),
   view: ({ mode, lecturerId, studentGroupId, degreeId, pathId }) => {
     const params = new URLSearchParams({ mode });
     if (lecturerId) params.set("lecturer_id", lecturerId);

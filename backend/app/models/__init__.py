@@ -18,6 +18,11 @@ from app.models.snapshot import (
     SnapshotRoom,
     SnapshotSharedSession,
 )
+from app.models.snapshot_generation import (
+    SnapshotGenerationRun,
+    SnapshotSolutionEntry,
+    SnapshotTimetableSolution,
+)
 from app.models.v2 import (
     V2Degree,
     V2GenerationRun,
@@ -45,6 +50,9 @@ __all__ = [
     "SnapshotLecturer",
     "SnapshotRoom",
     "SnapshotSharedSession",
+    "SnapshotGenerationRun",
+    "SnapshotSolutionEntry",
+    "SnapshotTimetableSolution",
     "StudentModuleMembership",
     "StudentProgrammeContext",
     "V2Degree",
