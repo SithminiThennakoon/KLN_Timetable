@@ -276,30 +276,30 @@ function GenerateStudio() {
       <div className="panel studio-panel">
         <div className="studio-header">
           <div>
-            <h1 className="section-title">Generate Solutions</h1>
+            <h1 className="section-title">Generate Timetable</h1>
             <p className="section-subtitle">
-              Generate the full faculty timetable from the active setup source. Hard constraints are always enforced. Nice-to-have constraints only help reduce large solution counts.
+              Generate timetable options from the current setup. The system checks the result automatically before you use it.
             </p>
             {activeImportRunId && (
               <>
                 <p className="helper-copy">Using import snapshot #{activeImportRunId} directly.</p>
                 <p className="helper-copy">
-                  This generation run uses the normalized snapshot data directly, and the selected timetable is verified against the same snapshot before it is considered trusted.
+                  This run uses the current snapshot directly, and the selected timetable is verified against the same snapshot before it is considered trusted.
                 </p>
               </>
             )}
           </div>
           <button className="primary-btn" onClick={handleGenerate} disabled={loading}>
-            {loading ? "Generating..." : "Generate Timetable Solutions"}
+            {loading ? "Generating..." : "Generate Timetable"}
           </button>
         </div>
 
         {error && <div className="error-banner">{error}</div>}
 
         <section className="studio-card">
-          <h2>Nice-to-Have Constraints</h2>
+          <h2>Optional Preferences</h2>
           <p className="helper-copy">
-            Start without extra constraints if you want to measure how many valid timetables exist. Add nice-to-have constraints when the result count is too high and you need the solver to narrow the search.
+            Start without extra preferences if you want the broadest result. Add them only when you need the system to narrow a large solution set.
           </p>
           <div className="studio-actions">
             <button
@@ -387,14 +387,14 @@ function GenerateStudio() {
 
         {!generation && !error && (
           <section className="studio-card">
-            <h2>No generation run yet</h2>
-            <p className="empty-state">
-              {activeImportRunId
-                ? "Complete the snapshot-backed setup in Setup, then generate timetable solutions here."
-                : "Save your faculty data in Setup, then generate timetable solutions here. The system will count valid solutions, stop at the configured threshold or time limit, and keep preview solutions for review."}
-            </p>
-          </section>
-        )}
+              <h2>No generation run yet</h2>
+              <p className="empty-state">
+                {activeImportRunId
+                ? "Complete the setup in Setup, then generate the timetable here."
+                : "Finish the setup first, then generate the timetable here."}
+              </p>
+            </section>
+          )}
 
         {generation && (
           <>

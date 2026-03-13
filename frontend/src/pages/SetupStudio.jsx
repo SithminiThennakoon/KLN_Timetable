@@ -769,19 +769,19 @@ function StepChecks({ stepKey, validation, snapshotMode = false }) {
     snapshotMode,
   });
   if (feedback.blocking.length === 0 && feedback.warnings.length === 0) {
-    return (
-      <section className="studio-card">
-        <div className="info-banner">No current issues detected for this step.</div>
-      </section>
-    );
+    return null;
   }
+
+  const visibleWarnings = warningMessages.slice(0, 5);
 
   return (
     <section className="studio-card">
-      <h2>Current Step Checks</h2>
+      <h2>Step Check</h2>
       {feedback.blocking.length > 0 && (
         <div className="error-banner">
-          <strong>Fix these on this step:</strong>
+          <strong>
+            {feedback.blocking.length} required issue{feedback.blocking.length === 1 ? "" : "s"} on this step
+          </strong>
           <ul>
             {feedback.blocking.map((issue) => (
               <li key={issue}>{issue}</li>
@@ -791,12 +791,20 @@ function StepChecks({ stepKey, validation, snapshotMode = false }) {
       )}
       {warningMessages.length > 0 && (
         <div className="schema-notes">
-          <h3>Warnings for this step</h3>
+          <h3>
+            {warningMessages.length} warning{warningMessages.length === 1 ? "" : "s"} to review
+          </h3>
           <ul>
-            {warningMessages.map((warning) => (
+            {visibleWarnings.map((warning) => (
               <li key={warning}>{warning}</li>
             ))}
           </ul>
+          {warningMessages.length > visibleWarnings.length && (
+            <p className="helper-copy">
+              {warningMessages.length - visibleWarnings.length} more warning
+              {warningMessages.length - visibleWarnings.length === 1 ? "" : "s"} are hidden for now.
+            </p>
+          )}
         </div>
       )}
     </section>
@@ -1408,6 +1416,52 @@ function SetupStudio() {
     }
   };
 
+  const runGuidedDemoSetup = async () => {
+    setSelectedImportFile(null);
+    setUseBundledImportSample(true);
+    setImportAnalysis(null);
+    setImportProjection(null);
+    setMaterializedImport(null);
+    setImportRuleActions({});
+    setImportAction("demo");
+    setImportLoading(true);
+    setSaving(true);
+    setError("");
+    setStatus("Preparing the guided demo flow. This will load sample student data and fill the missing teaching details automatically.");
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(activeImportRunStorageKey);
+      }
+      const analysis = await timetableStudioService.analyzeEnrollmentImport(null);
+      setImportAnalysis(analysis);
+      const projection = await timetableStudioService.previewEnrollmentImport({ rules: [] }, null);
+      setImportProjection(projection);
+      const response = await timetableStudioService.materializeEnrollmentImport(
+        { rules: [] },
+        null
+      );
+      setMaterializedImport(response);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(activeImportRunStorageKey, String(response.import_run_id));
+      }
+      await loadImportWorkspace(response.import_run_id);
+      const summary = await timetableStudioService.seedRealisticSnapshotMissingData(
+        response.import_run_id
+      );
+      await loadImportWorkspace(
+        response.import_run_id,
+        `Demo setup ready. Snapshot #${response.import_run_id} now includes ${summary.lecturers_created} lecturers, ${summary.rooms_created} rooms, and ${summary.shared_sessions_created} teaching sessions.`
+      );
+      setActiveStep(3);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setImportAction("");
+      setImportLoading(false);
+      setSaving(false);
+    }
+  };
+
   const handleTempSessionModuleChange = (moduleId) => {
     const selectedModule = draft.modules.find((module) => module.id === moduleId);
     setTempSession((current) => ({
@@ -1852,8 +1906,9 @@ function SetupStudio() {
         activeImportRunId
       );
       await loadImportWorkspace(activeImportRunId);
+      setActiveStep(3);
       setStatus(
-        `Sample missing data loaded into snapshot #${activeImportRunId}. Added ${summary.rooms_created} rooms, ${summary.lecturers_created} lecturers, and ${summary.shared_sessions_created} realistic starter sessions.`
+        `Teaching details added for the demo. Snapshot #${activeImportRunId} now includes ${summary.rooms_created} rooms, ${summary.lecturers_created} lecturers, and ${summary.shared_sessions_created} realistic starter sessions.`
       );
     } catch (err) {
       setError(err.message);
@@ -2070,6 +2125,41 @@ function SetupStudio() {
   const hasAnalyzedImport = Boolean(importAnalysis);
   const hasReviewedImport = Boolean(importProjection);
   const hasMaterializedImport = Boolean(activeImportRunId);
+  const nextGuidedAction = !hasMaterializedImport
+    ? {
+        title: "Start with the easiest path",
+        description:
+          "For the demo, use the sample student data and let the app fill the missing teaching details automatically.",
+        button: importAction === "demo" ? "Preparing Demo..." : "Start Demo with Sample Data",
+        onClick: runGuidedDemoSetup,
+        secondary: "If you want, you can still use your own CSV below.",
+      }
+    : summary.sessions === 0
+      ? {
+          title: "Add the teaching details",
+          description:
+            "The student data is ready. Fill lecturers, rooms, and teaching sessions next.",
+          button: "Fill Demo Teaching Data",
+          onClick: loadSampleManualCompletionData,
+          secondary: "You can also add lecturers, rooms, and sessions manually in the sections below.",
+        }
+      : validation.blocking.length > 0
+        ? {
+            title: "Fix the final issues",
+            description: `There are ${validation.blocking.length} required issue${
+              validation.blocking.length === 1 ? "" : "s"
+            } to review before generation.`,
+            button: "Go to Ready to Generate",
+            onClick: () => setActiveStep(3),
+            secondary: "The final review step shows the shortest fix list.",
+          }
+        : {
+            title: "Move to generation",
+            description: "This setup looks ready. Open Generate and create timetable options.",
+            button: "Open Generate",
+            onClick: handleOpenGenerate,
+            secondary: "You can always return here and adjust the teaching details later.",
+          };
   const importStageSection = (
     <section className="studio-card">
       <div className="setup-flow-overview">
@@ -2106,12 +2196,27 @@ function SetupStudio() {
         </div>
       </div>
 
+      <div className="future-card">
+        <strong>{nextGuidedAction.title}</strong>
+        <span>{nextGuidedAction.description}</span>
+        <div className="record-actions">
+          <button
+            className="primary-btn"
+            type="button"
+            onClick={nextGuidedAction.onClick}
+            disabled={importLoading || saving || loading}
+          >
+            {nextGuidedAction.button}
+          </button>
+        </div>
+        <p className="helper-copy">{nextGuidedAction.secondary}</p>
+      </div>
+
       <div className="section-row">
         <div>
           <h2>Import Student Enrolments</h2>
           <p>
-            This is the normal starting point. First import the CSV, then complete the missing
-            timetable details in the wizard below.
+            Use your own CSV if you want to test real enrolment data. The guided demo path above is the fastest route for a normal user.
           </p>
         </div>
         <div className="record-actions">
@@ -2171,7 +2276,7 @@ function SetupStudio() {
         ) : (
           <>
             <strong>No CSV selected yet</strong>
-            <span>Choose a file or use the built-in sample CSV to begin.</span>
+            <span>Choose a file or use the guided demo action above.</span>
           </>
         )}
       </div>
@@ -2225,21 +2330,34 @@ function SetupStudio() {
       ) : (
         <>
           <div className="summary-grid">
-            {Object.entries(importAnalysis.summary || {}).map(([key, value]) => (
-              <div key={key} className="summary-item">
-                <span>{key.replace(/_/g, " ")}</span>
-                <strong>{value}</strong>
+            <div className="summary-item">
+              <span>Rows scanned</span>
+              <strong>{importAnalysis.summary?.total_rows || 0}</strong>
+            </div>
+            <div className="summary-item">
+              <span>Students found</span>
+              <strong>{importAnalysis.summary?.unique_students || 0}</strong>
+            </div>
+            <div className="summary-item">
+              <span>Review buckets</span>
+              <strong>{importBuckets.length}</strong>
+            </div>
+            {hasReviewedImport && (
+              <div className="summary-item">
+                <span>Rows kept for timetable building</span>
+                <strong>{importProjection.projection_summary?.projected_rows || 0}</strong>
               </div>
-            ))}
+            )}
           </div>
 
-          <div className="schema-notes">
+          <details className="schema-notes">
+            <summary>See import details</summary>
             <h3>Things That Need Review</h3>
             {importBuckets.length === 0 ? (
               <p className="empty-state">This import looks clean. No review items were generated.</p>
             ) : (
               <div className="editor-list">
-                {importBuckets.slice(0, 24).map((bucket) => {
+                {importBuckets.slice(0, 12).map((bucket) => {
                   const bucketId = `${bucket.bucket_type}::${bucket.bucket_key}`;
                   return (
                     <div key={bucketId} className="editor-card">
@@ -2267,30 +2385,16 @@ function SetupStudio() {
                           <option value="exclude">Exclude bucket</option>
                         </select>
                       </label>
-                      {bucket.sample_rows?.length > 0 && (
-                        <div className="schema-notes compact">
-                          <h3>Sample rows</h3>
-                          <ul>
-                            {bucket.sample_rows.map((row) => (
-                              <li key={`${bucketId}-${row.row_number}`}>
-                                Row {row.row_number}: {row.course_code} | {row.stream} | Year{" "}
-                                {row.year} | Batch {row.batch || "-"} | Path{" "}
-                                {row.course_path_no || "blank"}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
                     </div>
                   );
                 })}
               </div>
             )}
-          </div>
+          </details>
 
           {hasReviewedImport && (
             <div className="schema-notes">
-              <h3>Step 2: Review Result</h3>
+              <h3>Review result</h3>
               <div className="summary-grid">
                 {Object.entries(importProjection.projection_summary || {}).map(([key, value]) => (
                   <div key={key} className="summary-item">
@@ -2319,10 +2423,9 @@ function SetupStudio() {
           <div className="schema-notes">
             <h3>What happens next</h3>
             <ul>
-              <li>The system keeps the exact student enrolments from the CSV.</li>
-              <li>Unresolved items stay excluded until you make a decision.</li>
-              <li>After you click `Use This Import`, the manual wizard opens for the missing timetable details.</li>
-              <li>Your imported student data is kept separate from the manual teaching setup.</li>
+              <li>The system keeps the student enrolments from the CSV.</li>
+              <li>Unresolved items stay excluded until you decide otherwise.</li>
+              <li>After `Use This Import`, you only complete the teaching details that the CSV cannot provide.</li>
             </ul>
           </div>
         </>
@@ -2339,7 +2442,7 @@ function SetupStudio() {
             <p className="section-subtitle">
               {activeImportRunId
                 ? `Student enrolments are loaded. Now complete the missing teaching details.`
-                : "Start by importing the student enrolment CSV. After that, complete the missing timetable details."}
+                : "Start with the guided demo path or import your own student CSV."}
             </p>
           </div>
           {showSetupWizard && (
@@ -2381,21 +2484,15 @@ function SetupStudio() {
             <div>
               <h2>Complete Missing Details</h2>
               <p>
-                Add the teaching details the CSV cannot provide, such as rooms, lecturers, and
-                shared teaching sessions.
+                Add only the teaching details that do not exist in the CSV: rooms, lecturers, and teaching sessions.
               </p>
             </div>
             {activeImportRunId && <span className="tag-chip">Snapshot #{activeImportRunId}</span>}
           </div>
-          <div className="schema-notes">
-            <h3>This stage is for non-CSV data only</h3>
-            <ul>
-              <li>rooms and room capabilities</li>
-              <li>lecturers</li>
-              <li>shared teaching sessions and delivery requirements</li>
-              <li>testing helpers that populate only the missing teaching data</li>
-            </ul>
-            {activeImportRunId && (
+          {activeImportRunId && (
+            <div className="future-card">
+              <strong>Fastest next step</strong>
+              <span>Use the realistic demo teaching data if you want to reach generation quickly.</span>
               <div className="record-actions">
                 <button
                   className="ghost-btn"
@@ -2403,18 +2500,18 @@ function SetupStudio() {
                   onClick={loadSampleManualCompletionData}
                   disabled={saving || loading || importLoading}
                 >
-                  Load Sample Missing Data
+                  Fill Demo Teaching Data
                 </button>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </section>
 
         <div className="wizard-steps">
           {visibleSteps.map((step, index) => (
             <StepBadge
               key={step.key}
-              label={`${index + 1}. ${step.label}`}
+              label={`${index + 1}. ${step.key === "review" ? "Ready to Generate" : step.label}`}
               active={index === activeStep}
               complete={!blockedSteps[step.key] && index < activeStep}
               blocked={blockedSteps[step.key]}
@@ -3832,7 +3929,7 @@ function SetupStudio() {
           <div className="studio-grid two-column">
             <StepIntro stepKey="review" />
             <section className="studio-card">
-              <h2>Readiness Review</h2>
+              <h2>Ready to Generate</h2>
               {validation.blocking.length === 0 ? (
                 <div className="info-banner">This setup is ready for timetable generation.</div>
               ) : (
@@ -3848,7 +3945,7 @@ function SetupStudio() {
 
               {validation.warnings.length > 0 && (
                 <div className="schema-notes">
-                  <h3>Warnings you may still want to review</h3>
+                  <h3>Warnings to review</h3>
                   <ul>
                     {summarizeValidationWarnings(validation.warnings, {
                       snapshotMode: Boolean(activeImportRunId),
@@ -3903,7 +4000,7 @@ function SetupStudio() {
               blockedSteps[visibleSteps[Math.min(activeStep + 1, visibleSteps.length - 1)].key]
             }
           >
-            Next
+            Continue
           </button>
         </div>
           </>

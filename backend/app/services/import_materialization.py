@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from collections import Counter, defaultdict
@@ -638,7 +639,8 @@ def materialize_import_run(
             continue
         academic_year = member_rows[0][1]
         signature = ",".join(str(student_id) for student_id in student_ids)
-        key = (academic_year, signature)
+        signature_hash = hashlib.sha1(signature.encode("utf-8")).hexdigest()
+        key = (academic_year, signature_hash)
         if key not in pending_attendance_groups:
             programme_counts = Counter(programme_id for _, _, programme_id, _ in member_rows if programme_id)
             path_counts = Counter(path_id for _, _, _, path_id in member_rows if path_id)
@@ -668,7 +670,7 @@ def materialize_import_run(
                     student_count=len(student_ids),
                 ),
                 derivation_basis="module_membership_signature",
-                membership_signature=signature,
+                membership_signature=signature_hash,
                 interpretation_confidence="medium",
                 student_count=len(student_ids),
             )

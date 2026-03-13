@@ -273,7 +273,7 @@ describe("GenerateStudio", () => {
     fireEvent.change(screen.getByLabelText(/Performance preset/i), {
       target: { value: "thorough" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Generate Timetable Solutions/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Generate Timetable/i }));
 
     await waitFor(() =>
       expect(timetableStudioService.generate).toHaveBeenCalledWith({
@@ -321,7 +321,7 @@ describe("GenerateStudio", () => {
     fireEvent.change(screen.getByLabelText(/Max solutions/i), { target: { value: "100000" } });
     fireEvent.change(screen.getByLabelText(/Preview limit/i), { target: { value: "0" } });
     fireEvent.change(screen.getByLabelText(/Time limit \(seconds\)/i), { target: { value: "600" } });
-    fireEvent.click(screen.getByRole("button", { name: /Generate Timetable Solutions/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Generate Timetable/i }));
 
     await waitFor(() =>
       expect(timetableStudioService.generate).toHaveBeenCalledWith({

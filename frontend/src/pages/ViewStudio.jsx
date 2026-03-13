@@ -1070,10 +1070,16 @@ function ViewStudio() {
     (mode === "lecturer" && !selectedLecturerId) ||
     (mode === "student" && (!selectedDegreeId || !selectedPathId));
 
-  const handleApplyFilters = async () => {
-    if (needsSelection) return;
-    await loadView(mode);
-  };
+  useEffect(() => {
+    if (mode === "admin") {
+      return;
+    }
+    if (needsSelection) {
+      setView(null);
+      return;
+    }
+    loadView(mode);
+  }, [mode, needsSelection, selectedLecturerId, selectedDegreeId, selectedPathId, loadView]);
 
   const handleExport = async (format) => {
     try {
@@ -1120,7 +1126,7 @@ function ViewStudio() {
           <div className="vs-title-block">
             <h1 className="section-title">Timetable Views</h1>
             <p className="section-subtitle">
-              Review the current timetable in admin, lecturer, or student mode.
+              Start with the default timetable. Switch to lecturer or student mode only when you need a filtered view.
             </p>
             {activeImportRunId && (
               <p className="helper-copy">
@@ -1183,16 +1189,6 @@ function ViewStudio() {
                 </select>
               </>
             )}
-            {mode !== "admin" && (
-              <button
-                type="button"
-                className="primary-btn vs-apply-btn"
-                onClick={handleApplyFilters}
-                disabled={needsSelection}
-              >
-                Apply
-              </button>
-            )}
           </div>
         </div>
 
@@ -1251,13 +1247,13 @@ function ViewStudio() {
         {!loading && mode === "lecturer" && !view && !error && !selectedLecturerId && (
           <section className="studio-card vs-empty-state">
             <h2>Select a lecturer</h2>
-            <p>Choose a lecturer above, then click Apply to load their timetable.</p>
+            <p>Choose a lecturer above to load their timetable automatically.</p>
           </section>
         )}
         {!loading && mode === "student" && !view && !error && (
           <section className="studio-card vs-empty-state">
             <h2>Select a degree and path</h2>
-            <p>Choose the degree and path above, then click Apply to load the student timetable.</p>
+            <p>Choose the degree and path above to load the student timetable automatically.</p>
           </section>
         )}
         {!loading && mode === "admin" && !view && !error && (
