@@ -6,6 +6,7 @@ It must be checked against the normalized verification snapshot.
 ## Current snapshot source
 
 - `GET /api/v2/imports/{import_run_id}/verification-snapshot`
+- `GET /api/v2/imports/{import_run_id}/verification`
 - `GET /api/v2/imports/{import_run_id}/verification/python`
 
 ## Snapshot contents
@@ -53,5 +54,5 @@ Each verifier should return JSON with this shape:
 ## Current implementation status
 
 - Python verifier: implemented and callable through the API
-- Rust verifier: implemented as a standalone CLI module
+- Rust verifier: implemented and callable through the verification suite
 - Elixir verifier: planned

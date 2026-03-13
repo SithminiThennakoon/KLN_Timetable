@@ -148,7 +148,7 @@ function GenerateStudio() {
     setVerificationLoading(true);
     setVerificationError("");
     try {
-      const response = await timetableStudioService.verifySnapshotGenerationPython(importRunId);
+      const response = await timetableStudioService.verifySnapshotGeneration(importRunId);
       setVerification(response);
     } catch (err) {
       setVerification(null);
@@ -549,44 +549,72 @@ function GenerateStudio() {
                   <>
                     <div className="summary-grid">
                       <div className="summary-item">
-                        <span>Verifier</span>
-                        <strong>{verification.verifier}</strong>
+                        <span>Completed verifiers</span>
+                        <strong>{(verification.completed_verifiers || []).join(", ") || "None"}</strong>
                       </div>
                       <div className="summary-item">
                         <span>Hard constraints</span>
-                        <strong>{verification.hard_valid ? "Pass" : "Fail"}</strong>
+                        <strong>{verification.hard_valid_all ? "Pass" : "Not fully trusted yet"}</strong>
                       </div>
                       <div className="summary-item">
-                        <span>Violations</span>
-                        <strong>{verification.hard_violations?.length || 0}</strong>
+                        <span>Missing verifiers</span>
+                        <strong>{(verification.missing_verifiers || []).join(", ") || "None"}</strong>
                       </div>
                       <div className="summary-item">
-                        <span>Checked entries</span>
-                        <strong>{verification.stats?.entry_count || 0}</strong>
+                        <span>Verified solution</span>
+                        <strong>{verification.solution_id || "-"}</strong>
                       </div>
                     </div>
-                    {(verification.hard_violations || []).length > 0 && (
+                    {(verification.missing_verifiers || []).length > 0 && (
                       <div className="info-banner invalid">
-                        {(verification.hard_violations || [])
-                          .slice(0, 5)
-                          .map((item) => item.message)
-                          .join(" ")}
+                        The timetable is not fully trusted yet because these required verifiers have not completed:{" "}
+                        {(verification.missing_verifiers || []).join(", ")}.
                       </div>
                     )}
-                    {(verification.soft_summary || []).length > 0 && (
+                    {Object.entries(verification.errors || {}).length > 0 && (
                       <div className="constraint-list">
-                        {verification.soft_summary.map((item) => (
-                          <div key={item.key} className="constraint-row static">
+                        {Object.entries(verification.errors).map(([key, value]) => (
+                          <div key={key} className="constraint-row static">
                             <div>
-                              <strong>
-                                {item.label}: {item.satisfied ? "Satisfied" : "Not satisfied"}
-                              </strong>
-                              <span>{item.details}</span>
+                              <strong>{key}</strong>
+                              <span>{value}</span>
                             </div>
                           </div>
                         ))}
                       </div>
                     )}
+                    {Object.entries(verification.results || {}).map(([key, result]) => (
+                      <div key={key} className="schema-notes">
+                        <h3>{key} verifier</h3>
+                        <p>
+                          Hard constraints: {result.hard_valid ? "Pass" : "Fail"} | Violations:{" "}
+                          {result.hard_violations?.length || 0} | Checked entries:{" "}
+                          {result.stats?.entry_count || 0}
+                        </p>
+                        {(result.hard_violations || []).length > 0 && (
+                          <div className="info-banner invalid">
+                            {(result.hard_violations || [])
+                              .slice(0, 5)
+                              .map((item) => item.message)
+                              .join(" ")}
+                          </div>
+                        )}
+                        {(result.soft_summary || []).length > 0 && (
+                          <div className="constraint-list">
+                            {result.soft_summary.map((item) => (
+                              <div key={`${key}-${item.key}`} className="constraint-row static">
+                                <div>
+                                  <strong>
+                                    {item.label}: {item.satisfied ? "Satisfied" : "Not satisfied"}
+                                  </strong>
+                                  <span>{item.details}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </>
                 )}
               </section>

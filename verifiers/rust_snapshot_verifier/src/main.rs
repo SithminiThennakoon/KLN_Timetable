@@ -31,7 +31,6 @@ struct SharedSession {
     id: i32,
     name: String,
     session_type: Option<String>,
-    duration_minutes: i32,
     occurrences_per_week: i32,
     required_room_type: Option<String>,
     required_lab_type: Option<String>,
