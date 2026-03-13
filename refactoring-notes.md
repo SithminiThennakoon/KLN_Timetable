@@ -110,3 +110,44 @@ Relevant references:
 3. Fix student general-year filtering so the selected year is part of the request and backend query.
 4. Either fully implement `cohort_year` end to end or remove it from the UI until it is real.
 5. Either enforce `year_restriction` in validation/solver logic or remove/relabel it so operators are not misled.
+
+## Future work after demo
+
+### CSV and import realism
+
+- The CSV is good enough as the primary student-attendance source, but not enough as a full timetable-input source.
+- It still leaves major non-CSV teaching data to be entered manually:
+  - lecturers
+  - rooms and room capabilities
+  - shared teaching structure
+  - weekly teaching intent
+- A large portion of raw CSV rows are still excluded or ambiguous during import, especially around:
+  - cross-year module registrations
+  - common modules
+  - repeaters
+  - path ambiguity
+
+### Sample seed realism issues
+
+- The current realistic sample missing-data seed is operational, but still too synthetic.
+- It seeds sessions for only part of the imported module set, not the full imported academic world.
+- It currently exercises almost no same-time parallel teaching behavior.
+- It still produces some tiny one-student or two-student weekly sessions that are likely repeater or exception cases and should not behave like standard scheduled teaching.
+- Some derived attendance-group labels appear too simplistic for the actual module mix they carry, so group labeling may be misleading even when underlying student membership is correct.
+
+### Generated timetable realism issues
+
+- The sample-generated timetable is verifier-valid, but some patterns still look unrealistic:
+  - very heavy Friday concentration
+  - near-saturated flagship lecture rooms
+  - a few cohorts with unusually high weekly hours
+  - placeholder lecturer workloads that may not resemble real faculty allocation
+- The biggest realism risk is not solver correctness now; it is whether the seeded sample world resembles the real faculty strongly enough for meaningful demo confidence.
+
+### Best follow-up work after the demo
+
+1. Separate repeater-style and tiny exception groups from normal weekly teaching seeding.
+2. Improve attendance-group labeling so mixed/common groups are represented honestly.
+3. Expand realistic seeding to cover shared teaching patterns and more realistic lecturer assignment.
+4. Rebalance seeded room and day usage so demo generations are less artificially skewed.
+5. Re-check which imported modules should become active weekly teaching demand versus historical or exceptional enrollments.
