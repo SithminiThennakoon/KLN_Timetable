@@ -146,6 +146,7 @@ def build_mock_task() -> SessionTask:
         lecturer_ids=(1,),
         student_group_ids=(1,),
         student_membership_keys=tuple(),
+        study_years=(1,),
         student_count=40,
         root_session_id=1,
         bundle_key=None,
@@ -290,6 +291,34 @@ class TimetableV2Tests(unittest.TestCase):
         self.assertEqual(analysis["anomaly_counts"]["missing_batch"], 1)
         self.assertEqual(analysis["anomaly_counts"]["non_numeric_year"], 1)
         self.assertEqual(analysis["anomaly_counts"]["unparseable_course_code"], 1)
+
+    def test_room_year_restriction_blocks_room_match(self):
+        task = build_mock_task()
+        allowed_room = type(
+            "Room",
+            (),
+            {
+                "id": 1,
+                "capacity": 50,
+                "room_type": "lab",
+                "lab_type": "chem_lab",
+                "year_restriction": 1,
+            },
+        )()
+        blocked_room = type(
+            "Room",
+            (),
+            {
+                "id": 2,
+                "capacity": 50,
+                "room_type": "lab",
+                "lab_type": "chem_lab",
+                "year_restriction": 2,
+            },
+        )()
+
+        self.assertTrue(timetable_v2_service._room_matches(allowed_room, task))
+        self.assertFalse(timetable_v2_service._room_matches(blocked_room, task))
 
     def test_csv_import_rules_can_accept_exception_and_treat_blank_path_as_common(self):
         csv_path = write_csv_fixture(

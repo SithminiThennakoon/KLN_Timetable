@@ -18,11 +18,13 @@ struct Room {
     capacity: i32,
     room_type: Option<String>,
     lab_type: Option<String>,
+    year_restriction: Option<i32>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 struct AttendanceGroup {
     id: i32,
+    study_year: i32,
     student_hashes: Vec<String>,
 }
 
@@ -96,6 +98,7 @@ struct EntryContext {
     entry: TimetableEntry,
     session: SharedSession,
     student_hashes: BTreeSet<String>,
+    study_years: BTreeSet<i32>,
 }
 
 fn overlaps(start_a: i32, end_a: i32, start_b: i32, end_b: i32) -> bool {
@@ -168,8 +171,10 @@ fn build_entry_context(snapshot: &Snapshot) -> Vec<EntryContext> {
                 entry.attendance_group_ids.clone()
             };
             let mut student_hashes = BTreeSet::new();
+            let mut study_years = BTreeSet::new();
             for group_id in group_ids {
                 if let Some(group) = groups_by_id.get(&group_id) {
+                    study_years.insert(group.study_year);
                     for student_hash in &group.student_hashes {
                         student_hashes.insert(student_hash.clone());
                     }
@@ -179,6 +184,7 @@ fn build_entry_context(snapshot: &Snapshot) -> Vec<EntryContext> {
                 entry,
                 session,
                 student_hashes,
+                study_years,
             }
         })
         .collect()
@@ -229,6 +235,21 @@ fn verify_hard_constraints(snapshot: &Snapshot) -> Vec<Violation> {
                         required_lab_type,
                         room.name,
                         room.lab_type.clone().unwrap_or_default()
+                    ),
+                });
+            }
+        }
+        if let Some(room_year_restriction) = room.year_restriction {
+            if item
+                .study_years
+                .iter()
+                .any(|study_year| *study_year != room_year_restriction)
+            {
+                violations.push(Violation {
+                    constraint: "room_year_restriction".to_string(),
+                    message: format!(
+                        "Session \"{}\" includes study years {:?} but room \"{}\" is restricted to year {}.",
+                        item.session.name, item.study_years, room.name, room_year_restriction
                     ),
                 });
             }
@@ -584,10 +605,10 @@ mod tests {
             r#"{
               "selected_soft_constraints": ["prefer_morning_theory"],
               "rooms": [
-                {"id": 1, "name": "Hall A", "capacity": 80, "room_type": "lecture", "lab_type": null}
+                {"id": 1, "name": "Hall A", "capacity": 80, "room_type": "lecture", "lab_type": null, "year_restriction": null}
               ],
               "attendance_groups": [
-                {"id": 1, "student_hashes": ["s1", "s2", "s3"]}
+                {"id": 1, "study_year": 1, "student_hashes": ["s1", "s2", "s3"]}
               ],
               "shared_sessions": [
                 {
@@ -610,7 +631,7 @@ mod tests {
                   "start_minute": 480,
                   "duration_minutes": 120,
                   "occurrence_index": 1,
-                  "room": {"id": 1, "name": "Hall A", "capacity": 80, "room_type": "lecture", "lab_type": null},
+                  "room": {"id": 1, "name": "Hall A", "capacity": 80, "room_type": "lecture", "lab_type": null, "year_restriction": null},
                   "lecturer_ids": [1],
                   "attendance_group_ids": [1]
                 }
@@ -636,5 +657,17 @@ mod tests {
             .hard_violations
             .iter()
             .any(|item| item.constraint == "room_capacity_compatibility"));
+    }
+
+    #[test]
+    fn room_year_restriction_violation_is_reported() {
+        let mut snapshot = snapshot_json();
+        snapshot.timetable_entries[0].room.year_restriction = Some(2);
+        let result = verify_snapshot(&snapshot);
+        assert!(!result.hard_valid);
+        assert!(result
+            .hard_violations
+            .iter()
+            .any(|item| item.constraint == "room_year_restriction"));
     }
 }

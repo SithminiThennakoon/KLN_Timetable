@@ -64,11 +64,15 @@ def _build_entry_context(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
         attendance_group_ids = [int(item) for item in raw.get("attendance_group_ids") or session.get("attendance_group_ids", [])]
         lecturer_ids = [int(item) for item in raw.get("lecturer_ids") or session.get("lecturer_ids", [])]
         student_hashes: set[str] = set()
+        study_years: set[int] = set()
         for group_id in attendance_group_ids:
             group = groups_by_id.get(group_id)
             if not group:
                 continue
             student_hashes.update(group.get("student_hashes", []))
+            study_year = group.get("study_year")
+            if study_year is not None:
+                study_years.add(int(study_year))
         entries.append(
             {
                 "solution_entry_id": int(raw["solution_entry_id"]),
@@ -84,6 +88,7 @@ def _build_entry_context(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
                 "attendance_group_ids": attendance_group_ids,
                 "lecturer_ids": lecturer_ids,
                 "student_hashes": student_hashes,
+                "study_years": study_years,
             }
         )
     return entries
@@ -141,6 +146,22 @@ def _verify_hard_constraints(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
                     f'Session "{session["name"]}" requires lab type "{required_lab_type}" but room "{room["name"]}" is "{room.get("lab_type")}".',
                     shared_session_id=entry["shared_session_id"],
                     room_id=int(room["id"]),
+                )
+            )
+
+        room_year_restriction = room.get("year_restriction")
+        if room_year_restriction is not None and any(
+            int(study_year) != int(room_year_restriction)
+            for study_year in entry["study_years"]
+        ):
+            violations.append(
+                _violation(
+                    "room_year_restriction",
+                    f'Session "{session["name"]}" includes study years {sorted(entry["study_years"])} but room "{room["name"]}" is restricted to year {room_year_restriction}.',
+                    shared_session_id=entry["shared_session_id"],
+                    room_id=int(room["id"]),
+                    room_year_restriction=int(room_year_restriction),
+                    study_years=sorted(entry["study_years"]),
                 )
             )
 

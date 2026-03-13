@@ -12,7 +12,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from verifiers.python_snapshot_verifier import verify_snapshot  # noqa: E402
 
 
-def build_snapshot(*, room_capacity=80, include_overlap=False, friday_theory=False):
+def build_snapshot(
+    *,
+    room_capacity=80,
+    include_overlap=False,
+    friday_theory=False,
+    room_year_restriction=None,
+):
     first_day = "Friday" if friday_theory else "Monday"
     second_entry = {
         "shared_session_id": 2,
@@ -47,7 +53,7 @@ def build_snapshot(*, room_capacity=80, include_overlap=False, friday_theory=Fal
                 "room_type": "lecture",
                 "lab_type": None,
                 "location": "Main Building",
-                "year_restriction": None,
+                "year_restriction": room_year_restriction,
             },
             "lecturer_ids": [1],
             "attendance_group_ids": [1],
@@ -66,7 +72,7 @@ def build_snapshot(*, room_capacity=80, include_overlap=False, friday_theory=Fal
                 "room_type": "lecture",
                 "lab_type": None,
                 "location": "Main Building",
-                "year_restriction": None,
+                "year_restriction": room_year_restriction,
             },
             {
                 "id": 2,
@@ -138,7 +144,7 @@ def build_snapshot(*, room_capacity=80, include_overlap=False, friday_theory=Fal
                     "room_type": "lecture",
                     "lab_type": None,
                     "location": "Main Building",
-                    "year_restriction": None,
+                    "year_restriction": room_year_restriction,
                 },
                 "lecturer_ids": [1],
                 "curriculum_module_ids": [1],
@@ -183,6 +189,16 @@ class PythonSnapshotVerifierTests(unittest.TestCase):
         self.assertTrue(
             any(
                 item["constraint"] == "no_student_overlap"
+                for item in result["hard_violations"]
+            )
+        )
+
+    def test_room_year_restriction_violation_is_reported(self):
+        result = verify_snapshot(build_snapshot(room_year_restriction=2))
+        self.assertFalse(result["hard_valid"])
+        self.assertTrue(
+            any(
+                item["constraint"] == "room_year_restriction"
                 for item in result["hard_violations"]
             )
         )

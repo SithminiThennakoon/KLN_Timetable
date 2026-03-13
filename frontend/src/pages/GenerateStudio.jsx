@@ -278,7 +278,7 @@ function GenerateStudio() {
               <>
                 <p className="helper-copy">Using import snapshot #{activeImportRunId} directly.</p>
                 <p className="helper-copy">
-                  This generation run uses the normalized snapshot data directly. The Views page still follows the published legacy dataset until snapshot-native views are finished.
+                  This generation run uses the normalized snapshot data directly, and the selected timetable is verified against the same snapshot before it is considered trusted.
                 </p>
               </>
             )}
@@ -527,7 +527,7 @@ function GenerateStudio() {
                   <div>
                     <h2>Verification</h2>
                     <p className="helper-copy">
-                      The selected timetable is checked against the normalized snapshot using an independent Python verifier.
+                      The selected timetable is checked against the normalized snapshot using three independent verifiers: Python, Rust, and Elixir.
                     </p>
                   </div>
                   <button

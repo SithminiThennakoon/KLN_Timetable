@@ -151,6 +151,7 @@ class SessionTask:
     lecturer_ids: tuple[int, ...]
     student_group_ids: tuple[int, ...]
     student_membership_keys: tuple[str, ...]
+    study_years: tuple[int, ...]
     student_count: int
     root_session_id: int
     bundle_key: tuple[int, int] | None
@@ -472,6 +473,10 @@ def _build_tasks(db: Session) -> list[SessionTask]:
             if session.allow_parallel_rooms
             else [lecturer_ids for _ in split_assignments]
         )
+        study_year_by_group_id = {
+            int(group.id): int(group.year)
+            for group in session.student_groups
+        }
         for occurrence_index in range(1, int(session.occurrences_per_week) + 1):
             for split, assigned_lecturers in zip(
                 split_assignments, lecturer_chunks, strict=True
@@ -495,6 +500,15 @@ def _build_tasks(db: Session) -> list[SessionTask]:
                         lecturer_ids=assigned_lecturers,
                         student_group_ids=split.student_group_ids,
                         student_membership_keys=student_membership_keys,
+                        study_years=tuple(
+                            sorted(
+                                {
+                                    study_year_by_group_id[group_id]
+                                    for group_id in split.student_group_ids
+                                    if group_id in study_year_by_group_id
+                                }
+                            )
+                        ),
                         student_count=split.student_count,
                         root_session_id=int(session.id),
                         bundle_key=(int(session.id), occurrence_index)
@@ -567,6 +581,10 @@ def _build_snapshot_tasks(
             if session.allow_parallel_rooms
             else [lecturer_ids for _ in split_assignments]
         )
+        study_year_by_group_id = {
+            int(group.id): int(group.study_year)
+            for group in session.attendance_groups
+        }
         for occurrence_index in range(1, int(session.occurrences_per_week) + 1):
             for split, assigned_lecturers in zip(
                 split_assignments, lecturer_chunks, strict=True
@@ -590,6 +608,15 @@ def _build_snapshot_tasks(
                         lecturer_ids=assigned_lecturers,
                         student_group_ids=split.student_group_ids,
                         student_membership_keys=student_membership_keys,
+                        study_years=tuple(
+                            sorted(
+                                {
+                                    study_year_by_group_id[group_id]
+                                    for group_id in split.student_group_ids
+                                    if group_id in study_year_by_group_id
+                                }
+                            )
+                        ),
                         student_count=split.student_count,
                         root_session_id=int(session.id),
                         bundle_key=(int(session.id), occurrence_index)
@@ -633,6 +660,10 @@ def _format_session_module_name(session: V2Session) -> str:
 
 def _room_matches(room: V2Room, task: SessionTask) -> bool:
     if room.capacity < task.student_count:
+        return False
+    if room.year_restriction is not None and any(
+        int(study_year) != int(room.year_restriction) for study_year in task.study_years
+    ):
         return False
     if task.required_room_type and room.room_type != task.required_room_type:
         return False
@@ -847,6 +878,11 @@ def _precheck_diagnostics(
                 room = room_lookup.get(task.specific_room_id)
                 room_name = room.name if room else f"room #{task.specific_room_id}"
                 issue += f" in required room {room_name}"
+            elif task.study_years:
+                issue += " for study year"
+                if len(task.study_years) > 1:
+                    issue += "s"
+                issue += " " + ", ".join(str(item) for item in task.study_years)
             elif task.required_lab_type:
                 issue += f" requiring lab type {task.required_lab_type}"
             elif task.required_room_type:
@@ -3830,6 +3866,7 @@ def build_snapshot_verification_payload(db: Session, import_run_id: int) -> dict
         "hard_constraints": [
             "room_capacity_compatibility",
             "room_capability_compatibility",
+            "room_year_restriction",
             "specific_room_restrictions",
             "no_room_overlap",
             "no_lecturer_overlap",

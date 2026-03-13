@@ -44,6 +44,7 @@ Each verifier should return JSON with this shape:
 
 - room capacity compatibility
 - room capability compatibility
+- room year restriction
 - specific room restrictions
 - no room overlap
 - no lecturer overlap
@@ -55,4 +56,4 @@ Each verifier should return JSON with this shape:
 
 - Python verifier: implemented and callable through the API
 - Rust verifier: implemented and callable through the verification suite
-- Elixir verifier: planned
+- Elixir verifier: implemented and callable through the verification suite
