@@ -100,6 +100,8 @@ export const timetableStudioService = {
     }
     return apiClient.get(`/v2/generate/latest?import_run_id=${importRunId}`);
   },
+  verifySnapshotGenerationPython: (importRunId) =>
+    apiClient.get(`/v2/imports/${importRunId}/verification/python`),
   setDefault: (solutionId, importRunId = null) =>
     apiClient.post("/v2/solutions/default", {
       solution_id: solutionId,

@@ -122,6 +122,9 @@ function formatCombinationCount(suggestion) {
 
 function GenerateStudio() {
   const [generation, setGeneration] = useState(null);
+  const [verification, setVerification] = useState(null);
+  const [verificationLoading, setVerificationLoading] = useState(false);
+  const [verificationError, setVerificationError] = useState("");
   const [activeImportRunId, setActiveImportRunId] = useState(() => {
     if (typeof window === "undefined") {
       return null;
@@ -136,6 +139,25 @@ function GenerateStudio() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const loadVerification = async (importRunId, nextGeneration = null) => {
+    if (!importRunId || !nextGeneration || (nextGeneration.solutions || []).length === 0) {
+      setVerification(null);
+      setVerificationError("");
+      return;
+    }
+    setVerificationLoading(true);
+    setVerificationError("");
+    try {
+      const response = await timetableStudioService.verifySnapshotGenerationPython(importRunId);
+      setVerification(response);
+    } catch (err) {
+      setVerification(null);
+      setVerificationError(err.message);
+    } finally {
+      setVerificationLoading(false);
+    }
+  };
+
   const loadLatest = async () => {
     try {
       const response = await timetableStudioService.latestGeneration(activeImportRunId);
@@ -145,8 +167,11 @@ function GenerateStudio() {
         ...prev,
         performance_preset: response.performance_preset || prev.performance_preset,
       }));
+      await loadVerification(activeImportRunId, response);
     } catch {
       setGeneration(null);
+      setVerification(null);
+      setVerificationError("");
     }
   };
 
@@ -189,8 +214,11 @@ function GenerateStudio() {
         ...requestSettings,
       });
       setGeneration(response);
+      await loadVerification(activeImportRunId, response);
     } catch (err) {
       setError(err.message);
+      setVerification(null);
+      setVerificationError("");
     } finally {
       setLoading(false);
     }
@@ -205,6 +233,7 @@ function GenerateStudio() {
         activeImportRunId
       );
       setGeneration(response);
+      await loadVerification(activeImportRunId, response);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -491,6 +520,77 @@ function GenerateStudio() {
                 </div>
               )}
             </section>
+
+            {activeImportRunId && (
+              <section className="studio-card">
+                <div className="studio-header compact">
+                  <div>
+                    <h2>Verification</h2>
+                    <p className="helper-copy">
+                      The selected timetable is checked against the normalized snapshot using an independent Python verifier.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => loadVerification(activeImportRunId, generation)}
+                    disabled={verificationLoading || loading}
+                  >
+                    {verificationLoading ? "Verifying..." : "Run Verification"}
+                  </button>
+                </div>
+                {verificationError && <div className="error-banner">{verificationError}</div>}
+                {!verification && !verificationError && (
+                  <p className="empty-state">
+                    Verification will appear here after a snapshot-backed generation run finishes.
+                  </p>
+                )}
+                {verification && (
+                  <>
+                    <div className="summary-grid">
+                      <div className="summary-item">
+                        <span>Verifier</span>
+                        <strong>{verification.verifier}</strong>
+                      </div>
+                      <div className="summary-item">
+                        <span>Hard constraints</span>
+                        <strong>{verification.hard_valid ? "Pass" : "Fail"}</strong>
+                      </div>
+                      <div className="summary-item">
+                        <span>Violations</span>
+                        <strong>{verification.hard_violations?.length || 0}</strong>
+                      </div>
+                      <div className="summary-item">
+                        <span>Checked entries</span>
+                        <strong>{verification.stats?.entry_count || 0}</strong>
+                      </div>
+                    </div>
+                    {(verification.hard_violations || []).length > 0 && (
+                      <div className="info-banner invalid">
+                        {(verification.hard_violations || [])
+                          .slice(0, 5)
+                          .map((item) => item.message)
+                          .join(" ")}
+                      </div>
+                    )}
+                    {(verification.soft_summary || []).length > 0 && (
+                      <div className="constraint-list">
+                        {verification.soft_summary.map((item) => (
+                          <div key={item.key} className="constraint-row static">
+                            <div>
+                              <strong>
+                                {item.label}: {item.satisfied ? "Satisfied" : "Not satisfied"}
+                              </strong>
+                              <span>{item.details}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </section>
+            )}
 
             <section className="studio-card">
               <h2>Preview Solutions</h2>

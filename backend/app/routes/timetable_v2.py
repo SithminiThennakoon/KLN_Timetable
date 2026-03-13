@@ -87,6 +87,7 @@ from app.services.timetable_v2 import (
     set_default_solution,
     set_default_snapshot_solution,
 )
+from app.services.verification import run_snapshot_python_verification
 
 router = APIRouter(prefix="/api/v2", tags=["timetable-v2"])
 logger = logging.getLogger("uvicorn.error")
@@ -868,6 +869,17 @@ def get_snapshot_verification_snapshot(
 ):
     try:
         return build_snapshot_verification_payload(db, import_run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/imports/{import_run_id}/verification/python", response_model=dict)
+def run_python_snapshot_verification_route(
+    import_run_id: int,
+    db: Session = Depends(get_db),
+):
+    try:
+        return run_snapshot_python_verification(db, import_run_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

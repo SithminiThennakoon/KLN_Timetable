@@ -36,8 +36,8 @@ Status meanings:
 | Seeder / demo data | `implemented` | `/api/v2/dataset/demo` | Exists in old flat dataset flow. |
 | Counts derived primarily from enrollment CSV | `partial` | normalized import layer | The new import path derives counts, but the main UI/generator path is not fully using it yet. |
 | Manual wizard only fills non-CSV solver metadata | `missing` | target only | This is the intended architecture, but not the current behavior. |
-| Separate post-generation verification phase | `missing` | target only | No real external verification modules exist yet. |
-| Three independent verifiers in different languages | `missing` | target only | Not started. |
+| Separate post-generation verification phase | `partial` | verification snapshot export, Python verifier, Rust verifier | Verification snapshot export exists and Python/Rust verifiers now exist, but full workflow enforcement and the Elixir verifier are still missing. |
+| Three independent verifiers in different languages | `partial` | Python verifier, Rust verifier, Elixir planned | Python and Rust are implemented; Elixir is still missing. |
 
 ## Current Bottom Line
 
