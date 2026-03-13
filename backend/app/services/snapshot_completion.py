@@ -19,6 +19,7 @@ from app.models.solver import AttendanceGroup, AttendanceGroupStudent
 from app.services.enrollment_inference import (
     LAB_SPLIT_LIMIT_BY_TYPE,
     TARGET_WEEKLY_LECTURER_HOURS,
+    build_realistic_demo_dataset_from_enrollment_csv,
     _split_assignment_count,
     _synthetic_lab_type,
     _synthetic_lecture_duration,
@@ -1290,7 +1291,9 @@ def delete_snapshot_shared_session(
 
 
 def seed_realistic_snapshot_missing_data(db: Session, *, import_run_id: int) -> dict:
+    import_run = _require_import_run(db, import_run_id)
     workspace = build_import_workspace(db, import_run_id)
+    legacy_seed = build_realistic_demo_dataset_from_enrollment_csv(import_run.source_file)
 
     attendance_group_by_id = {
         int(group["id"]): group for group in workspace["attendance_groups"]
@@ -1304,109 +1307,70 @@ def seed_realistic_snapshot_missing_data(db: Session, *, import_run_id: int) -> 
     existing_room_names = {
         room["name"].strip().lower() for room in workspace["rooms"] if room.get("name")
     }
+    existing_session_keys = {
+        (
+            shared_session["name"].strip().lower(),
+            shared_session["session_type"].strip().lower(),
+        )
+        for shared_session in workspace["shared_sessions"]
+        if shared_session.get("name") and shared_session.get("session_type")
+    }
 
     existing_session_module_ids: set[int] = set()
     for shared_session in workspace["shared_sessions"]:
         existing_session_module_ids.update(shared_session["curriculum_module_ids"])
 
-    rooms_to_create = [
-        room
-        for room in REALISTIC_SNAPSHOT_ROOMS
-        if room["name"].strip().lower() not in existing_room_names
-    ]
+    rooms_to_create = []
+    for room in legacy_seed["rooms"]:
+        if room["name"].strip().lower() in existing_room_names:
+            continue
+        existing_room_names.add(room["name"].strip().lower())
+        rooms_to_create.append(
+            {
+                "client_key": room["client_key"],
+                "name": room["name"],
+                "capacity": room["capacity"],
+                "room_type": room["room_type"],
+                "lab_type": room.get("lab_type"),
+                "location": room["location"],
+                "year_restriction": room.get("year_restriction"),
+                "notes": "Realistic seed room",
+            }
+        )
     created_rooms = create_snapshot_rooms_batch(
         db, import_run_id=import_run_id, rooms=rooms_to_create
     )
 
-    module_meta_all: list[dict] = []
-    semester_weight_by_bucket: dict[int, int] = {}
+    modules_by_code: dict[str, list[dict]] = {}
     for module in modules:
-        attendance_group_ids = [int(value) for value in module["attendance_group_ids"]]
-        audience_sizes = [
-            int(attendance_group_by_id[group_id]["student_count"])
-            for group_id in attendance_group_ids
-            if group_id in attendance_group_by_id
-        ]
-        audience_size = sum(audience_sizes)
-        semester_bucket = int(module["semester_bucket"] or 1)
-        semester_weight_by_bucket[semester_bucket] = (
-            semester_weight_by_bucket.get(semester_bucket, 0) + max(1, audience_size)
-        )
-        module_meta_all.append(
-            {
-                "id": int(module["id"]),
-                "code": module["code"],
-                "name": module["name"],
-                "nominal_year": int(module["nominal_year"] or 1),
-                "semester_bucket": semester_bucket,
-                "is_full_year": bool(module.get("is_full_year")),
-                "attendance_group_ids": attendance_group_ids,
-                "audience_size": audience_size,
-                "audience_sizes": audience_sizes,
-            }
-        )
+        modules_by_code.setdefault(module["code"], []).append(module)
 
-    selected_semester_bucket = None
-    if semester_weight_by_bucket:
-        selected_semester_bucket = max(
-            semester_weight_by_bucket.items(),
-            key=lambda item: (item[1], -item[0]),
-        )[0]
-
-    module_meta: list[dict] = []
-    prefix_minutes: dict[str, int] = {}
-    prefix_module_count: dict[str, int] = {}
-    for module in module_meta_all:
-        if (
-            selected_semester_bucket is not None
-            and not module["is_full_year"]
-            and module["semester_bucket"] != selected_semester_bucket
-        ):
-            continue
-        prefix = _course_prefix(module["code"], module["name"])
-        lecture_duration = _synthetic_lecture_duration(module["code"], module["audience_size"])
-        lab_type = _synthetic_lab_type(
-            prefix,
-            module["code"],
-            module["nominal_year"],
-            module["audience_size"],
-        )
-        total_minutes = lecture_duration
-        if lab_type:
-            total_minutes += 180 * _split_assignment_count(
-                module["audience_sizes"],
-                LAB_SPLIT_LIMIT_BY_TYPE[lab_type],
-            )
-        module["prefix"] = prefix
-        module["lecture_duration"] = lecture_duration
-        module["lab_type"] = lab_type
-        module["total_minutes"] = total_minutes
-        prefix_minutes[prefix] = prefix_minutes.get(prefix, 0) + total_minutes
-        prefix_module_count[prefix] = prefix_module_count.get(prefix, 0) + 1
-        module_meta.append(module)
-
-    lecturer_target_minutes = TARGET_WEEKLY_LECTURER_HOURS * 60
     lecturers_to_create: list[dict] = []
-    for prefix in sorted(prefix_minutes):
-        lecturer_count = max(
-            1,
-            min(
-                6,
-                math.ceil(prefix_minutes[prefix] / lecturer_target_minutes),
-            ),
-        )
-        if prefix_module_count[prefix] >= 8:
-            lecturer_count = max(lecturer_count, 2)
-        for index in range(lecturer_count):
-            name = f"{prefix} Lecturer {index + 1}"
-            if name.strip().lower() in existing_lecturer_names:
+    legacy_lecturer_by_client_key = {
+        lecturer["client_key"]: lecturer for lecturer in legacy_seed["lecturers"]
+    }
+    used_lecturer_client_keys: set[str] = set()
+    for session in legacy_seed["sessions"]:
+        if session["module_client_key"] not in {
+            module["client_key"] for module in legacy_seed["modules"]
+        }:
+            continue
+        for lecturer_client_key in session.get("lecturer_client_keys", []):
+            if lecturer_client_key in used_lecturer_client_keys:
                 continue
-            existing_lecturer_names.add(name.strip().lower())
+            lecturer = legacy_lecturer_by_client_key.get(lecturer_client_key)
+            if not lecturer:
+                continue
+            if lecturer["name"].strip().lower() in existing_lecturer_names:
+                used_lecturer_client_keys.add(lecturer_client_key)
+                continue
+            existing_lecturer_names.add(lecturer["name"].strip().lower())
+            used_lecturer_client_keys.add(lecturer_client_key)
             lecturers_to_create.append(
                 {
-                    "client_key": f"seed_lecturer_{prefix.lower()}_{index + 1}",
-                    "name": name,
-                    "email": f"{prefix.lower()}.{index + 1}@science.kln.ac.lk",
+                    "client_key": lecturer["client_key"],
+                    "name": lecturer["name"],
+                    "email": lecturer.get("email"),
                     "notes": "Realistic seed lecturer",
                 }
             )
@@ -1422,69 +1386,81 @@ def seed_realistic_snapshot_missing_data(db: Session, *, import_run_id: int) -> 
         .all()
     )
     lecturer_ids_by_prefix: dict[str, list[int]] = {}
+    lecturer_id_by_client_key: dict[str, int] = {}
     for lecturer in snapshot_lecturers:
         name = lecturer.name or ""
         prefix = name.split(" Lecturer ")[0].strip().upper()
         lecturer_ids_by_prefix.setdefault(prefix, []).append(int(lecturer.id))
+        if lecturer.client_key:
+            lecturer_id_by_client_key[lecturer.client_key] = int(lecturer.id)
 
-    lecturer_minutes_by_id = {int(lecturer.id): 0 for lecturer in snapshot_lecturers}
+    room_id_by_client_key = {
+        room.client_key: int(room.id)
+        for room in db.query(SnapshotRoom)
+        .filter(SnapshotRoom.import_run_id == import_run_id)
+        .all()
+        if room.client_key
+    }
+
+    legacy_module_code_by_client_key = {
+        module["client_key"]: module["code"] for module in legacy_seed["modules"]
+    }
+
     shared_sessions_to_create: list[dict] = []
-    for module in sorted(module_meta, key=lambda item: item["code"]):
-        if module["id"] in existing_session_module_ids:
+    for legacy_session in legacy_seed["sessions"]:
+        session_key = (
+            legacy_session["name"].strip().lower(),
+            legacy_session["session_type"].strip().lower(),
+        )
+        if session_key in existing_session_keys:
             continue
-        prefix_lecturer_ids = lecturer_ids_by_prefix.get(module["prefix"], [])
-        assigned_lecturer_ids: list[int] = []
-        if prefix_lecturer_ids:
-            assigned_lecturer_id = min(
-                prefix_lecturer_ids,
-                key=lambda lecturer_id: (
-                    lecturer_minutes_by_id.get(lecturer_id, 0),
-                    lecturer_id,
-                ),
-            )
-            lecturer_minutes_by_id[assigned_lecturer_id] = (
-                lecturer_minutes_by_id.get(assigned_lecturer_id, 0)
-                + module["total_minutes"]
-            )
-            assigned_lecturer_ids = [assigned_lecturer_id]
-
-        shared_sessions_to_create.append(
+        module_code = legacy_module_code_by_client_key.get(legacy_session["module_client_key"])
+        if not module_code:
+            continue
+        matching_modules = modules_by_code.get(module_code, [])
+        curriculum_module_ids = [
+            int(module["id"])
+            for module in matching_modules
+            if int(module["id"]) not in existing_session_module_ids
+        ]
+        if not curriculum_module_ids:
+            continue
+        attendance_group_ids = sorted(
             {
-                "client_key": f"seed_session_{module['code'].lower().replace(' ', '_')}_lecture",
-                "name": f"{module['code']} Lecture",
-                "session_type": "lecture",
-                "duration_minutes": module["lecture_duration"],
-                "occurrences_per_week": 1,
-                "required_room_type": "lecture",
-                "required_lab_type": None,
-                "specific_room_id": None,
-                "max_students_per_group": None,
-                "allow_parallel_rooms": False,
-                "notes": "Realistic seed session adapted from the legacy demo builder.",
-                "lecturer_ids": assigned_lecturer_ids,
-                "curriculum_module_ids": [module["id"]],
-                "attendance_group_ids": module["attendance_group_ids"],
+                int(group_id)
+                for module in matching_modules
+                for group_id in module["attendance_group_ids"]
+                if int(group_id) in attendance_group_by_id
             }
         )
-        if module["lab_type"]:
-            shared_sessions_to_create.append(
-                {
-                    "client_key": f"seed_session_{module['code'].lower().replace(' ', '_')}_lab",
-                    "name": f"{module['code']} Lab",
-                    "session_type": "lab",
-                    "duration_minutes": 180,
-                    "occurrences_per_week": 1,
-                    "required_room_type": "lab",
-                    "required_lab_type": module["lab_type"],
-                    "specific_room_id": None,
-                    "max_students_per_group": LAB_SPLIT_LIMIT_BY_TYPE[module["lab_type"]],
-                    "allow_parallel_rooms": False,
-                    "notes": "Realistic seed lab session adapted from the legacy demo builder.",
-                    "lecturer_ids": assigned_lecturer_ids,
-                    "curriculum_module_ids": [module["id"]],
-                    "attendance_group_ids": module["attendance_group_ids"],
-                }
-            )
+        if not attendance_group_ids:
+            continue
+        lecturer_ids = [
+            lecturer_id_by_client_key[client_key]
+            for client_key in legacy_session.get("lecturer_client_keys", [])
+            if client_key in lecturer_id_by_client_key
+        ]
+        shared_sessions_to_create.append(
+            {
+                "client_key": legacy_session["client_key"],
+                "name": legacy_session["name"],
+                "session_type": legacy_session["session_type"],
+                "duration_minutes": legacy_session["duration_minutes"],
+                "occurrences_per_week": legacy_session["occurrences_per_week"],
+                "required_room_type": legacy_session.get("required_room_type"),
+                "required_lab_type": legacy_session.get("required_lab_type"),
+                "specific_room_id": room_id_by_client_key.get(
+                    legacy_session.get("specific_room_client_key")
+                ),
+                "max_students_per_group": legacy_session.get("max_students_per_group"),
+                "allow_parallel_rooms": legacy_session.get("allow_parallel_rooms", False),
+                "notes": legacy_session.get("notes")
+                or "Realistic seed session adapted from the legacy demo builder.",
+                "lecturer_ids": lecturer_ids,
+                "curriculum_module_ids": curriculum_module_ids,
+                "attendance_group_ids": attendance_group_ids,
+            }
+        )
 
     created_shared_sessions = create_snapshot_shared_sessions_batch(
         db,
