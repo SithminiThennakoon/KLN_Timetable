@@ -1379,6 +1379,65 @@ def seed_realistic_snapshot_missing_data(db: Session, *, import_run_id: int) -> 
         db, import_run_id=import_run_id, lecturers=lecturers_to_create
     )
 
+    legacy_module_code_by_client_key = {
+        module["client_key"]: module["code"] for module in legacy_seed["modules"]
+    }
+    required_lecturer_slots_by_prefix: dict[str, int] = {}
+    for legacy_session in legacy_seed["sessions"]:
+        module_code = legacy_module_code_by_client_key.get(
+            legacy_session["module_client_key"]
+        )
+        if not module_code:
+            continue
+        prefix = module_code.split()[0].strip().upper()
+        if not prefix:
+            continue
+        explicit_count = len(legacy_session.get("lecturer_client_keys", []))
+        required_count = explicit_count or (
+            2 if legacy_session.get("allow_parallel_rooms") else 1
+        )
+        required_lecturer_slots_by_prefix[prefix] = max(
+            required_lecturer_slots_by_prefix.get(prefix, 0),
+            required_count,
+        )
+
+    existing_snapshot_lecturers = (
+        db.query(SnapshotLecturer)
+        .filter(SnapshotLecturer.import_run_id == import_run_id)
+        .order_by(SnapshotLecturer.name.asc(), SnapshotLecturer.id.asc())
+        .all()
+    )
+    existing_counts_by_prefix: dict[str, int] = {}
+    for lecturer in existing_snapshot_lecturers:
+        prefix = (lecturer.name or "").split(" Lecturer ")[0].strip().upper()
+        if prefix:
+            existing_counts_by_prefix[prefix] = (
+                existing_counts_by_prefix.get(prefix, 0) + 1
+            )
+
+    placeholder_lecturers: list[dict] = []
+    for prefix, required_count in sorted(required_lecturer_slots_by_prefix.items()):
+        existing_count = existing_counts_by_prefix.get(prefix, 0)
+        for ordinal in range(existing_count + 1, required_count + 1):
+            name = f"{prefix} Lecturer {ordinal}"
+            lowered = name.strip().lower()
+            if lowered in existing_lecturer_names:
+                continue
+            existing_lecturer_names.add(lowered)
+            placeholder_lecturers.append(
+                {
+                    "client_key": f"seed_lecturer_{prefix.lower()}_{ordinal}",
+                    "name": name,
+                    "email": None,
+                    "notes": "Realistic seed placeholder lecturer",
+                }
+            )
+
+    if placeholder_lecturers:
+        create_snapshot_lecturers_batch(
+            db, import_run_id=import_run_id, lecturers=placeholder_lecturers
+        )
+
     snapshot_lecturers = (
         db.query(SnapshotLecturer)
         .filter(SnapshotLecturer.import_run_id == import_run_id)
@@ -1400,10 +1459,6 @@ def seed_realistic_snapshot_missing_data(db: Session, *, import_run_id: int) -> 
         .filter(SnapshotRoom.import_run_id == import_run_id)
         .all()
         if room.client_key
-    }
-
-    legacy_module_code_by_client_key = {
-        module["client_key"]: module["code"] for module in legacy_seed["modules"]
     }
 
     shared_sessions_to_create: list[dict] = []
@@ -1435,11 +1490,18 @@ def seed_realistic_snapshot_missing_data(db: Session, *, import_run_id: int) -> 
         )
         if not attendance_group_ids:
             continue
+        module_prefix = module_code.split()[0].strip().upper()
         lecturer_ids = [
             lecturer_id_by_client_key[client_key]
             for client_key in legacy_session.get("lecturer_client_keys", [])
             if client_key in lecturer_id_by_client_key
         ]
+        if not lecturer_ids and module_prefix:
+            fallback_lecturers = lecturer_ids_by_prefix.get(module_prefix, [])
+            if legacy_session.get("allow_parallel_rooms"):
+                lecturer_ids = fallback_lecturers[:2]
+            else:
+                lecturer_ids = fallback_lecturers[:1]
         shared_sessions_to_create.append(
             {
                 "client_key": legacy_session["client_key"],

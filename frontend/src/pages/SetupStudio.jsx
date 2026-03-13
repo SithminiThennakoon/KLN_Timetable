@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { timetableStudioService } from "../services/timetableStudioService";
 import SearchableMultiSelect from "../components/SearchableMultiSelect";
 
-const IMPORT_DEBUG_PREFIX = "[SetupImport]";
 const activeImportRunStorageKey = "kln_active_import_run_id";
 
 const steps = [
@@ -726,12 +725,55 @@ function currentStepFeedback(stepKey, validation) {
   };
 }
 
-function StepChecks({ stepKey, validation }) {
+function summarizeValidationWarnings(warnings, { snapshotMode = false } = {}) {
+  if (!snapshotMode) {
+    return warnings;
+  }
+
+  const lecturerWarnings = warnings.filter((warning) =>
+    /^Session ".*" has no lecturer assigned\.$/.test(warning)
+  );
+  const attendanceWarnings = warnings.filter((warning) =>
+    /^Session ".*" has no attendance group assigned yet\.$/.test(warning)
+  );
+  const parallelWarnings = warnings.filter((warning) =>
+    /^Session ".*" uses parallel rooms but has fewer than two lecturers assigned\.$/.test(warning)
+  );
+  const summarized = [];
+
+  if (lecturerWarnings.length > 0) {
+    summarized.push(
+      `${lecturerWarnings.length} session${lecturerWarnings.length === 1 ? "" : "s"} still need lecturer assignments.`
+    );
+  }
+  if (attendanceWarnings.length > 0) {
+    summarized.push(
+      `${attendanceWarnings.length} session${attendanceWarnings.length === 1 ? "" : "s"} still need attendance-group assignments.`
+    );
+  }
+  if (parallelWarnings.length > 0) {
+    summarized.push(
+      `${parallelWarnings.length} parallel-room session${parallelWarnings.length === 1 ? "" : "s"} still need at least two lecturers.`
+    );
+  }
+
+  const covered = new Set([
+    ...lecturerWarnings,
+    ...attendanceWarnings,
+    ...parallelWarnings,
+  ]);
+  return [...summarized, ...warnings.filter((warning) => !covered.has(warning))];
+}
+
+function StepChecks({ stepKey, validation, snapshotMode = false }) {
   if (stepKey === "review") {
     return null;
   }
 
   const feedback = currentStepFeedback(stepKey, validation);
+  const warningMessages = summarizeValidationWarnings(feedback.warnings, {
+    snapshotMode,
+  });
   if (feedback.blocking.length === 0 && feedback.warnings.length === 0) {
     return (
       <section className="studio-card">
@@ -753,11 +795,11 @@ function StepChecks({ stepKey, validation }) {
           </ul>
         </div>
       )}
-      {feedback.warnings.length > 0 && (
+      {warningMessages.length > 0 && (
         <div className="schema-notes">
           <h3>Warnings for this step</h3>
           <ul>
-            {feedback.warnings.map((warning) => (
+            {warningMessages.map((warning) => (
               <li key={warning}>{warning}</li>
             ))}
           </ul>
@@ -1345,17 +1387,7 @@ function SetupStudio() {
     setError("");
     setStatus("");
     try {
-      console.log(`${IMPORT_DEBUG_PREFIX} analyze clicked`, {
-        fileName: selectedImportFile?.name || null,
-        usingBundledSample: useBundledImportSample,
-        hasChosenImportSource: Boolean(selectedImportFile || useBundledImportSample),
-      });
       const response = await timetableStudioService.analyzeEnrollmentImport(selectedImportFile);
-      console.log(`${IMPORT_DEBUG_PREFIX} analyze completed`, {
-        sourceFile: response?.source_file || null,
-        bucketCount: response?.buckets?.length || 0,
-        totalRows: response?.summary?.total_rows || null,
-      });
       setImportAnalysis(response);
       setImportProjection(null);
       setMaterializedImport(null);
@@ -1366,9 +1398,6 @@ function SetupStudio() {
           : "Enrollment CSV analyzed. Review the flagged items before continuing."
       );
     } catch (err) {
-      console.log(`${IMPORT_DEBUG_PREFIX} analyze failed`, {
-        message: err.message,
-      });
       setError(err.message);
     } finally {
       setImportAction("");
@@ -1383,30 +1412,16 @@ function SetupStudio() {
     setStatus("");
     try {
       const rules = buildImportRulePayload(importRuleActions);
-      console.log(`${IMPORT_DEBUG_PREFIX} review clicked`, {
-        fileName: selectedImportFile?.name || null,
-        usingBundledSample: useBundledImportSample,
-        rulesCount: rules.length,
-        hasAnalysis: Boolean(importAnalysis),
-      });
       const response = await timetableStudioService.previewEnrollmentImport(
         {
           rules,
         },
         selectedImportFile
       );
-      console.log(`${IMPORT_DEBUG_PREFIX} review completed`, {
-        projectedModules: response?.projection_summary?.modules || null,
-        projectedCohorts: response?.projection_summary?.student_groups || null,
-        projectedSessions: response?.projection_summary?.sessions || null,
-      });
       setImportProjection(response);
       setMaterializedImport(null);
       setStatus("Import review is ready. Check the projected counts before using this import.");
     } catch (err) {
-      console.log(`${IMPORT_DEBUG_PREFIX} review failed`, {
-        message: err.message,
-      });
       setError(err.message);
     } finally {
       setImportAction("");
@@ -1422,23 +1437,12 @@ function SetupStudio() {
     setStatus("Using this import. This can take a while for the full sample CSV.");
     try {
       const rules = buildImportRulePayload(importRuleActions);
-      console.log(`${IMPORT_DEBUG_PREFIX} use-import clicked`, {
-        fileName: selectedImportFile?.name || null,
-        usingBundledSample: useBundledImportSample,
-        hasProjection: Boolean(importProjection),
-        rulesCount: rules.length,
-      });
       const response = await timetableStudioService.materializeEnrollmentImport(
         {
           rules,
         },
         selectedImportFile
       );
-      console.log(`${IMPORT_DEBUG_PREFIX} materialize completed`, {
-        importRunId: response?.import_run_id || null,
-        programmes: response?.counts?.programmes || null,
-        attendanceGroups: response?.counts?.attendance_groups || null,
-      });
       setLegacyManualMode(false);
       setMaterializedImport(response);
       if (typeof window !== "undefined") {
@@ -1453,9 +1457,6 @@ function SetupStudio() {
       );
       setActiveStep(0);
     } catch (err) {
-      console.log(`${IMPORT_DEBUG_PREFIX} materialize failed`, {
-        message: err.message,
-      });
       setError(err.message);
     } finally {
       setImportAction("");
@@ -2247,20 +2248,6 @@ function SetupStudio() {
         </div>
       </div>
 
-      <div className="schema-notes compact">
-        <h3>Import Debug State</h3>
-        <ul>
-          <li>chosen source: {hasChosenImportSource ? "yes" : "no"}</li>
-          <li>analyzed: {hasAnalyzedImport ? "yes" : "no"}</li>
-          <li>reviewed: {hasReviewedImport ? "yes" : "no"}</li>
-          <li>materialized: {hasMaterializedImport ? "yes" : "no"}</li>
-          <li>current import action: {importAction || "idle"}</li>
-          <li>import loading: {importLoading ? "yes" : "no"}</li>
-          <li>saving: {saving ? "yes" : "no"}</li>
-          <li>use button disabled: {importLoading || saving || !hasReviewedImport ? "yes" : "no"}</li>
-        </ul>
-      </div>
-
       {!hasAnalyzedImport ? (
         <div className="future-card">
           <strong>Step 1: Analyze the CSV</strong>
@@ -2481,7 +2468,11 @@ function SetupStudio() {
           </div>
         </section>
 
-        <StepChecks stepKey={currentStep} validation={validation} />
+        <StepChecks
+          stepKey={currentStep}
+          validation={validation}
+          snapshotMode={Boolean(activeImportRunId)}
+        />
 
         {currentStep === "structure" && (
           <div className="studio-grid">
@@ -3892,7 +3883,9 @@ function SetupStudio() {
                 <div className="schema-notes">
                   <h3>Warnings you may still want to review</h3>
                   <ul>
-                    {validation.warnings.map((warning) => (
+                    {summarizeValidationWarnings(validation.warnings, {
+                      snapshotMode: Boolean(activeImportRunId),
+                    }).map((warning) => (
                       <li key={warning}>{warning}</li>
                     ))}
                   </ul>
@@ -3901,13 +3894,22 @@ function SetupStudio() {
 
               <div className="schema-notes">
                 <h3>What this save action will write</h3>
-                <ul>
-                  <li>Degrees and year-specific paths</li>
-                  <li>Rooms and lecturers used by the timetable views</li>
-                  <li>Derived base cohorts plus any override groups</li>
-                  <li>Modules and weekly sessions with advanced delivery options</li>
-                  <li>Split limits that can auto-create internal session parts during generation</li>
-                </ul>
+                {activeImportRunId ? (
+                  <ul>
+                    <li>rooms and room capabilities</li>
+                    <li>lecturers used by generation, views, and verification</li>
+                    <li>shared teaching sessions linked to imported attendance groups</li>
+                    <li>delivery rules such as split limits, parallel rooms, and specific-room requirements</li>
+                  </ul>
+                ) : (
+                  <ul>
+                    <li>Degrees and year-specific paths</li>
+                    <li>Rooms and lecturers used by the timetable views</li>
+                    <li>Derived base cohorts plus any override groups</li>
+                    <li>Modules and weekly sessions with advanced delivery options</li>
+                    <li>Split limits that can auto-create internal session parts during generation</li>
+                  </ul>
+                )}
               </div>
             </section>
 

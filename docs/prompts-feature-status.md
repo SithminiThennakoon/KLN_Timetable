@@ -26,7 +26,7 @@ Status meanings:
 | Same-time parallel delivery across multiple rooms/lecturers | `partial` | snapshot session model + generator | There is support via `allow_parallel_rooms`, but the completion UX and validation around it still need polishing. |
 | Generate all possible timetables when feasible | `partial` | old generator | The app enumerates up to limits and reports truncation, but the exact `prompts.md` behavior is not fully aligned. |
 | Stop when search space is too large | `implemented` | old generator | Current generation exposes caps/time limits and reports truncation. |
-| Force user to add soft constraints when too many solutions remain | `partial` | generator response + UI | Combination suggestions exist, but the exact forcing flow from the spec is not fully enforced. |
+| Force user to add soft constraints when too many solutions remain | `implemented` | generator response + GenerateStudio UI | When more than 100 valid timetables remain, the Generate page now blocks default selection until the user narrows the search with more nice-to-have constraints or exhausts the available set. |
 | Default selected timetable | `implemented` | old generator + solution selection APIs | Present today. |
 | Admin view | `implemented` | `ViewStudio`, `/api/v2/views` | Snapshot-aware admin view is active. |
 | Lecturer view | `implemented` | `ViewStudio`, `/api/v2/views` | Snapshot-aware lecturer filtering now works on stable IDs. |

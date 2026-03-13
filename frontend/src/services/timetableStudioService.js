@@ -1,7 +1,5 @@
 import { apiClient } from "./apiClient";
 
-const IMPORT_DEBUG_PREFIX = "[SetupImport]";
-
 function buildImportFormData(payload = {}, file) {
   const formData = new FormData();
   if (file) {
@@ -18,16 +16,6 @@ function buildImportFormData(payload = {}, file) {
   return formData;
 }
 
-function logImportRequest(step, payload = {}, file) {
-  console.log(`${IMPORT_DEBUG_PREFIX} ${step} request`, {
-    fileName: file?.name || null,
-    hasFile: Boolean(file),
-    rulesCount: (payload.rules || []).length,
-    targetAcademicYear: payload.target_academic_year || null,
-    allowedAttempts: payload.allowed_attempts || ["1"],
-  });
-}
-
 export const timetableStudioService = {
   getDatasetSummary: () => apiClient.get("/v2/dataset"),
   getFullDataset: () => apiClient.get("/v2/dataset/full"),
@@ -39,18 +27,15 @@ export const timetableStudioService = {
   },
   loadDemoDataset: (profile = "realistic") => apiClient.post(`/v2/dataset/demo?profile=${profile}`, {}),
   analyzeEnrollmentImport: (file) => {
-    logImportRequest("analyze", {}, file);
     return apiClient.postForm("/v2/imports/enrollment-analysis-upload", buildImportFormData({}, file));
   },
   previewEnrollmentImport: (payload, file) => {
-    logImportRequest("review", payload, file);
     return apiClient.postForm(
       "/v2/imports/enrollment-projection-upload",
       buildImportFormData(payload, file)
     );
   },
   materializeEnrollmentImport: (payload, file) => {
-    logImportRequest("use-import", payload, file);
     return apiClient.postForm(
       "/v2/imports/enrollment-materialize-upload",
       buildImportFormData(payload, file)

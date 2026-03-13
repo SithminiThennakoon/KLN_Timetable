@@ -264,6 +264,12 @@ function GenerateStudio() {
   const allConstraintsSelected =
     availableSoftConstraints.length > 0 &&
     availableSoftConstraints.every((option) => softConstraints.includes(option.key));
+  const requiresConstraintNarrowing =
+    Boolean(generation) &&
+    generation.counts.total_solutions_found > 100 &&
+    !allConstraintsSelected;
+  const representativePreviewMode =
+    Boolean(generation) && generation.counts.total_solutions_found > 100;
 
   return (
     <div className="page-shell">
@@ -464,9 +470,14 @@ function GenerateStudio() {
                   limit {generation.stats?.memory_limit_mb || 0} MB
                 </p>
               )}
-              {generation.counts.total_solutions_found > 100 && (
+              {requiresConstraintNarrowing && (
                 <div className="info-banner invalid">
-                  More than 100 valid timetables exist. Add nice-to-have constraints if you need a smaller solution set. If you keep this run, the stored previews are representative options rather than the full list.
+                  More than 100 valid timetables exist. Select more nice-to-have constraints and generate again before choosing a default timetable.
+                </div>
+              )}
+              {!requiresConstraintNarrowing && representativePreviewMode && (
+                <div className="info-banner invalid">
+                  More than 100 valid timetables still exist even with the current nice-to-have set. The stored previews are representative options rather than the full list, so pick one only if you are satisfied with that reduced guidance.
                 </div>
               )}
               {generation.counts.truncated && (
@@ -622,6 +633,11 @@ function GenerateStudio() {
 
             <section className="studio-card">
               <h2>Preview Solutions</h2>
+              {requiresConstraintNarrowing && (
+                <p className="helper-copy">
+                  Default selection is locked until you narrow the solution count below 100 or exhaust all nice-to-have constraints.
+                </p>
+              )}
               <div className="solution-list">
                 {generation.solutions.length === 0 ? (
                   <p className="empty-state">No preview solutions available.</p>
@@ -639,9 +655,13 @@ function GenerateStudio() {
                         <button
                           className="ghost-btn"
                           onClick={() => handleDefault(solution.solution_id)}
-                          disabled={loading || solution.is_default}
+                          disabled={loading || solution.is_default || requiresConstraintNarrowing}
                         >
-                          {solution.is_default ? "Selected" : "Set as Default"}
+                          {solution.is_default
+                            ? "Selected"
+                            : requiresConstraintNarrowing
+                              ? "Select More Constraints First"
+                              : "Set as Default"}
                         </button>
                       </div>
                       <div className="mini-entry-list">
