@@ -363,24 +363,36 @@ defmodule ElixirSnapshotVerifier do
       lecturer_ids = present_list(entry["lecturer_ids"], session["lecturer_ids"])
 
       student_hashes =
-        attendance_group_ids
-        |> Enum.flat_map(fn group_id ->
-          group = groups_by_id[integer(group_id)] || %{}
-          group["student_hashes"] || []
-        end)
-        |> MapSet.new()
+        case entry["student_hashes"] || [] do
+          [] ->
+            attendance_group_ids
+            |> Enum.flat_map(fn group_id ->
+              group = groups_by_id[integer(group_id)] || %{}
+              group["student_hashes"] || []
+            end)
+            |> MapSet.new()
+
+          raw_student_hashes ->
+            MapSet.new(raw_student_hashes)
+        end
 
       study_years =
-        attendance_group_ids
-        |> Enum.reduce(MapSet.new(), fn group_id, acc ->
-          case groups_by_id[integer(group_id)] do
-            %{"study_year" => study_year} when not is_nil(study_year) ->
-              MapSet.put(acc, integer(study_year))
+        case entry["study_years"] || [] do
+          [] ->
+            attendance_group_ids
+            |> Enum.reduce(MapSet.new(), fn group_id, acc ->
+              case groups_by_id[integer(group_id)] do
+                %{"study_year" => study_year} when not is_nil(study_year) ->
+                  MapSet.put(acc, integer(study_year))
 
-            _ ->
-              acc
-          end
-        end)
+                _ ->
+                  acc
+              end
+            end)
+
+          raw_study_years ->
+            MapSet.new(Enum.map(raw_study_years, &integer/1))
+        end
 
       %{
         entry: entry,

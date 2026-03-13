@@ -3825,6 +3825,43 @@ def build_snapshot_verification_payload(db: Session, import_run_id: int) -> dict
         .order_by(SnapshotLecturer.id)
         .all()
     )
+    student_hashes_by_group_id = {
+        int(group.id): sorted(
+            item.student.student_hash
+            for item in group.students
+            if item.student is not None and item.student.student_hash
+        )
+        for group in attendance_groups
+    }
+    study_year_by_group_id = {
+        int(group.id): int(group.study_year)
+        for group in attendance_groups
+    }
+
+    def split_audience_details(session: SnapshotSharedSession) -> dict[int, dict]:
+        split_details: dict[int, dict] = {}
+        group_offsets: dict[int, int] = defaultdict(int)
+        for split_assignment in _build_snapshot_split_assignments(session):
+            student_hashes: list[str] = []
+            study_years: set[int] = set()
+            attendance_group_ids: list[int] = []
+            for group_id, fragment_size, _fragment_label in split_assignment.fragments:
+                group_id = int(group_id)
+                all_hashes = student_hashes_by_group_id.get(group_id, [])
+                start_index = group_offsets.get(group_id, 0)
+                end_index = start_index + int(fragment_size)
+                student_hashes.extend(all_hashes[start_index:end_index])
+                group_offsets[group_id] = end_index
+                attendance_group_ids.append(group_id)
+                study_year = study_year_by_group_id.get(group_id)
+                if study_year is not None:
+                    study_years.add(study_year)
+            split_details[int(split_assignment.split_index)] = {
+                "attendance_group_ids": sorted(set(attendance_group_ids)),
+                "student_hashes": student_hashes,
+                "study_years": sorted(study_years),
+            }
+        return split_details
 
     entries = []
     for entry in sorted(
@@ -3836,6 +3873,7 @@ def build_snapshot_verification_payload(db: Session, import_run_id: int) -> dict
         ),
     ):
         session = entry.shared_session
+        split_details = split_audience_details(session).get(int(entry.split_index), {})
         entries.append(
             {
                 "shared_session_id": int(entry.shared_session_id),
@@ -3856,7 +3894,12 @@ def build_snapshot_verification_payload(db: Session, import_run_id: int) -> dict
                 },
                 "lecturer_ids": [int(item.id) for item in session.lecturers],
                 "curriculum_module_ids": [int(item.id) for item in session.curriculum_modules],
-                "attendance_group_ids": [int(item.id) for item in session.attendance_groups],
+                "attendance_group_ids": split_details.get(
+                    "attendance_group_ids",
+                    [int(item.id) for item in session.attendance_groups],
+                ),
+                "student_hashes": split_details.get("student_hashes", []),
+                "study_years": split_details.get("study_years", []),
             }
         )
 

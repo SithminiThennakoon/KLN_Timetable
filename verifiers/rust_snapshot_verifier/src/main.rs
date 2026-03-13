@@ -51,6 +51,10 @@ struct TimetableEntry {
     room: Room,
     lecturer_ids: Vec<i32>,
     attendance_group_ids: Vec<i32>,
+    #[serde(default)]
+    student_hashes: Vec<String>,
+    #[serde(default)]
+    study_years: Vec<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -170,13 +174,15 @@ fn build_entry_context(snapshot: &Snapshot) -> Vec<EntryContext> {
             } else {
                 entry.attendance_group_ids.clone()
             };
-            let mut student_hashes = BTreeSet::new();
-            let mut study_years = BTreeSet::new();
-            for group_id in group_ids {
-                if let Some(group) = groups_by_id.get(&group_id) {
-                    study_years.insert(group.study_year);
-                    for student_hash in &group.student_hashes {
-                        student_hashes.insert(student_hash.clone());
+            let mut student_hashes: BTreeSet<String> = entry.student_hashes.iter().cloned().collect();
+            let mut study_years: BTreeSet<i32> = entry.study_years.iter().cloned().collect();
+            if student_hashes.is_empty() && study_years.is_empty() {
+                for group_id in group_ids {
+                    if let Some(group) = groups_by_id.get(&group_id) {
+                        study_years.insert(group.study_year);
+                        for student_hash in &group.student_hashes {
+                            student_hashes.insert(student_hash.clone());
+                        }
                     }
                 }
             }

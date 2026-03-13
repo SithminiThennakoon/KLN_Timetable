@@ -63,16 +63,19 @@ def _build_entry_context(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
         room = raw.get("room") or rooms_by_id[int(raw["room_id"])]
         attendance_group_ids = [int(item) for item in raw.get("attendance_group_ids") or session.get("attendance_group_ids", [])]
         lecturer_ids = [int(item) for item in raw.get("lecturer_ids") or session.get("lecturer_ids", [])]
-        student_hashes: set[str] = set()
-        study_years: set[int] = set()
-        for group_id in attendance_group_ids:
-            group = groups_by_id.get(group_id)
-            if not group:
-                continue
-            student_hashes.update(group.get("student_hashes", []))
-            study_year = group.get("study_year")
-            if study_year is not None:
-                study_years.add(int(study_year))
+        raw_student_hashes = raw.get("student_hashes") or []
+        raw_study_years = raw.get("study_years") or []
+        student_hashes: set[str] = set(raw_student_hashes)
+        study_years: set[int] = {int(item) for item in raw_study_years if item is not None}
+        if not student_hashes and not study_years:
+            for group_id in attendance_group_ids:
+                group = groups_by_id.get(group_id)
+                if not group:
+                    continue
+                student_hashes.update(group.get("student_hashes", []))
+                study_year = group.get("study_year")
+                if study_year is not None:
+                    study_years.add(int(study_year))
         entries.append(
             {
                 "solution_entry_id": int(raw["solution_entry_id"]),
