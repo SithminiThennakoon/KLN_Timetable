@@ -1278,7 +1278,20 @@ function SetupStudio() {
   };
 
   const handleOpenGenerate = () => {
-    if (!activeImportRunId || validation.blocking.length > 0) {
+    if (!activeImportRunId) {
+      return;
+    }
+    if (validation.blocking.length > 0) {
+      const reviewIndex = visibleSteps.findIndex((step) => step.key === "review");
+      if (reviewIndex >= 0) {
+        setActiveStep(reviewIndex);
+      }
+      setStatus("");
+      setError(
+        `Fix ${validation.blocking.length} blocking issue${
+          validation.blocking.length === 1 ? "" : "s"
+        } before generation. Review & Generate shows the full list.`
+      );
       return;
     }
     navigate("/generate");
@@ -2334,9 +2347,16 @@ function SetupStudio() {
               <button
                 className="primary-btn"
                 onClick={handleOpenGenerate}
-                disabled={saving || loading || validation.blocking.length > 0}
+                disabled={saving || loading}
+                title={
+                  validation.blocking.length > 0
+                    ? `Fix ${validation.blocking.length} blocking issue${
+                        validation.blocking.length === 1 ? "" : "s"
+                      } before generation`
+                    : "Open the generation workspace"
+                }
               >
-                Open Generate
+                {validation.blocking.length > 0 ? "Review Before Generate" : "Open Generate"}
               </button>
             </div>
           )}
