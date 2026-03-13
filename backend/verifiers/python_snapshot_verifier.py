@@ -115,6 +115,15 @@ def _verify_hard_constraints(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
         start_minute = entry["start_minute"]
         end_minute = entry["end_minute"]
 
+        if not entry["lecturer_ids"]:
+            violations.append(
+                _violation(
+                    "lecturer_assignment",
+                    f'Session "{session["name"]}" has no lecturer assigned.',
+                    shared_session_id=entry["shared_session_id"],
+                )
+            )
+
         if student_count > int(room["capacity"]):
             violations.append(
                 _violation(

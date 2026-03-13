@@ -202,6 +202,18 @@ fn verify_hard_constraints(snapshot: &Snapshot) -> Vec<Violation> {
         let start_minute = item.entry.start_minute;
         let end_minute = item.entry.start_minute + item.entry.duration_minutes;
         let student_count = item.student_hashes.len() as i32;
+        let lecturer_ids = if item.entry.lecturer_ids.is_empty() {
+            item.session.lecturer_ids.clone()
+        } else {
+            item.entry.lecturer_ids.clone()
+        };
+
+        if lecturer_ids.is_empty() {
+            violations.push(Violation {
+                constraint: "lecturer_assignment".to_string(),
+                message: format!("Session \"{}\" has no lecturer assigned.", item.session.name),
+            });
+        }
 
         if student_count > room.capacity {
             violations.push(Violation {
@@ -282,11 +294,6 @@ fn verify_hard_constraints(snapshot: &Snapshot) -> Vec<Violation> {
             .entry((room.id, item.entry.day.clone()))
             .or_default()
             .push(item.clone());
-        let lecturer_ids = if item.entry.lecturer_ids.is_empty() {
-            item.session.lecturer_ids.clone()
-        } else {
-            item.entry.lecturer_ids.clone()
-        };
         for lecturer_id in lecturer_ids {
             lecturer_day_entries
                 .entry((lecturer_id, item.entry.day.clone()))
@@ -669,5 +676,18 @@ mod tests {
             .hard_violations
             .iter()
             .any(|item| item.constraint == "room_year_restriction"));
+    }
+
+    #[test]
+    fn missing_lecturer_assignment_is_reported() {
+        let mut snapshot = snapshot_json();
+        snapshot.shared_sessions[0].lecturer_ids = vec![];
+        snapshot.timetable_entries[0].lecturer_ids = vec![];
+        let result = verify_snapshot(&snapshot);
+        assert!(!result.hard_valid);
+        assert!(result
+            .hard_violations
+            .iter()
+            .any(|item| item.constraint == "lecturer_assignment"));
     }
 }

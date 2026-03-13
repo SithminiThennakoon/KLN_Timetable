@@ -203,6 +203,19 @@ class PythonSnapshotVerifierTests(unittest.TestCase):
             )
         )
 
+    def test_missing_lecturer_assignment_is_reported(self):
+        snapshot = build_snapshot()
+        snapshot["shared_sessions"][0]["lecturer_ids"] = []
+        snapshot["timetable_entries"][0]["lecturer_ids"] = []
+        result = verify_snapshot(snapshot)
+        self.assertFalse(result["hard_valid"])
+        self.assertTrue(
+            any(
+                item["constraint"] == "lecturer_assignment"
+                for item in result["hard_violations"]
+            )
+        )
+
     def test_selected_soft_constraints_are_summarized(self):
         result = verify_snapshot(build_snapshot(friday_theory=True))
         soft_by_key = {item["key"]: item for item in result["soft_summary"]}

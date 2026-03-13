@@ -851,6 +851,11 @@ def _precheck_diagnostics(
     group_session_minutes: dict[tuple[int, int, int], int] = {}
 
     for task in tasks:
+        if len(task.lecturer_ids) == 0:
+            issues.append(
+                f"{task.module_code} / {task.session_name} has no lecturer assigned."
+            )
+            continue
         for lecturer_id in task.lecturer_ids:
             lecturer_minutes[int(lecturer_id)] += task.duration_minutes
         for group_id in task.student_group_ids:
@@ -3864,6 +3869,7 @@ def build_snapshot_verification_payload(db: Session, import_run_id: int) -> dict
             item for item in run.selected_soft_constraints.split(",") if item
         ],
         "hard_constraints": [
+            "lecturer_assignment",
             "room_capacity_compatibility",
             "room_capability_compatibility",
             "room_year_restriction",

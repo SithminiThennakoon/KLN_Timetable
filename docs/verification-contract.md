@@ -42,6 +42,7 @@ Each verifier should return JSON with this shape:
 
 ## Hard constraints to check
 
+- lecturer assignment
 - room capacity compatibility
 - room capability compatibility
 - room year restriction

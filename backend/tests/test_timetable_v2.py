@@ -320,6 +320,21 @@ class TimetableV2Tests(unittest.TestCase):
         self.assertTrue(timetable_v2_service._room_matches(allowed_room, task))
         self.assertFalse(timetable_v2_service._room_matches(blocked_room, task))
 
+    def test_generation_fails_when_session_has_no_lecturer(self):
+        payload = DatasetUpsertRequest(**build_dataset(lecturer_count=0))
+        replace_dataset(self.db, payload)
+
+        run = generate_timetables(
+            self.db,
+            selected_soft_constraints=[],
+            max_solutions=5,
+            preview_limit=1,
+            time_limit_seconds=10,
+        )
+
+        self.assertEqual(run.status, "infeasible")
+        self.assertIn("has no lecturer assigned", run.message)
+
     def test_csv_import_rules_can_accept_exception_and_treat_blank_path_as_common(self):
         csv_path = write_csv_fixture(
             [

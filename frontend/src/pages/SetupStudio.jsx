@@ -643,7 +643,9 @@ function validateDraft(draft, { snapshotMode = false } = {}) {
       blocking.push(`Session ${index + 1} needs a valid weekly occurrence count.`);
     }
     if (session.lecturerIds.length === 0) {
-      warnings.push(`Session "${session.name || `#${index + 1}`}" has no lecturer assigned.`);
+      blocking.push(
+        `Session "${session.name || `#${index + 1}`}" must have at least one lecturer assigned.`
+      );
     }
     if (session.cohortIds.length === 0) {
       if (snapshotMode) {
@@ -730,9 +732,6 @@ function summarizeValidationWarnings(warnings, { snapshotMode = false } = {}) {
     return warnings;
   }
 
-  const lecturerWarnings = warnings.filter((warning) =>
-    /^Session ".*" has no lecturer assigned\.$/.test(warning)
-  );
   const attendanceWarnings = warnings.filter((warning) =>
     /^Session ".*" has no attendance group assigned yet\.$/.test(warning)
   );
@@ -741,11 +740,6 @@ function summarizeValidationWarnings(warnings, { snapshotMode = false } = {}) {
   );
   const summarized = [];
 
-  if (lecturerWarnings.length > 0) {
-    summarized.push(
-      `${lecturerWarnings.length} session${lecturerWarnings.length === 1 ? "" : "s"} still need lecturer assignments.`
-    );
-  }
   if (attendanceWarnings.length > 0) {
     summarized.push(
       `${attendanceWarnings.length} session${attendanceWarnings.length === 1 ? "" : "s"} still need attendance-group assignments.`
@@ -758,7 +752,6 @@ function summarizeValidationWarnings(warnings, { snapshotMode = false } = {}) {
   }
 
   const covered = new Set([
-    ...lecturerWarnings,
     ...attendanceWarnings,
     ...parallelWarnings,
   ]);

@@ -18,6 +18,7 @@ Status meanings:
 | Hard room capacity and compatibility constraints | `implemented` | snapshot generation + verification suite | Capacity, room/lab capability, specific-room rules, and room year restrictions are enforced in generation and all three verifiers. |
 | No room overlap | `implemented` | old generator | Present in current generation logic. |
 | No lecturer overlap | `implemented` | old generator | Present in current generation logic. |
+| Lecturer assignment required before generation | `implemented` | setup validation, generation precheck, verification suite | Sessions without lecturers are now blocked in setup, rejected by generation precheck, and reported as hard violations by Python/Rust/Elixir verification. |
 | No student overlap | `implemented` | snapshot generation + verification suite | Snapshot generation and all verifiers now check clashes against exact student membership. |
 | Working hours and lunch break | `implemented` | old generator | Present in current generation logic. |
 | Multiple weekly sessions spread across days | `implemented` | soft constraints | Present as a soft constraint. |
