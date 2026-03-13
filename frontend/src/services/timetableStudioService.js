@@ -31,7 +31,12 @@ function logImportRequest(step, payload = {}, file) {
 export const timetableStudioService = {
   getDatasetSummary: () => apiClient.get("/v2/dataset"),
   getFullDataset: () => apiClient.get("/v2/dataset/full"),
-  getLookups: () => apiClient.get("/v2/lookups"),
+  getLookups: (importRunId = null) => {
+    if (!importRunId) {
+      return apiClient.get("/v2/lookups");
+    }
+    return apiClient.get(`/v2/lookups?import_run_id=${importRunId}`);
+  },
   loadDemoDataset: (profile = "realistic") => apiClient.post(`/v2/dataset/demo?profile=${profile}`, {}),
   analyzeEnrollmentImport: (file) => {
     logImportRequest("analyze", {}, file);
@@ -100,20 +105,24 @@ export const timetableStudioService = {
       solution_id: solutionId,
       import_run_id: importRunId || undefined,
     }),
-  view: ({ mode, lecturerId, studentGroupId, degreeId, pathId }) => {
+  view: ({ mode, lecturerId, studentGroupId, degreeId, pathId, studyYear, importRunId }) => {
     const params = new URLSearchParams({ mode });
     if (lecturerId) params.set("lecturer_id", lecturerId);
     if (studentGroupId) params.set("student_group_id", studentGroupId);
     if (degreeId) params.set("degree_id", degreeId);
     if (pathId) params.set("path_id", pathId);
+    if (studyYear) params.set("study_year", studyYear);
+    if (importRunId) params.set("import_run_id", importRunId);
     return apiClient.get(`/v2/views?${params.toString()}`);
   },
-  exportView: ({ mode, format, lecturerId, studentGroupId, degreeId, pathId }) => {
+  exportView: ({ mode, format, lecturerId, studentGroupId, degreeId, pathId, studyYear, importRunId }) => {
     const params = new URLSearchParams({ mode, export_format: format });
     if (lecturerId) params.set("lecturer_id", lecturerId);
     if (studentGroupId) params.set("student_group_id", studentGroupId);
     if (degreeId) params.set("degree_id", degreeId);
     if (pathId) params.set("path_id", pathId);
+    if (studyYear) params.set("study_year", studyYear);
+    if (importRunId) params.set("import_run_id", importRunId);
     return apiClient.get(`/v2/exports?${params.toString()}`);
   },
 };

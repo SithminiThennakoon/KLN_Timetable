@@ -1293,11 +1293,8 @@ function SetupStudio() {
     setStatus("");
     try {
       if (activeImportRunId) {
-        const response = await timetableStudioService.publishImportWorkspaceToLegacyDataset(
-          activeImportRunId
-        );
         setStatus(
-          `Import snapshot #${activeImportRunId} published to the generator dataset. ${response.summary.sessions} sessions are ready for generation.`
+          `Snapshot #${activeImportRunId} is ready. Open Generate to build timetable solutions directly from this imported setup.`
         );
         return;
       }
@@ -2406,7 +2403,7 @@ function SetupStudio() {
                 onClick={handleSave}
                 disabled={saving || loading || validation.blocking.length > 0}
               >
-                {saving ? "Saving..." : activeImportRunId ? "Publish To Generator" : "Save Dataset"}
+                {saving ? "Saving..." : activeImportRunId ? "Snapshot Ready" : "Save Dataset"}
               </button>
             </div>
           )}

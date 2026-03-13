@@ -71,6 +71,7 @@ from app.services.snapshot_completion import (
 )
 from app.services.timetable_v2 import (
     build_demo_dataset,
+    build_snapshot_verification_payload,
     build_view_payload,
     dataset_summary,
     export_view,
@@ -155,8 +156,11 @@ def load_demo_dataset(
 
 
 @router.get("/lookups", response_model=LookupResponse)
-def get_lookups(db: Session = Depends(get_db)):
-    return lookup_options(db)
+def get_lookups(
+    import_run_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    return lookup_options(db, import_run_id=import_run_id)
 
 
 @router.get("/imports/enrollment-analysis", response_model=ImportAnalysisResponse)
@@ -857,23 +861,38 @@ def set_default(payload: DefaultSelectionRequest, db: Session = Depends(get_db))
     return serialize_generation_run(run)
 
 
+@router.get("/imports/{import_run_id}/verification-snapshot", response_model=dict)
+def get_snapshot_verification_snapshot(
+    import_run_id: int,
+    db: Session = Depends(get_db),
+):
+    try:
+        return build_snapshot_verification_payload(db, import_run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.get("/views", response_model=ViewResponse)
 def view_timetable(
     mode: str = Query(default="admin"),
+    import_run_id: int | None = Query(default=None),
     lecturer_id: int | None = Query(default=None),
     student_group_id: int | None = Query(default=None),
     degree_id: int | None = Query(default=None),
     path_id: int | None = Query(default=None),
+    study_year: int | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     try:
         return build_view_payload(
             db,
             mode=mode,
+            import_run_id=import_run_id,
             lecturer_id=lecturer_id,
             student_group_id=student_group_id,
             degree_id=degree_id,
             path_id=path_id,
+            study_year=study_year,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -883,20 +902,24 @@ def view_timetable(
 def export_timetable(
     mode: str = Query(default="admin"),
     export_format: str = Query(default="csv"),
+    import_run_id: int | None = Query(default=None),
     lecturer_id: int | None = Query(default=None),
     student_group_id: int | None = Query(default=None),
     degree_id: int | None = Query(default=None),
     path_id: int | None = Query(default=None),
+    study_year: int | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     try:
         view_payload = build_view_payload(
             db,
             mode=mode,
+            import_run_id=import_run_id,
             lecturer_id=lecturer_id,
             student_group_id=student_group_id,
             degree_id=degree_id,
             path_id=path_id,
+            study_year=study_year,
         )
         return export_view(view_payload, export_format)
     except ValueError as exc:

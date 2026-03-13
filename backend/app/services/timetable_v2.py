@@ -17,7 +17,8 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import engine
 from app.models.imports import ImportStudent
-from app.models.snapshot import SnapshotRoom, SnapshotSharedSession
+from app.models.academic import Programme, ProgrammePath
+from app.models.snapshot import SnapshotLecturer, SnapshotRoom, SnapshotSharedSession
 from app.models.snapshot_generation import (
     SnapshotGenerationRun,
     SnapshotSolutionEntry,
@@ -3540,7 +3541,13 @@ def get_latest_snapshot_run(
             joinedload(SnapshotGenerationRun.solutions)
             .joinedload(SnapshotTimetableSolution.entries)
             .joinedload(SnapshotSolutionEntry.shared_session)
-            .joinedload(SnapshotSharedSession.attendance_groups),
+            .joinedload(SnapshotSharedSession.attendance_groups)
+            .joinedload(AttendanceGroup.programme),
+            joinedload(SnapshotGenerationRun.solutions)
+            .joinedload(SnapshotTimetableSolution.entries)
+            .joinedload(SnapshotSolutionEntry.shared_session)
+            .joinedload(SnapshotSharedSession.attendance_groups)
+            .joinedload(AttendanceGroup.programme_path),
         )
         .filter(SnapshotGenerationRun.import_run_id == import_run_id)
         .order_by(SnapshotGenerationRun.id.desc())
@@ -3600,14 +3607,321 @@ def set_default_snapshot_solution(
     return solution
 
 
+def _snapshot_lookup_options(db: Session, import_run_id: int) -> dict:
+    lecturers = (
+        db.query(SnapshotLecturer)
+        .filter(SnapshotLecturer.import_run_id == import_run_id)
+        .order_by(SnapshotLecturer.name)
+        .all()
+    )
+    attendance_groups = (
+        db.query(AttendanceGroup)
+        .options(
+            joinedload(AttendanceGroup.programme),
+            joinedload(AttendanceGroup.programme_path),
+        )
+        .filter(AttendanceGroup.import_run_id == import_run_id)
+        .order_by(
+            AttendanceGroup.programme_id,
+            AttendanceGroup.study_year,
+            AttendanceGroup.programme_path_id,
+            AttendanceGroup.id,
+        )
+        .all()
+    )
+    degrees_by_id: dict[int, dict] = {}
+    student_paths: list[dict] = []
+    seen_paths: set[tuple[int, int, int | None]] = set()
+    for group in attendance_groups:
+        if not group.programme_id or not group.programme:
+            continue
+        degrees_by_id[int(group.programme_id)] = {
+            "id": int(group.programme.id),
+            "label": f"{group.programme.code} - {group.programme.name}",
+        }
+        if group.study_year is None:
+            continue
+        key = (int(group.programme_id), int(group.study_year), int(group.programme_path_id) if group.programme_path_id else None)
+        if key in seen_paths:
+            continue
+        seen_paths.add(key)
+        student_paths.append(
+            {
+                "id": int(group.programme_path_id) if group.programme_path_id else None,
+                "degree_id": int(group.programme_id),
+                "year": int(group.study_year),
+                "label": f"Year {int(group.study_year)} - {group.programme_path.code if group.programme_path else 'General'}",
+            }
+        )
+    student_paths.sort(key=lambda item: (item["degree_id"], item["year"], item["label"]))
+    return {
+        "lecturers": [{"id": int(item.id), "label": item.name} for item in lecturers],
+        "degrees": sorted(degrees_by_id.values(), key=lambda item: item["label"]),
+        "student_paths": student_paths,
+    }
+
+
+def _build_snapshot_view_payload(
+    db: Session,
+    *,
+    import_run_id: int,
+    mode: str,
+    lecturer_id: int | None = None,
+    degree_id: int | None = None,
+    path_id: int | None = None,
+    study_year: int | None = None,
+) -> dict:
+    run = get_latest_snapshot_run(db, import_run_id)
+    if not run or not run.solutions:
+        raise ValueError("No generated timetable available")
+
+    solution = next((item for item in run.solutions if item.is_default), run.solutions[0])
+    serialized = serialize_snapshot_solution(solution)
+    real_entries = sorted(
+        solution.entries,
+        key=lambda item: (
+            DAY_INDEX.get(item.day, 99),
+            item.start_minute,
+            item.room.name,
+        ),
+    )
+    entry_pairs = list(zip(real_entries, serialized["entries"], strict=True))
+
+    if mode == "lecturer":
+        lecturer = (
+            db.query(SnapshotLecturer)
+            .filter(
+                SnapshotLecturer.import_run_id == import_run_id,
+                SnapshotLecturer.id == lecturer_id,
+            )
+            .first()
+        )
+        if not lecturer:
+            raise ValueError("Lecturer not found")
+        entries = [
+            payload
+            for real_entry, payload in entry_pairs
+            if any(int(item.id) == int(lecturer.id) for item in real_entry.shared_session.lecturers)
+        ]
+        title = f"Lecturer Timetable - {lecturer.name}"
+        subtitle = "Sessions taught by the selected lecturer."
+    elif mode == "student":
+        if not degree_id:
+            raise ValueError("Degree not found")
+        programme = db.query(Programme).filter(Programme.id == degree_id).first()
+        if not programme:
+            raise ValueError("Degree not found")
+        if not study_year:
+            raise ValueError("Study year not found")
+        target_groups = (
+            db.query(AttendanceGroup)
+            .filter(
+                AttendanceGroup.import_run_id == import_run_id,
+                AttendanceGroup.programme_id == degree_id,
+                AttendanceGroup.study_year == study_year,
+                AttendanceGroup.programme_path_id == path_id if path_id else AttendanceGroup.programme_path_id.is_(None),
+            )
+            .all()
+        )
+        if not target_groups:
+            raise ValueError("Student path has no matching groups")
+        target_group_ids = {int(group.id) for group in target_groups}
+        target_label = (
+            f"{programme.code} - {next((group.programme_path.code for group in target_groups if group.programme_path), 'General')}"
+            if path_id
+            else f"{programme.code} - Year {study_year} General"
+        )
+        entries = [
+            payload
+            for real_entry, payload in entry_pairs
+            if any(
+                int(group.id) in target_group_ids
+                for group in real_entry.shared_session.attendance_groups
+            )
+        ]
+        subtitle = "Sessions attended by the selected degree and path."
+        title = f"Student Timetable - {target_label}"
+    else:
+        entries = [payload for _real_entry, payload in entry_pairs]
+        title = "Faculty Timetable"
+        subtitle = "Default faculty timetable with all session details."
+
+    serialized["entries"] = entries
+    return {
+        "mode": mode,
+        "title": title,
+        "subtitle": subtitle,
+        "solution": serialized,
+    }
+
+
+def build_snapshot_verification_payload(db: Session, import_run_id: int) -> dict:
+    run = get_latest_snapshot_run(db, import_run_id)
+    if not run or not run.solutions:
+        raise ValueError("No generated timetable available")
+
+    solution = next((item for item in run.solutions if item.is_default), run.solutions[0])
+    attendance_groups = (
+        db.query(AttendanceGroup)
+        .options(
+            joinedload(AttendanceGroup.programme),
+            joinedload(AttendanceGroup.programme_path),
+            joinedload(AttendanceGroup.students).joinedload(AttendanceGroupStudent.student),
+        )
+        .filter(AttendanceGroup.import_run_id == import_run_id)
+        .order_by(AttendanceGroup.id)
+        .all()
+    )
+    rooms = (
+        db.query(SnapshotRoom)
+        .filter(SnapshotRoom.import_run_id == import_run_id)
+        .order_by(SnapshotRoom.id)
+        .all()
+    )
+    lecturers = (
+        db.query(SnapshotLecturer)
+        .filter(SnapshotLecturer.import_run_id == import_run_id)
+        .order_by(SnapshotLecturer.id)
+        .all()
+    )
+
+    entries = []
+    for entry in sorted(
+        solution.entries,
+        key=lambda item: (
+            DAY_INDEX.get(item.day, 99),
+            item.start_minute,
+            int(item.shared_session_id),
+        ),
+    ):
+        session = entry.shared_session
+        entries.append(
+            {
+                "shared_session_id": int(entry.shared_session_id),
+                "solution_entry_id": int(entry.id),
+                "day": entry.day,
+                "start_minute": int(entry.start_minute),
+                "duration_minutes": int(entry.duration_minutes),
+                "occurrence_index": int(entry.occurrence_index),
+                "split_index": int(entry.split_index),
+                "room": {
+                    "id": int(entry.room.id),
+                    "name": entry.room.name,
+                    "capacity": int(entry.room.capacity),
+                    "room_type": entry.room.room_type,
+                    "lab_type": entry.room.lab_type,
+                    "location": entry.room.location,
+                    "year_restriction": entry.room.year_restriction,
+                },
+                "lecturer_ids": [int(item.id) for item in session.lecturers],
+                "curriculum_module_ids": [int(item.id) for item in session.curriculum_modules],
+                "attendance_group_ids": [int(item.id) for item in session.attendance_groups],
+            }
+        )
+
+    return {
+        "version": 1,
+        "import_run_id": int(import_run_id),
+        "generation_run_id": int(run.id),
+        "solution_id": int(solution.id),
+        "selected_soft_constraints": [
+            item for item in run.selected_soft_constraints.split(",") if item
+        ],
+        "hard_constraints": [
+            "room_capacity_compatibility",
+            "room_capability_compatibility",
+            "specific_room_restrictions",
+            "no_room_overlap",
+            "no_lecturer_overlap",
+            "no_student_overlap",
+            "working_hours_only",
+            "lunch_break_protection",
+        ],
+        "rooms": [
+            {
+                "id": int(room.id),
+                "name": room.name,
+                "capacity": int(room.capacity),
+                "room_type": room.room_type,
+                "lab_type": room.lab_type,
+                "location": room.location,
+                "year_restriction": room.year_restriction,
+            }
+            for room in rooms
+        ],
+        "lecturers": [
+            {
+                "id": int(lecturer.id),
+                "name": lecturer.name,
+                "email": lecturer.email,
+            }
+            for lecturer in lecturers
+        ],
+        "attendance_groups": [
+            {
+                "id": int(group.id),
+                "label": group.label,
+                "academic_year": group.academic_year,
+                "study_year": group.study_year,
+                "programme_id": int(group.programme_id) if group.programme_id else None,
+                "programme_code": group.programme.code if group.programme else None,
+                "programme_path_id": int(group.programme_path_id) if group.programme_path_id else None,
+                "programme_path_code": group.programme_path.code if group.programme_path else None,
+                "student_count": int(group.student_count),
+                "student_hashes": [
+                    item.student.student_hash
+                    for item in group.students
+                    if item.student is not None
+                ],
+            }
+            for group in attendance_groups
+        ],
+        "shared_sessions": [
+            {
+                "id": int(session.id),
+                "name": session.name,
+                "session_type": session.session_type,
+                "duration_minutes": int(session.duration_minutes),
+                "occurrences_per_week": int(session.occurrences_per_week),
+                "required_room_type": session.required_room_type,
+                "required_lab_type": session.required_lab_type,
+                "specific_room_id": int(session.specific_room_id) if session.specific_room_id else None,
+                "max_students_per_group": int(session.max_students_per_group) if session.max_students_per_group else None,
+                "allow_parallel_rooms": bool(session.allow_parallel_rooms),
+                "lecturer_ids": [int(item.id) for item in session.lecturers],
+                "curriculum_module_ids": [int(item.id) for item in session.curriculum_modules],
+                "attendance_group_ids": [int(item.id) for item in session.attendance_groups],
+            }
+            for session in sorted(
+                {entry.shared_session for entry in solution.entries},
+                key=lambda item: int(item.id),
+            )
+        ],
+        "timetable_entries": entries,
+    }
+
+
 def build_view_payload(
     db: Session,
     mode: str,
+    import_run_id: int | None = None,
     lecturer_id: int | None = None,
     student_group_id: int | None = None,
     degree_id: int | None = None,
     path_id: int | None = None,
+    study_year: int | None = None,
 ) -> dict:
+    if import_run_id:
+        return _build_snapshot_view_payload(
+            db,
+            import_run_id=import_run_id,
+            mode=mode,
+            lecturer_id=lecturer_id,
+            degree_id=degree_id,
+            path_id=path_id,
+            study_year=study_year,
+        )
+
     run = get_latest_run(db)
     if not run or not run.solutions:
         raise ValueError("No generated timetable available")
@@ -3653,18 +3967,21 @@ def build_view_payload(
             target_label = f"{degree.code} - {path.code}"
             subtitle = "Sessions attended by the selected degree and path."
         else:
+            if not study_year:
+                raise ValueError("Study year not found")
             groups = (
                 db.query(V2StudentGroup)
                 .filter(
                     V2StudentGroup.degree_id == degree_id,
                     V2StudentGroup.path_id.is_(None),
+                    V2StudentGroup.year == study_year,
                 )
                 .all()
             )
             if not groups:
                 raise ValueError("General student group not found for the selected degree")
             target_group_names = {group.name for group in groups}
-            target_label = f"{degree.code} - General"
+            target_label = f"{degree.code} - Year {study_year} General"
             subtitle = "Sessions attended by the selected degree cohort."
         entries = [
             entry
@@ -3911,7 +4228,9 @@ def read_dataset(db: Session) -> dict:
     }
 
 
-def lookup_options(db: Session) -> dict:
+def lookup_options(db: Session, import_run_id: int | None = None) -> dict:
+    if import_run_id:
+        return _snapshot_lookup_options(db, import_run_id)
     lecturers = db.query(V2Lecturer).order_by(V2Lecturer.name).all()
     degrees = db.query(V2Degree).order_by(V2Degree.code).all()
     paths = db.query(V2Path).order_by(V2Path.degree_id, V2Path.year, V2Path.code).all()

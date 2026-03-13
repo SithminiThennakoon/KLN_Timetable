@@ -11,6 +11,7 @@ const densityModes = {
   comfortable: { label: "Comfortable", minuteHeight: 1.0 },
   expanded: { label: "Expanded", minuteHeight: 1.35 },
 };
+const activeImportRunStorageKey = "kln_active_import_run_id";
 
 // ─── Pure helpers ──────────────────────────────────────────────────────────────
 
@@ -25,6 +26,11 @@ function formatDuration(minutes) {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
+function studentPathValue(item) {
+  if (!item) return "";
+  return item.id ? `path-${item.id}` : `general-${item.year}`;
 }
 
 function compactSessionName(moduleCode, sessionName) {
@@ -953,6 +959,14 @@ const AgendaView = memo(AgendaViewInner);
 
 function ViewStudio() {
   const [mode, setMode] = useState("admin");
+  const [activeImportRunId] = useState(() => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    const raw = window.localStorage.getItem(activeImportRunStorageKey);
+    const parsed = Number(raw);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  });
   const [view, setView] = useState(null);
   const [lookups, setLookups] = useState({ lecturers: [], degrees: [], student_paths: [] });
   const [selectedLecturerId, setSelectedLecturerId] = useState("");
@@ -971,6 +985,13 @@ function ViewStudio() {
     () => lookups.student_paths.filter((p) => String(p.degree_id) === String(selectedDegreeId || "")),
     [lookups.student_paths, selectedDegreeId]
   );
+  const selectedStudentPath = useMemo(
+    () =>
+      availableStudentPaths.find(
+        (item) => studentPathValue(item) === String(selectedPathId || "")
+      ) || null,
+    [availableStudentPaths, selectedPathId]
+  );
 
   const loadView = useCallback(
     async (nextMode = mode) => {
@@ -979,9 +1000,14 @@ function ViewStudio() {
       try {
         const response = await timetableStudioService.view({
           mode: nextMode,
+          importRunId: activeImportRunId,
           lecturerId: nextMode === "lecturer" ? selectedLecturerId : undefined,
           degreeId: nextMode === "student" ? selectedDegreeId : undefined,
-          pathId: nextMode === "student" && selectedPathId !== "general" ? selectedPathId : undefined,
+          studyYear: nextMode === "student" ? selectedStudentPath?.year : undefined,
+          pathId:
+            nextMode === "student" && selectedStudentPath?.id
+              ? selectedStudentPath.id
+              : undefined,
         });
         setView(response);
       } catch (err) {
@@ -999,14 +1025,14 @@ function ViewStudio() {
         setLoading(false);
       }
     },
-    [mode, selectedLecturerId, selectedDegreeId, selectedPathId]
+    [activeImportRunId, mode, selectedLecturerId, selectedDegreeId, selectedPathId, selectedStudentPath]
   );
 
   useEffect(() => {
-    timetableStudioService.getLookups().then(setLookups).catch(() => {});
+    timetableStudioService.getLookups(activeImportRunId).then(setLookups).catch(() => {});
     loadView();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeImportRunId]);
 
   const entryMap = useMemo(() => {
     const map = new Map();
@@ -1058,9 +1084,14 @@ function ViewStudio() {
       const response = await timetableStudioService.exportView({
         mode,
         format,
+        importRunId: activeImportRunId,
         lecturerId: mode === "lecturer" ? selectedLecturerId : undefined,
         degreeId: mode === "student" ? selectedDegreeId : undefined,
-        pathId: mode === "student" && selectedPathId !== "general" ? selectedPathId : undefined,
+        studyYear: mode === "student" ? selectedStudentPath?.year : undefined,
+        pathId:
+          mode === "student" && selectedStudentPath?.id
+            ? selectedStudentPath.id
+            : undefined,
       });
       downloadBase64(response.filename, response.content_type, response.content);
     } catch (err) {
@@ -1091,6 +1122,11 @@ function ViewStudio() {
             <p className="section-subtitle">
               Review the current timetable in admin, lecturer, or student mode.
             </p>
+            {activeImportRunId && (
+              <p className="helper-copy">
+                Using import snapshot #{activeImportRunId} for lookups and timetable views.
+              </p>
+            )}
           </div>
           <div className="vs-filter-controls">
             <div className="vs-mode-group">
@@ -1139,7 +1175,7 @@ function ViewStudio() {
                   {availableStudentPaths.map((item) => (
                     <option
                       key={`${item.degree_id}-${item.year}-${item.id ?? "general"}`}
-                      value={item.id ?? "general"}
+                      value={studentPathValue(item)}
                     >
                       {item.label}
                     </option>
