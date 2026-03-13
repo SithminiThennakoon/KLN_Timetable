@@ -31,11 +31,15 @@ function formatDetail(detail) {
 
 async function request(path, options = {}) {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const hasFormDataBody = options.body instanceof FormData;
+  const headers = hasFormDataBody
+    ? { ...(options.headers || {}) }
+    : {
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      };
   const response = await fetch(`${resolveApiBaseUrl()}${normalizedPath}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
+    headers,
     ...options,
   });
 
@@ -65,6 +69,11 @@ export const apiClient = {
     request(path, {
       method: "PUT",
       body: JSON.stringify(body),
+    }),
+  postForm: (path, formData) =>
+    request(path, {
+      method: "POST",
+      body: formData,
     }),
   delete: (path) =>
     request(path, {

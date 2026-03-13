@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { timetableStudioService } from "../services/timetableStudioService";
 import SearchableMultiSelect from "../components/SearchableMultiSelect";
 
+const IMPORT_DEBUG_PREFIX = "[SetupImport]";
+
 const steps = [
   { key: "structure", label: "Structure" },
   { key: "lecturers", label: "Lecturers" },
@@ -386,6 +388,9 @@ function normalizeImportWorkspace(workspace) {
       year: module.nominal_year || 1,
       semester: module.semester_bucket || 1,
       is_full_year: Boolean(module.is_full_year),
+      defaultCohortIds: (module.attendance_group_ids || [])
+        .map((attendanceGroupId) => cohortIdBySource.get(attendanceGroupId))
+        .filter(Boolean),
     };
   });
 
@@ -417,7 +422,7 @@ function normalizeImportWorkspace(workspace) {
     };
   });
 
-  return syncBaseCohorts({
+  return {
     degrees,
     paths,
     lecturers,
@@ -425,7 +430,7 @@ function normalizeImportWorkspace(workspace) {
     cohorts,
     modules,
     sessions,
-  });
+  };
 }
 
 function buildPayload(draft) {
@@ -552,7 +557,7 @@ function buildPayload(draft) {
   };
 }
 
-function validateDraft(draft) {
+function validateDraft(draft, { snapshotMode = false } = {}) {
   const blocking = [];
   const warnings = [];
 
@@ -601,7 +606,7 @@ function validateDraft(draft) {
     if (!cohort.name.trim()) {
       blocking.push(`Base cohort ${index + 1} is missing a name.`);
     }
-    if (!Number(cohort.size) || Number(cohort.size) <= 0) {
+    if (!snapshotMode && (!Number(cohort.size) || Number(cohort.size) <= 0)) {
       blocking.push(`Base cohort ${index + 1} needs a positive student count.`);
     }
   });
@@ -612,7 +617,7 @@ function validateDraft(draft) {
       if (!cohort.degreeId || !cohort.name.trim()) {
         blocking.push(`Override group ${index + 1} is missing degree or name.`);
       }
-      if (!Number(cohort.size) || Number(cohort.size) <= 0) {
+      if (!snapshotMode && (!Number(cohort.size) || Number(cohort.size) <= 0)) {
         blocking.push(`Override group ${index + 1} needs a positive student count.`);
       }
     });
@@ -641,7 +646,11 @@ function validateDraft(draft) {
       warnings.push(`Session "${session.name || `#${index + 1}`}" has no lecturer assigned.`);
     }
     if (session.cohortIds.length === 0) {
-      blocking.push(`Session ${index + 1} must target at least one cohort.`);
+      if (snapshotMode) {
+        warnings.push(`Session "${session.name || `#${index + 1}`}" has no attendance group assigned yet.`);
+      } else {
+        blocking.push(`Session ${index + 1} must target at least one cohort.`);
+      }
     }
     if (session.allow_parallel_rooms && session.lecturerIds.length < 2) {
       warnings.push(
@@ -852,7 +861,10 @@ function SetupStudio() {
   const [importAnalysis, setImportAnalysis] = useState(null);
   const [importProjection, setImportProjection] = useState(null);
   const [materializedImport, setMaterializedImport] = useState(null);
+  const [importAction, setImportAction] = useState("");
   const [legacyManualMode, setLegacyManualMode] = useState(false);
+  const [selectedImportFile, setSelectedImportFile] = useState(null);
+  const [useBundledImportSample, setUseBundledImportSample] = useState(false);
   const [importRuleActions, setImportRuleActions] = useState({});
   const [importLoading, setImportLoading] = useState(false);
   const activeImportRunId = materializedImport?.import_run_id || null;
@@ -906,7 +918,10 @@ function SetupStudio() {
     return draft.cohorts.filter((c) => String(c.cohort_year) === String(sessionCohortYearFilter));
   }, [draft.cohorts, sessionCohortYearFilter]);
 
-  const validation = useMemo(() => validateDraft(draft), [draft]);
+  const validation = useMemo(
+    () => validateDraft(draft, { snapshotMode: Boolean(activeImportRunId) }),
+    [draft, activeImportRunId]
+  );
 
   const blockedSteps = useMemo(() => {
     const hasStructure = draft.degrees.length > 0;
@@ -972,8 +987,10 @@ function SetupStudio() {
       setSessionYearFilter("all");
       setVisibleSessionCount(INITIAL_VISIBLE_RECORDS);
       setStatus(nextStatus);
+      return normalized;
     } catch (err) {
       setError(err.message);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -1018,38 +1035,23 @@ function SetupStudio() {
     };
   };
 
-  const createSnapshotRecord = async (collection, record, sourceDraft = draft) => {
-    if (collection === "lecturers") {
-      await timetableStudioService.createSnapshotLecturer(activeImportRunId, {
-        client_key: `lecturer_${record.id}`,
-        name: record.name.trim(),
-        email: record.email.trim() || null,
-        notes: record.notes?.trim() || null,
-      });
-      return;
-    }
+  const buildSnapshotLecturerPayload = (record) => ({
+    client_key: `lecturer_${record.id}`,
+    name: record.name.trim(),
+    email: record.email.trim() || null,
+    notes: record.notes?.trim() || null,
+  });
 
-    if (collection === "rooms") {
-      await timetableStudioService.createSnapshotRoom(activeImportRunId, {
-        client_key: `room_${record.id}`,
-        name: record.name.trim(),
-        capacity: Number(record.capacity),
-        room_type: record.room_type || "lecture",
-        lab_type: record.lab_type?.trim() || null,
-        location: record.location.trim(),
-        year_restriction: record.year_restriction ? Number(record.year_restriction) : null,
-        notes: record.notes?.trim() || null,
-      });
-      return;
-    }
-
-    if (collection === "sessions") {
-      await timetableStudioService.createSnapshotSharedSession(
-        activeImportRunId,
-        buildSnapshotSharedSessionPayload(record, sourceDraft)
-      );
-    }
-  };
+  const buildSnapshotRoomPayload = (record) => ({
+    client_key: `room_${record.id}`,
+    name: record.name.trim(),
+    capacity: Number(record.capacity),
+    room_type: record.room_type || "lecture",
+    lab_type: record.lab_type?.trim() || null,
+    location: record.location.trim(),
+    year_restriction: record.year_restriction ? Number(record.year_restriction) : null,
+    notes: record.notes?.trim() || null,
+  });
 
   const persistSnapshotBatch = async (collection, records, successMessage) => {
     if (!activeImportRunId || records.length === 0) {
@@ -1061,8 +1063,21 @@ function SetupStudio() {
     setStatus("");
 
     try {
-      for (const record of records) {
-        await createSnapshotRecord(collection, record);
+      if (collection === "lecturers") {
+        await timetableStudioService.createSnapshotLecturersBatch(
+          activeImportRunId,
+          records.map(buildSnapshotLecturerPayload)
+        );
+      } else if (collection === "rooms") {
+        await timetableStudioService.createSnapshotRoomsBatch(
+          activeImportRunId,
+          records.map(buildSnapshotRoomPayload)
+        );
+      } else if (collection === "sessions") {
+        await timetableStudioService.createSnapshotSharedSessionsBatch(
+          activeImportRunId,
+          records.map((record) => buildSnapshotSharedSessionPayload(record))
+        );
       }
       await loadImportWorkspace(activeImportRunId, successMessage);
       return true;
@@ -1118,6 +1133,44 @@ function SetupStudio() {
     }
   };
 
+  const assignDefaultCohortsToSnapshotSessions = async (sourceDraft = draft) => {
+    if (!activeImportRunId) {
+      return 0;
+    }
+
+    const sessionsNeedingDefaults = sourceDraft.sessions.filter((session) => {
+      if (!session.sourceSharedSessionId || (session.cohortIds || []).length > 0) {
+        return false;
+      }
+      const module = sourceDraft.modules.find((entry) => entry.id === session.moduleId);
+      return Boolean(module && (module.defaultCohortIds || []).length > 0);
+    });
+
+    if (sessionsNeedingDefaults.length === 0) {
+      return 0;
+    }
+
+    for (const session of sessionsNeedingDefaults) {
+      const module = sourceDraft.modules.find((entry) => entry.id === session.moduleId);
+      if (!module || !module.defaultCohortIds?.length) {
+        continue;
+      }
+      await timetableStudioService.updateSnapshotSharedSession(
+        activeImportRunId,
+        session.sourceSharedSessionId,
+        buildSnapshotSharedSessionPayload(
+          {
+            ...session,
+            cohortIds: module.defaultCohortIds,
+          },
+          sourceDraft
+        )
+      );
+    }
+
+    return sessionsNeedingDefaults.length;
+  };
+
   const deleteSnapshotRecord = async (collection, record) => {
     if (!activeImportRunId) {
       return false;
@@ -1152,22 +1205,22 @@ function SetupStudio() {
   const updateDraft = (updater) => {
     setDraft((current) => {
       const next = typeof updater === "function" ? updater(current) : updater;
-      const synced = syncBaseCohorts(next);
+      const synced = activeImportRunId ? next : syncBaseCohorts(next);
       setSummary(toSummary(synced));
       return synced;
     });
   };
 
   const goToStep = (index) => {
-    if (blockedSteps[steps[index].key]) {
+    if (blockedSteps[visibleSteps[index].key]) {
       return;
     }
     setActiveStep(index);
   };
 
   const nextStep = () => {
-    const nextIndex = Math.min(activeStep + 1, steps.length - 1);
-    if (!blockedSteps[steps[nextIndex].key]) {
+    const nextIndex = Math.min(activeStep + 1, visibleSteps.length - 1);
+    if (!blockedSteps[visibleSteps[nextIndex].key]) {
       setActiveStep(nextIndex);
     }
   };
@@ -1199,6 +1252,7 @@ function SetupStudio() {
     setError("");
     try {
       setLegacyManualMode(true);
+      setSelectedImportFile(null);
       setMaterializedImport(null);
       await timetableStudioService.loadDemoDataset(profile);
       await loadDataset(
@@ -1270,60 +1324,119 @@ function SetupStudio() {
   };
 
   const handleAnalyzeEnrollmentImport = async () => {
+    setImportAction("analyze");
     setImportLoading(true);
     setError("");
     setStatus("");
     try {
-      const response = await timetableStudioService.analyzeEnrollmentImport();
+      console.log(`${IMPORT_DEBUG_PREFIX} analyze clicked`, {
+        fileName: selectedImportFile?.name || null,
+        usingBundledSample: useBundledImportSample,
+        hasChosenImportSource: Boolean(selectedImportFile || useBundledImportSample),
+      });
+      const response = await timetableStudioService.analyzeEnrollmentImport(selectedImportFile);
+      console.log(`${IMPORT_DEBUG_PREFIX} analyze completed`, {
+        sourceFile: response?.source_file || null,
+        bucketCount: response?.buckets?.length || 0,
+        totalRows: response?.summary?.total_rows || null,
+      });
       setImportAnalysis(response);
       setImportProjection(null);
       setMaterializedImport(null);
       setImportRuleActions({});
-      setStatus("Enrollment CSV analyzed. Review the flagged buckets before previewing the import.");
+      setStatus(
+        selectedImportFile
+          ? `Loaded ${selectedImportFile.name}. Review the flagged items before continuing.`
+          : "Enrollment CSV analyzed. Review the flagged items before continuing."
+      );
     } catch (err) {
+      console.log(`${IMPORT_DEBUG_PREFIX} analyze failed`, {
+        message: err.message,
+      });
       setError(err.message);
     } finally {
+      setImportAction("");
       setImportLoading(false);
     }
   };
 
   const handlePreviewEnrollmentImport = async () => {
+    setImportAction("review");
     setImportLoading(true);
     setError("");
     setStatus("");
     try {
-      const response = await timetableStudioService.previewEnrollmentImport({
-        rules: buildImportRulePayload(importRuleActions),
+      const rules = buildImportRulePayload(importRuleActions);
+      console.log(`${IMPORT_DEBUG_PREFIX} review clicked`, {
+        fileName: selectedImportFile?.name || null,
+        usingBundledSample: useBundledImportSample,
+        rulesCount: rules.length,
+        hasAnalysis: Boolean(importAnalysis),
+      });
+      const response = await timetableStudioService.previewEnrollmentImport(
+        {
+          rules,
+        },
+        selectedImportFile
+      );
+      console.log(`${IMPORT_DEBUG_PREFIX} review completed`, {
+        projectedModules: response?.projection_summary?.modules || null,
+        projectedCohorts: response?.projection_summary?.student_groups || null,
+        projectedSessions: response?.projection_summary?.sessions || null,
       });
       setImportProjection(response);
       setMaterializedImport(null);
-      setStatus("Reviewed import preview is ready. Check the projected counts before materializing the import snapshot.");
+      setStatus("Import review is ready. Check the projected counts before using this import.");
     } catch (err) {
+      console.log(`${IMPORT_DEBUG_PREFIX} review failed`, {
+        message: err.message,
+      });
       setError(err.message);
     } finally {
+      setImportAction("");
       setImportLoading(false);
     }
   };
 
   const handleLoadEnrollmentImport = async () => {
+    setImportAction("materialize");
     setImportLoading(true);
     setSaving(true);
     setError("");
-    setStatus("");
+    setStatus("Using this import. This can take a while for the full sample CSV.");
     try {
-      const response = await timetableStudioService.materializeEnrollmentImport({
-        rules: buildImportRulePayload(importRuleActions),
+      const rules = buildImportRulePayload(importRuleActions);
+      console.log(`${IMPORT_DEBUG_PREFIX} use-import clicked`, {
+        fileName: selectedImportFile?.name || null,
+        usingBundledSample: useBundledImportSample,
+        hasProjection: Boolean(importProjection),
+        rulesCount: rules.length,
+      });
+      const response = await timetableStudioService.materializeEnrollmentImport(
+        {
+          rules,
+        },
+        selectedImportFile
+      );
+      console.log(`${IMPORT_DEBUG_PREFIX} materialize completed`, {
+        importRunId: response?.import_run_id || null,
+        programmes: response?.counts?.programmes || null,
+        attendanceGroups: response?.counts?.attendance_groups || null,
       });
       setLegacyManualMode(false);
       setMaterializedImport(response);
       await loadImportWorkspace(
         response.import_run_id,
-        `Reviewed enrollment import materialized as snapshot #${response.import_run_id}.`
+        `Import loaded. Snapshot #${response.import_run_id} is ready for manual completion.`
       );
-      setActiveStep(1);
+      setActiveStep(0);
     } catch (err) {
+      console.log(`${IMPORT_DEBUG_PREFIX} materialize failed`, {
+        message: err.message,
+      });
       setError(err.message);
     } finally {
+      setImportAction("");
       setImportLoading(false);
       setSaving(false);
     }
@@ -1386,7 +1499,7 @@ function SetupStudio() {
         allow_parallel_rooms: false,
         notes: "",
         lecturerIds: [],
-        cohortIds: [],
+        cohortIds: module.defaultCohortIds || [],
       }));
 
     if (starterSessions.length === 0) {
@@ -1406,10 +1519,10 @@ function SetupStudio() {
       const moduleIdsWithSessions = new Set(current.sessions.map((session) => session.moduleId));
       const starterSessions = current.modules
         .filter((module) => module.id && !moduleIdsWithSessions.has(module.id))
-        .map((module) => ({
-          id: makeId("session"),
-          moduleId: module.id,
-          name: `${module.name || module.code || "Module"} Session`,
+          .map((module) => ({
+            id: makeId("session"),
+            moduleId: module.id,
+            name: `${module.name || module.code || "Module"} Session`,
           session_type: "lecture",
           duration_minutes: 60,
           occurrences_per_week: 1,
@@ -1417,12 +1530,12 @@ function SetupStudio() {
           required_room_type: "lecture",
           required_lab_type: "",
           specific_room_id: "",
-          max_students_per_group: "",
-          allow_parallel_rooms: false,
-          notes: "",
-          lecturerIds: [],
-          cohortIds: [],
-        }));
+            max_students_per_group: "",
+            allow_parallel_rooms: false,
+            notes: "",
+            lecturerIds: [],
+            cohortIds: module.defaultCohortIds || [],
+          }));
 
       if (starterSessions.length === 0) {
         return current;
@@ -1502,7 +1615,7 @@ function SetupStudio() {
           allow_parallel_rooms: false,
           notes: "",
           lecturerIds: [],
-          cohortIds: [],
+          cohortIds: module.defaultCohortIds || [],
         }))
       );
 
@@ -1539,7 +1652,7 @@ function SetupStudio() {
             allow_parallel_rooms: false,
             notes: "",
             lecturerIds: [],
-            cohortIds: [],
+            cohortIds: module.defaultCohortIds || [],
           }))
         );
 
@@ -1741,6 +1854,30 @@ function SetupStudio() {
     });
   };
 
+  const loadSampleManualCompletionData = async () => {
+    if (!activeImportRunId) {
+      setError("Import a CSV first. Sample missing-data helpers only work after the student data is loaded.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setStatus("");
+    try {
+      const summary = await timetableStudioService.seedRealisticSnapshotMissingData(
+        activeImportRunId
+      );
+      await loadImportWorkspace(activeImportRunId);
+      setStatus(
+        `Sample missing data loaded into snapshot #${activeImportRunId}. Added ${summary.rooms_created} rooms, ${summary.lecturers_created} lecturers, and ${summary.shared_sessions_created} realistic starter sessions.`
+      );
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const addScienceStructureTemplates = () => {
     const degreeTemplates = [
       { code: "PS", name: "Physical Science", duration_years: 3, intake_label: "PS Intake" },
@@ -1934,52 +2071,180 @@ function SetupStudio() {
   const lecturerOptions = draft.lecturers;
   const roomOptions = draft.rooms;
 
-  const currentStep = steps[activeStep].key;
+  const visibleSteps = activeImportRunId
+    ? steps.filter((step) =>
+        ["lecturers", "rooms", "sessions", "review"].includes(step.key)
+      )
+    : steps;
+  const currentStep = visibleSteps[activeStep]?.key || visibleSteps[0].key;
+  const hasChosenImportSource = Boolean(selectedImportFile || useBundledImportSample);
+  const importSourceLabel = selectedImportFile
+    ? selectedImportFile.name
+    : useBundledImportSample
+      ? "Built-in sample CSV"
+      : "";
+  const hasAnalyzedImport = Boolean(importAnalysis);
+  const hasReviewedImport = Boolean(importProjection);
+  const hasMaterializedImport = Boolean(activeImportRunId);
   const importStageSection = (
     <section className="studio-card">
+      <div className="setup-flow-overview">
+        <div className={`flow-card ${hasMaterializedImport ? "done" : "current"}`}>
+          <span className="flow-card-step">1</span>
+          <div>
+            <strong>Import student enrolments</strong>
+            <p>
+              {!hasChosenImportSource
+                ? "Choose a CSV file to begin."
+                : hasMaterializedImport
+                  ? "Student enrolments are loaded."
+                  : "Analyze and review the selected CSV."}
+            </p>
+          </div>
+        </div>
+        <div className={`flow-card ${hasMaterializedImport ? "current" : ""}`}>
+          <span className="flow-card-step">2</span>
+          <div>
+            <strong>Complete missing details</strong>
+            <p>
+              {hasMaterializedImport
+                ? "Add rooms, lecturers, and teaching sessions."
+                : "Unlocks after the import is used."}
+            </p>
+          </div>
+        </div>
+        <div className="flow-card">
+          <span className="flow-card-step">3</span>
+          <div>
+            <strong>Generate timetable</strong>
+            <p>Publish this setup and move to generation.</p>
+          </div>
+        </div>
+      </div>
+
       <div className="section-row">
         <div>
-          <h2>Stage 1. Enrollment Import</h2>
+          <h2>Import Student Enrolments</h2>
           <p>
-            Start with the reviewed enrollment CSV. After materializing the import snapshot,
-            use the manual wizard only to complete the missing timetable metadata.
+            This is the normal starting point. First import the CSV, then complete the missing
+            timetable details in the wizard below.
           </p>
         </div>
         <div className="record-actions">
+          <label className="ghost-btn file-picker-btn">
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              className="visually-hidden"
+              onChange={(event) => {
+                const nextFile = event.target.files?.[0] || null;
+                setSelectedImportFile(nextFile);
+                setUseBundledImportSample(false);
+                setImportAnalysis(null);
+                setImportProjection(null);
+                setMaterializedImport(null);
+                setImportRuleActions({});
+                setStatus(
+                  nextFile
+                    ? `${nextFile.name} selected. Analyze it to start the import flow.`
+                    : ""
+                );
+              }}
+            />
+            Choose CSV File
+          </label>
           <button
             className="ghost-btn"
             type="button"
-            onClick={handleAnalyzeEnrollmentImport}
+            onClick={() => {
+              setSelectedImportFile(null);
+              setUseBundledImportSample(true);
+              setImportAnalysis(null);
+              setImportProjection(null);
+              setMaterializedImport(null);
+              setImportRuleActions({});
+              setStatus("Built-in sample CSV selected. Analyze it to start the import flow.");
+            }}
             disabled={importLoading || saving || loading}
           >
-            {importLoading ? "Analyzing..." : "Analyze Enrollment CSV"}
+            Use Sample CSV
+          </button>
+        </div>
+      </div>
+
+      <div className={`import-source-banner ${hasChosenImportSource ? "is-ready" : ""}`}>
+        {hasChosenImportSource ? (
+          <>
+            <strong>Selected source</strong>
+            <span>{importSourceLabel}</span>
+          </>
+        ) : (
+          <>
+            <strong>No CSV selected yet</strong>
+            <span>Choose a file or use the built-in sample CSV to begin.</span>
+          </>
+        )}
+      </div>
+
+      <div className="section-row">
+        <div>
+          <h3>Review The CSV</h3>
+          <p>Analyze the file, review unclear groups, then use the cleaned import.</p>
+        </div>
+        <div className="record-actions">
+          <button
+            className={!hasAnalyzedImport && hasChosenImportSource ? "primary-btn" : "ghost-btn"}
+            type="button"
+            onClick={handleAnalyzeEnrollmentImport}
+            disabled={importLoading || saving || loading || !hasChosenImportSource}
+          >
+            {importAction === "analyze" ? "Analyzing..." : "Analyze Enrollment CSV"}
           </button>
           <button
-            className="ghost-btn"
+            className={!hasReviewedImport && hasAnalyzedImport ? "primary-btn" : "ghost-btn"}
             type="button"
             onClick={handlePreviewEnrollmentImport}
-            disabled={importLoading || !importAnalysis}
+            disabled={importLoading || !hasAnalyzedImport}
           >
-            Preview Reviewed Import
+            {importAction === "review" ? "Reviewing..." : "Review Import"}
           </button>
           <button
             className="primary-btn"
             type="button"
             onClick={handleLoadEnrollmentImport}
-            disabled={importLoading || saving || !importProjection}
+            disabled={importLoading || saving || !hasReviewedImport}
           >
-            Materialize Reviewed Import
+            {importAction === "materialize" ? "Using Import..." : "Use This Import"}
           </button>
         </div>
       </div>
 
-      {!importAnalysis ? (
+      <div className="schema-notes compact">
+        <h3>Import Debug State</h3>
+        <ul>
+          <li>chosen source: {hasChosenImportSource ? "yes" : "no"}</li>
+          <li>analyzed: {hasAnalyzedImport ? "yes" : "no"}</li>
+          <li>reviewed: {hasReviewedImport ? "yes" : "no"}</li>
+          <li>materialized: {hasMaterializedImport ? "yes" : "no"}</li>
+          <li>current import action: {importAction || "idle"}</li>
+          <li>import loading: {importLoading ? "yes" : "no"}</li>
+          <li>saving: {saving ? "yes" : "no"}</li>
+          <li>use button disabled: {importLoading || saving || !hasReviewedImport ? "yes" : "no"}</li>
+        </ul>
+      </div>
+
+      {!hasAnalyzedImport ? (
         <div className="future-card">
-          <strong>No CSV analysis yet</strong>
+          <strong>Step 1: Analyze the CSV</strong>
           <span>
-            Analyze the enrollment CSV first. That unlocks preview, review decisions, and the
-            normalized import snapshot used by the manual completion wizard.
+            After choosing a source, click `Analyze Enrollment CSV`. The system will scan the file
+            and point out anything unclear.
           </span>
+        </div>
+      ) : hasMaterializedImport ? (
+        <div className="info-banner">
+          The CSV import has been materialized into snapshot #{activeImportRunId}. You can return to
+          this section later, but the next step is to complete the missing teaching details below.
         </div>
       ) : (
         <>
@@ -1993,9 +2258,9 @@ function SetupStudio() {
           </div>
 
           <div className="schema-notes">
-            <h3>Review Buckets</h3>
+            <h3>Things That Need Review</h3>
             {importBuckets.length === 0 ? (
-              <p className="empty-state">No review buckets were generated for the current CSV snapshot.</p>
+              <p className="empty-state">This import looks clean. No review items were generated.</p>
             ) : (
               <div className="editor-list">
                 {importBuckets.slice(0, 24).map((bucket) => {
@@ -2010,7 +2275,7 @@ function SetupStudio() {
                         <span className="tag-chip">{bucket.row_count} rows</span>
                       </div>
                       <label>
-                        <span>Decision</span>
+                        <span>How should this be treated?</span>
                         <select
                           value={importRuleActions[bucketId] || ""}
                           onChange={(event) =>
@@ -2047,9 +2312,9 @@ function SetupStudio() {
             )}
           </div>
 
-          {importProjection && (
+          {hasReviewedImport && (
             <div className="schema-notes">
-              <h3>Projection Preview</h3>
+              <h3>Step 2: Review Result</h3>
               <div className="summary-grid">
                 {Object.entries(importProjection.projection_summary || {}).map(([key, value]) => (
                   <div key={key} className="summary-item">
@@ -2063,7 +2328,7 @@ function SetupStudio() {
 
           {materializedImport && (
             <div className="schema-notes">
-              <h3>Materialized Import Snapshot</h3>
+              <h3>Import Ready</h3>
               <div className="summary-grid">
                 {Object.entries(materializedImport.counts || {}).map(([key, value]) => (
                   <div key={key} className="summary-item">
@@ -2076,61 +2341,16 @@ function SetupStudio() {
           )}
 
           <div className="schema-notes">
-            <h3>How this import behaves</h3>
+            <h3>What happens next</h3>
             <ul>
-              <li>CSV `Year` is treated as the teaching year unless a review rule says otherwise.</li>
-              <li>Unresolved buckets stay visible and are excluded from the imported dataset by default.</li>
-              <li>Exact student memberships are preserved so shared students cannot be double-booked later.</li>
-              <li>Materializing the import creates a normalized snapshot instead of overwriting the old flat setup dataset.</li>
+              <li>The system keeps the exact student enrolments from the CSV.</li>
+              <li>Unresolved items stay excluded until you make a decision.</li>
+              <li>After you click `Use This Import`, the manual wizard opens for the missing timetable details.</li>
+              <li>Your imported student data is kept separate from the manual teaching setup.</li>
             </ul>
           </div>
         </>
       )}
-
-      <div className="schema-notes">
-        <h3>Other starting points</h3>
-        <p>
-          These are fallback or development paths. The intended production flow is still CSV
-          import first, then manual completion.
-        </p>
-        <div className="record-actions">
-          <button
-            className="ghost-btn"
-            type="button"
-            onClick={() => handleLoadDemo("realistic")}
-            disabled={saving || loading}
-          >
-            Load Realistic Demo
-          </button>
-          <button
-            className="ghost-btn"
-            type="button"
-            onClick={() => handleLoadDemo("tuned")}
-            disabled={saving || loading}
-          >
-            Load Tuned Demo
-          </button>
-          {usingLegacyManualMode ? (
-            <button
-              className="ghost-btn"
-              type="button"
-              onClick={returnToCsvFirstFlow}
-              disabled={saving || loading || importLoading}
-            >
-              Return To CSV-First Flow
-            </button>
-          ) : (
-            <button
-              className="ghost-btn"
-              type="button"
-              onClick={enableLegacyManualMode}
-              disabled={saving || loading || importLoading}
-            >
-              Use Legacy Manual Setup
-            </button>
-          )}
-        </div>
-      </div>
     </section>
   );
 
@@ -2142,33 +2362,23 @@ function SetupStudio() {
             <h1 className="section-title">Setup Studio</h1>
             <p className="section-subtitle">
               {activeImportRunId
-                ? `Working on normalized import snapshot #${activeImportRunId} through the setup wizard bridge.`
-                : "Build the v2 timetable dataset through guided steps, then save one validated draft for generation."}
+                ? `Student enrolments are loaded. Now complete the missing teaching details.`
+                : usingLegacyManualMode
+                  ? "You are entering everything manually. CSV import is still the recommended path."
+                  : "Start by importing the student enrolment CSV. After that, complete the missing timetable details."}
             </p>
           </div>
-          <div className="studio-actions wrap">
-            <button
-              className="ghost-btn"
-              onClick={() => handleLoadDemo("realistic")}
-              disabled={saving || loading}
-            >
-              Load Realistic Demo
-            </button>
-            <button
-              className="ghost-btn"
-              onClick={() => handleLoadDemo("tuned")}
-              disabled={saving || loading}
-            >
-              Load Tuned Demo
-            </button>
-            <button
-              className="primary-btn"
-              onClick={handleSave}
-              disabled={saving || loading || validation.blocking.length > 0}
-            >
-              {saving ? "Saving..." : activeImportRunId ? "Publish To Generator" : "Save Dataset"}
-            </button>
-          </div>
+          {showSetupWizard && (
+            <div className="studio-actions wrap">
+              <button
+                className="primary-btn"
+                onClick={handleSave}
+                disabled={saving || loading || validation.blocking.length > 0}
+              >
+                {saving ? "Saving..." : activeImportRunId ? "Publish To Generator" : "Save Dataset"}
+              </button>
+            </div>
+          )}
         </div>
 
         {status && <div className="info-banner valid">{status}</div>}
@@ -2181,8 +2391,46 @@ function SetupStudio() {
           </div>
         )}
 
+        {importStageSection}
+
+        {showSetupWizard ? (
+          <>
+        <section className="studio-card">
+          <div className="section-row">
+            <div>
+              <h2>Complete Missing Details</h2>
+              <p>
+                Add the teaching details the CSV cannot provide, such as rooms, lecturers, and
+                shared teaching sessions.
+              </p>
+            </div>
+            {activeImportRunId && <span className="tag-chip">Snapshot #{activeImportRunId}</span>}
+          </div>
+          <div className="schema-notes">
+            <h3>This stage is for non-CSV data only</h3>
+            <ul>
+              <li>rooms and room capabilities</li>
+              <li>lecturers</li>
+              <li>shared teaching sessions and delivery requirements</li>
+              <li>testing helpers that populate only the missing teaching data</li>
+            </ul>
+            {activeImportRunId && (
+              <div className="record-actions">
+                <button
+                  className="ghost-btn"
+                  type="button"
+                  onClick={loadSampleManualCompletionData}
+                  disabled={saving || loading || importLoading}
+                >
+                  Load Sample Missing Data
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
+
         <div className="wizard-steps">
-          {steps.map((step, index) => (
+          {visibleSteps.map((step, index) => (
             <StepBadge
               key={step.key}
               label={`${index + 1}. ${step.label}`}
@@ -2476,9 +2724,6 @@ function SetupStudio() {
                   <p>These appear in session assignment and lecturer timetable views.</p>
                 </div>
                 <div className="record-actions">
-                  <button className="ghost-btn" onClick={addLecturerTemplateBatch}>
-                    Add Lecturer Templates
-                  </button>
                   <button
                     className="ghost-btn"
                     onClick={() => {
@@ -2558,18 +2803,6 @@ function SetupStudio() {
                   <p>Capture lecture halls, labs, and any year-specific restrictions.</p>
                 </div>
                 <div className="record-actions">
-                  <button
-                    className="ghost-btn"
-                    onClick={() => addRoomTemplateBatch("lectureHalls")}
-                  >
-                    Add Lecture Hall Templates
-                  </button>
-                  <button
-                    className="ghost-btn"
-                    onClick={() => addRoomTemplateBatch("labs")}
-                  >
-                    Add Lab Templates
-                  </button>
                   <button
                     className="ghost-btn"
                     onClick={() => {
@@ -2684,9 +2917,6 @@ function SetupStudio() {
                       );
                     })()}
                     <div className="record-actions">
-                      <button className="ghost-btn" onClick={() => duplicateRecord("rooms", room.id)}>
-                        Duplicate Room
-                      </button>
                       <button className="danger-btn" onClick={() => removeRecord("rooms", room.id)}>
                         Remove Room
                       </button>
@@ -3248,27 +3478,6 @@ function SetupStudio() {
                 <div className="record-actions">
                   <button
                     className="ghost-btn"
-                    onClick={addStarterSessionsFromModules}
-                    disabled={moduleOptions.length === 0}
-                  >
-                    Create Starter Sessions
-                  </button>
-                  <button
-                    className="ghost-btn"
-                    onClick={() => addSessionPatternFromModules("lectureTutorial")}
-                    disabled={moduleOptions.length === 0}
-                  >
-                    Create Lecture + Tutorial Set
-                  </button>
-                  <button
-                    className="ghost-btn"
-                    onClick={() => addSessionPatternFromModules("scienceSet")}
-                    disabled={moduleOptions.length === 0}
-                  >
-                    Create Science Session Set
-                  </button>
-                  <button
-                    className="ghost-btn"
                     onClick={() => {
                       setTempSession({
                         moduleId: moduleOptions[0]?.id || "",
@@ -3601,16 +3810,6 @@ function SetupStudio() {
                     </div>
 
                     <div className="record-actions">
-                      <button
-                        className="ghost-btn"
-                        onClick={() => copySessionAudienceToModuleSet(session.id)}
-                        disabled={!session.moduleId}
-                      >
-                        Copy Lecturers + Cohorts To Module Set
-                      </button>
-                      <button className="ghost-btn" onClick={() => duplicateRecord("sessions", session.id)}>
-                        Duplicate Session
-                      </button>
                       <button className="danger-btn" onClick={() => removeRecord("sessions", session.id)}>
                         Remove Session
                       </button>
@@ -3649,7 +3848,7 @@ function SetupStudio() {
             <section className="studio-card">
               <h2>Readiness Review</h2>
               {validation.blocking.length === 0 ? (
-                <div className="info-banner">The setup draft is complete enough to save and use for timetable generation.</div>
+                <div className="info-banner">This setup is ready to publish for timetable generation.</div>
               ) : (
                 <div className="error-banner">
                   <strong>Fix these blocking issues before saving:</strong>
@@ -3685,144 +3884,31 @@ function SetupStudio() {
             </section>
 
             <section className="studio-card">
-              <h2>Reviewed Enrollment Import</h2>
-              <p>
-                Use the lecturer-provided enrollment CSV through the new reviewed import flow. Unresolved buckets stay out of the generated dataset by default.
-              </p>
-              <div className="record-actions">
-                <button
-                  className="ghost-btn"
-                  type="button"
-                  onClick={handleAnalyzeEnrollmentImport}
-                  disabled={importLoading || saving || loading}
-                >
-                  {importLoading ? "Analyzing..." : "Analyze Enrollment CSV"}
-                </button>
-                <button
-                  className="ghost-btn"
-                  type="button"
-                  onClick={handlePreviewEnrollmentImport}
-                  disabled={importLoading || !importAnalysis}
-                >
-                  Preview Reviewed Import
-                </button>
-                <button
-                  className="primary-btn"
-                  type="button"
-                  onClick={handleLoadEnrollmentImport}
-                  disabled={importLoading || saving || !importProjection}
-                >
-                  Materialize Reviewed Import
-                </button>
-              </div>
-
-              {!importAnalysis ? (
-                <div className="future-card">
-                  <strong>No CSV analysis yet</strong>
-                  <span>Start by analyzing the built-in enrollment CSV, then resolve any important buckets before loading the reviewed dataset.</span>
-                </div>
-              ) : (
-                <>
+              <h2>Where This Data Came From</h2>
+              {activeImportRunId ? (
+                <div className="schema-notes">
+                  <h3>Imported student enrolments</h3>
                   <div className="summary-grid">
-                    {Object.entries(importAnalysis.summary || {}).map(([key, value]) => (
+                    {Object.entries(materializedImport?.counts || {}).map(([key, value]) => (
                       <div key={key} className="summary-item">
                         <span>{key.replace(/_/g, " ")}</span>
                         <strong>{value}</strong>
                       </div>
                     ))}
                   </div>
-
-                  <div className="schema-notes">
-                    <h3>Review Buckets</h3>
-                    {importBuckets.length === 0 ? (
-                      <p className="empty-state">No review buckets were generated for the current CSV snapshot.</p>
-                    ) : (
-                      <div className="editor-list">
-                        {importBuckets.slice(0, 24).map((bucket) => {
-                          const bucketId = `${bucket.bucket_type}::${bucket.bucket_key}`;
-                          return (
-                            <div key={bucketId} className="editor-card">
-                              <div className="section-row">
-                                <div>
-                                  <h3>{bucket.bucket_type.replace(/_/g, " ")}</h3>
-                                  <p>{bucket.description}</p>
-                                </div>
-                                <span className="tag-chip">{bucket.row_count} rows</span>
-                              </div>
-                              <label>
-                                <span>Decision</span>
-                                <select
-                                  value={importRuleActions[bucketId] || ""}
-                                  onChange={(event) =>
-                                    setImportRuleActions((current) => ({
-                                      ...current,
-                                      [bucketId]: event.target.value,
-                                    }))
-                                  }
-                                >
-                                  <option value="">Leave unresolved</option>
-                                  <option value="accept_exception">Accept exception</option>
-                                  <option value="treat_as_common">Treat as common module</option>
-                                  <option value="exclude">Exclude bucket</option>
-                                </select>
-                              </label>
-                              {bucket.sample_rows?.length > 0 && (
-                                <div className="schema-notes compact">
-                                  <h3>Sample rows</h3>
-                                  <ul>
-                                    {bucket.sample_rows.map((row) => (
-                                      <li key={`${bucketId}-${row.row_number}`}>
-                                        Row {row.row_number}: {row.course_code} | {row.stream} | Year {row.year} | Batch {row.batch || "-"} | Path {row.course_path_no || "blank"}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  {importProjection && (
-                    <div className="schema-notes">
-                      <h3>Projection Preview</h3>
-                      <div className="summary-grid">
-                        {Object.entries(importProjection.projection_summary || {}).map(([key, value]) => (
-                          <div key={key} className="summary-item">
-                            <span>{key.replace(/_/g, " ")}</span>
-                            <strong>{value}</strong>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {materializedImport && (
-                    <div className="schema-notes">
-                      <h3>Materialized Import Snapshot</h3>
-                      <div className="summary-grid">
-                        {Object.entries(materializedImport.counts || {}).map(([key, value]) => (
-                          <div key={key} className="summary-item">
-                            <span>{key.replace(/_/g, " ")}</span>
-                            <strong>{value}</strong>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="schema-notes">
-                    <h3>How this import behaves</h3>
-                    <ul>
-                      <li>CSV `Year` is treated as the teaching year unless a review rule says otherwise.</li>
-                      <li>Unresolved buckets stay visible and are excluded from the imported dataset by default.</li>
-                      <li>Exact student memberships are preserved so shared students cannot be double-booked later.</li>
-                      <li>Materializing the import creates a normalized snapshot instead of overwriting the old flat setup dataset.</li>
-                    </ul>
-                  </div>
-                </>
+                  <p>
+                    The CSV import flow lives at the top of the page. This step is only for the
+                    final check before generation.
+                  </p>
+                </div>
+              ) : (
+                <div className="schema-notes">
+                  <h3>Manual-only setup</h3>
+                  <p>
+                    This fallback path skips CSV import. It is useful for demos, but it is not the
+                    intended final operator flow.
+                  </p>
+                </div>
               )}
             </section>
           </div>
@@ -3835,11 +3921,21 @@ function SetupStudio() {
           <button
             className="primary-btn"
             onClick={nextStep}
-            disabled={activeStep === steps.length - 1 || blockedSteps[steps[Math.min(activeStep + 1, steps.length - 1)].key]}
+            disabled={
+              activeStep === visibleSteps.length - 1 ||
+              blockedSteps[visibleSteps[Math.min(activeStep + 1, visibleSteps.length - 1)].key]
+            }
           >
             Next
           </button>
         </div>
+          </>
+        ) : (
+          <section className="studio-card">
+            <h2>Next step</h2>
+            <p>Use the import first. The manual completion wizard will appear after that.</p>
+          </section>
+        )}
       </div>
 
       {showDegreeModal && (

@@ -343,6 +343,13 @@ class MaterializedImportResponse(BaseModel):
     counts: MaterializedImportCounts
 
 
+class SnapshotSeedResponse(BaseModel):
+    import_run_id: int
+    lecturers_created: int = 0
+    rooms_created: int = 0
+    shared_sessions_created: int = 0
+
+
 class SnapshotLecturerInput(BaseModel):
     client_key: str | None = Field(default=None, min_length=1)
     name: str = Field(..., min_length=1)
@@ -357,6 +364,14 @@ class SnapshotLecturerResponse(BaseModel):
     name: str
     email: str | None = None
     notes: str | None = None
+
+
+class SnapshotLecturerBatchInput(BaseModel):
+    lecturers: list[SnapshotLecturerInput] = Field(default_factory=list)
+
+
+class SnapshotLecturerBatchResponse(BaseModel):
+    lecturers: list[SnapshotLecturerResponse] = Field(default_factory=list)
 
 
 class SnapshotRoomInput(BaseModel):
@@ -381,6 +396,14 @@ class SnapshotRoomResponse(BaseModel):
     location: str
     year_restriction: int | None = None
     notes: str | None = None
+
+
+class SnapshotRoomBatchInput(BaseModel):
+    rooms: list[SnapshotRoomInput] = Field(default_factory=list)
+
+
+class SnapshotRoomBatchResponse(BaseModel):
+    rooms: list[SnapshotRoomResponse] = Field(default_factory=list)
 
 
 class SnapshotSharedSessionInput(BaseModel):
@@ -419,6 +442,14 @@ class SnapshotSharedSessionResponse(BaseModel):
     attendance_group_ids: list[int] = Field(default_factory=list)
 
 
+class SnapshotSharedSessionBatchInput(BaseModel):
+    shared_sessions: list[SnapshotSharedSessionInput] = Field(default_factory=list)
+
+
+class SnapshotSharedSessionBatchResponse(BaseModel):
+    shared_sessions: list[SnapshotSharedSessionResponse] = Field(default_factory=list)
+
+
 class SnapshotCompletionResponse(BaseModel):
     import_run_id: int
     lecturers: list[SnapshotLecturerResponse] = Field(default_factory=list)
@@ -451,6 +482,7 @@ class ImportWorkspaceCurriculumModuleResponse(BaseModel):
     nominal_year: int | None = None
     semester_bucket: int | None = None
     is_full_year: bool = False
+    attendance_group_ids: list[int] = Field(default_factory=list)
 
 
 class ImportWorkspaceAttendanceGroupResponse(BaseModel):

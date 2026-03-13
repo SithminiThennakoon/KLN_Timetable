@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import json
+import logging
+import tempfile
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -20,11 +25,18 @@ from app.schemas.v2 import (
     ImportWorkspaceResponse,
     LookupResponse,
     MaterializedImportResponse,
+    SnapshotSeedResponse,
     SnapshotCompletionResponse,
+    SnapshotLecturerBatchInput,
+    SnapshotLecturerBatchResponse,
     SnapshotLecturerInput,
     SnapshotLecturerResponse,
+    SnapshotRoomBatchInput,
+    SnapshotRoomBatchResponse,
     SnapshotRoomInput,
     SnapshotRoomResponse,
+    SnapshotSharedSessionBatchInput,
+    SnapshotSharedSessionBatchResponse,
     SnapshotSharedSessionInput,
     SnapshotSharedSessionResponse,
     ViewResponse,
@@ -34,6 +46,7 @@ from app.services.csv_import_analysis import (
     build_reviewed_import_projection,
     parse_review_rules,
 )
+from app.services.enrollment_inference import DEFAULT_ENROLLMENT_CSV
 from app.services.import_materialization import (
     materialize_import_run,
     summarize_import_run,
@@ -41,13 +54,17 @@ from app.services.import_materialization import (
 from app.services.snapshot_completion import (
     build_legacy_dataset_from_import_run,
     build_import_workspace,
+    create_snapshot_lecturers_batch,
     create_snapshot_lecturer,
+    create_snapshot_rooms_batch,
     create_snapshot_room,
+    create_snapshot_shared_sessions_batch,
     create_snapshot_shared_session,
     delete_snapshot_lecturer,
     delete_snapshot_room,
     delete_snapshot_shared_session,
     list_snapshot_completion,
+    seed_realistic_snapshot_missing_data,
     update_snapshot_lecturer,
     update_snapshot_room,
     update_snapshot_shared_session,
@@ -67,6 +84,45 @@ from app.services.timetable_v2 import (
 )
 
 router = APIRouter(prefix="/api/v2", tags=["timetable-v2"])
+logger = logging.getLogger("uvicorn.error")
+
+
+def _parse_import_form_payload(
+    *,
+    rules_json: str | None,
+    target_academic_year: str | None,
+    allowed_attempts_json: str | None,
+) -> ImportProjectionRequest:
+    try:
+        rules_payload = json.loads(rules_json) if rules_json else []
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Invalid rules_json payload.") from exc
+
+    try:
+        attempts_payload = (
+            json.loads(allowed_attempts_json)
+            if allowed_attempts_json
+            else ["1"]
+        )
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Invalid allowed_attempts_json payload.") from exc
+
+    return ImportProjectionRequest(
+        rules=rules_payload,
+        target_academic_year=target_academic_year or None,
+        allowed_attempts=attempts_payload,
+    )
+
+
+async def _write_upload_to_temp_file(upload: UploadFile) -> Path:
+    suffix = Path(upload.filename or "enrollment.csv").suffix or ".csv"
+    handle = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    try:
+        content = await upload.read()
+        handle.write(content)
+    finally:
+        handle.close()
+    return Path(handle.name)
 
 
 @router.get("/dataset", response_model=DatasetResponse)
@@ -107,6 +163,45 @@ def get_enrollment_import_analysis():
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@router.post("/imports/enrollment-analysis-upload", response_model=ImportAnalysisResponse)
+async def get_enrollment_import_analysis_from_upload(
+    file: UploadFile | None = File(default=None),
+):
+    logger.info(
+        "Enrollment analysis requested file_present=%s file_name=%s",
+        bool(file),
+        file.filename if file else None,
+    )
+    if file is None:
+        try:
+            response = analyze_enrollment_csv()
+            logger.info(
+                "Enrollment analysis completed source=%s buckets=%s",
+                response.get("source_file"),
+                len(response.get("buckets", [])),
+            )
+            return response
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    temp_path = await _write_upload_to_temp_file(file)
+    try:
+        response = analyze_enrollment_csv(str(temp_path))
+        response["source_file"] = file.filename or "uploaded.csv"
+        logger.info(
+            "Enrollment analysis completed source=%s buckets=%s",
+            response.get("source_file"),
+            len(response.get("buckets", [])),
+        )
+        return response
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
 @router.post("/imports/enrollment-projection", response_model=ImportProjectionResponse)
 def build_enrollment_projection(payload: ImportProjectionRequest):
     try:
@@ -117,6 +212,67 @@ def build_enrollment_projection(payload: ImportProjectionRequest):
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/imports/enrollment-projection-upload", response_model=ImportProjectionResponse)
+async def build_enrollment_projection_from_upload(
+    file: UploadFile | None = File(default=None),
+    rules_json: str | None = Form(default=None),
+    target_academic_year: str | None = Form(default=None),
+    allowed_attempts_json: str | None = Form(default=None),
+):
+    payload = _parse_import_form_payload(
+        rules_json=rules_json,
+        target_academic_year=target_academic_year,
+        allowed_attempts_json=allowed_attempts_json,
+    )
+    logger.info(
+        "Enrollment projection requested file_present=%s file_name=%s rules=%s target_year=%s allowed_attempts=%s",
+        bool(file),
+        file.filename if file else None,
+        len(payload.rules),
+        payload.target_academic_year,
+        payload.allowed_attempts,
+    )
+    if file is None:
+        try:
+            response = build_reviewed_import_projection(
+                rules=parse_review_rules([rule.model_dump() for rule in payload.rules]),
+                target_academic_year=payload.target_academic_year,
+                allowed_attempts=tuple(payload.allowed_attempts),
+            )
+            logger.info(
+                "Enrollment projection completed source=%s summary=%s",
+                response.get("analysis", {}).get("source_file"),
+                response.get("projection_summary"),
+            )
+            return response
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    temp_path = await _write_upload_to_temp_file(file)
+    try:
+        response = build_reviewed_import_projection(
+            path=str(temp_path),
+            rules=parse_review_rules([rule.model_dump() for rule in payload.rules]),
+            target_academic_year=payload.target_academic_year,
+            allowed_attempts=tuple(payload.allowed_attempts),
+        )
+        response["analysis"]["source_file"] = file.filename or "uploaded.csv"
+        logger.info(
+            "Enrollment projection completed source=%s summary=%s",
+            response.get("analysis", {}).get("source_file"),
+            response.get("projection_summary"),
+        )
+        return response
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 @router.post("/imports/enrollment-load", response_model=DatasetResponse)
@@ -160,6 +316,81 @@ def materialize_enrollment_import(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.post("/imports/enrollment-materialize-upload", response_model=MaterializedImportResponse)
+async def materialize_enrollment_import_from_upload(
+    db: Session = Depends(get_db),
+    file: UploadFile | None = File(default=None),
+    rules_json: str | None = Form(default=None),
+    target_academic_year: str | None = Form(default=None),
+    allowed_attempts_json: str | None = Form(default=None),
+):
+    payload = _parse_import_form_payload(
+        rules_json=rules_json,
+        target_academic_year=target_academic_year,
+        allowed_attempts_json=allowed_attempts_json,
+    )
+    logger.info(
+        "Enrollment materialize requested file_present=%s file_name=%s rules=%s target_year=%s allowed_attempts=%s",
+        bool(file),
+        file.filename if file else None,
+        len(payload.rules),
+        payload.target_academic_year,
+        payload.allowed_attempts,
+    )
+    if file is None:
+        try:
+            import_run = materialize_import_run(
+                db,
+                source_file=str(DEFAULT_ENROLLMENT_CSV),
+                review_rules=parse_review_rules([rule.model_dump() for rule in payload.rules]),
+                target_academic_year=payload.target_academic_year,
+                allowed_attempts=tuple(payload.allowed_attempts),
+                notes="Bundled sample CSV materialized via upload-compatible route.",
+            )
+            db.commit()
+            response = summarize_import_run(db, int(import_run.id))
+            logger.info(
+                "Enrollment materialize completed import_run_id=%s counts=%s",
+                response.get("import_run_id"),
+                response.get("counts"),
+            )
+            return response
+        except FileNotFoundError as exc:
+            db.rollback()
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            db.rollback()
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    temp_path = await _write_upload_to_temp_file(file)
+    try:
+        import_run = materialize_import_run(
+            db,
+            source_file=str(temp_path),
+            review_rules=parse_review_rules([rule.model_dump() for rule in payload.rules]),
+            target_academic_year=payload.target_academic_year,
+            allowed_attempts=tuple(payload.allowed_attempts),
+            notes=f"Uploaded source file: {file.filename or 'uploaded.csv'}",
+        )
+        import_run.source_file = file.filename or "uploaded.csv"
+        db.commit()
+        response = summarize_import_run(db, int(import_run.id))
+        logger.info(
+            "Enrollment materialize completed import_run_id=%s counts=%s",
+            response.get("import_run_id"),
+            response.get("counts"),
+        )
+        return response
+    except FileNotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
 @router.get(
     "/imports/{import_run_id}/snapshot",
     response_model=SnapshotCompletionResponse,
@@ -197,6 +428,55 @@ def publish_import_workspace_to_legacy_dataset(
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post(
+    "/imports/{import_run_id}/snapshot/seed-realistic-missing-data",
+    response_model=SnapshotSeedResponse,
+)
+def seed_import_snapshot_realistic_missing_data(
+    import_run_id: int,
+    db: Session = Depends(get_db),
+):
+    try:
+        summary = seed_realistic_snapshot_missing_data(db, import_run_id=import_run_id)
+        db.commit()
+        return summary
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=400, detail="Snapshot seed conflicted with existing records"
+        ) from exc
+
+
+@router.post(
+    "/imports/{import_run_id}/snapshot/lecturers/batch",
+    response_model=SnapshotLecturerBatchResponse,
+)
+def create_import_snapshot_lecturers_batch(
+    import_run_id: int,
+    payload: SnapshotLecturerBatchInput,
+    db: Session = Depends(get_db),
+):
+    try:
+        lecturers = create_snapshot_lecturers_batch(
+            db,
+            import_run_id=import_run_id,
+            lecturers=[item.model_dump() for item in payload.lecturers],
+        )
+        db.commit()
+        return {"lecturers": lecturers}
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=400, detail="One or more snapshot lecturers already exist"
+        ) from exc
 
 
 @router.post(
@@ -269,6 +549,33 @@ def delete_import_snapshot_lecturer(
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post(
+    "/imports/{import_run_id}/snapshot/rooms/batch",
+    response_model=SnapshotRoomBatchResponse,
+)
+def create_import_snapshot_rooms_batch(
+    import_run_id: int,
+    payload: SnapshotRoomBatchInput,
+    db: Session = Depends(get_db),
+):
+    try:
+        rooms = create_snapshot_rooms_batch(
+            db,
+            import_run_id=import_run_id,
+            rooms=[item.model_dump() for item in payload.rooms],
+        )
+        db.commit()
+        return {"rooms": rooms}
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=400, detail="One or more snapshot rooms already exist"
+        ) from exc
 
 
 @router.post(
@@ -349,6 +656,33 @@ def delete_import_snapshot_room(
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post(
+    "/imports/{import_run_id}/snapshot/shared-sessions/batch",
+    response_model=SnapshotSharedSessionBatchResponse,
+)
+def create_import_snapshot_shared_sessions_batch(
+    import_run_id: int,
+    payload: SnapshotSharedSessionBatchInput,
+    db: Session = Depends(get_db),
+):
+    try:
+        shared_sessions = create_snapshot_shared_sessions_batch(
+            db,
+            import_run_id=import_run_id,
+            shared_sessions=[item.model_dump() for item in payload.shared_sessions],
+        )
+        db.commit()
+        return {"shared_sessions": shared_sessions}
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=400, detail="One or more snapshot shared sessions already exist"
+        ) from exc
 
 
 @router.post(

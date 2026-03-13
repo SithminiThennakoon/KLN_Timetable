@@ -258,7 +258,7 @@ fi
 print_line "backend" "Starting FastAPI on http://127.0.0.1:8000"
 (
   cd "$BACKEND_DIR"
-  exec "$VENV_PYTHON" -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+  exec "$VENV_PYTHON" -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ) > >(stdbuf -oL sed 's/^/[backend] /') 2> >(stdbuf -oL sed 's/^/[backend] /' >&2) &
 backend_pid=$!
 

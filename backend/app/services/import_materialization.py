@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections import Counter, defaultdict
 
 from sqlalchemy.orm import Session
@@ -31,6 +32,8 @@ from app.services.enrollment_inference import STREAM_NAME_MAP
 
 VALID_IMPORT_STATUSES = {"valid", "valid_exception"}
 BROAD_ENTRY_STREAMS = {"PS", "BS"}
+BULK_INSERT_CHUNK_SIZE = 5000
+logger = logging.getLogger("uvicorn.error")
 
 
 def _json_list(values: set[str] | list[str] | tuple[str, ...]) -> str:
@@ -136,6 +139,13 @@ def _group_label(
     return f"{' '.join(parts)} ({student_count} students)"
 
 
+def _bulk_insert_mappings(db: Session, model, mappings: list[dict]) -> None:
+    if not mappings:
+        return
+    for start in range(0, len(mappings), BULK_INSERT_CHUNK_SIZE):
+        db.bulk_insert_mappings(model, mappings[start : start + BULK_INSERT_CHUNK_SIZE])
+
+
 def summarize_import_run(db: Session, import_run_id: int) -> dict:
     import_run = (
         db.query(ImportRun)
@@ -199,6 +209,7 @@ def materialize_import_run(
     notes: str | None = None,
 ) -> ImportRun:
     rows = _iter_rows(source_file)
+    logger.info("Import materialization parsed rows=%s source=%s", len(rows), source_file)
     review_rules = review_rules or []
     if review_rules:
         _apply_rules(rows, review_rules)
@@ -210,6 +221,12 @@ def materialize_import_run(
         rows,
         target_academic_year=target_academic_year,
         allowed_attempts=allowed_attempts,
+    )
+    logger.info(
+        "Import materialization selected academic_year=%s included_rows=%s projected_rows=%s",
+        target_academic_year,
+        len(included),
+        len(projected_rows),
     )
 
     import_run = ImportRun(
@@ -244,87 +261,108 @@ def materialize_import_run(
             if row.student_hash and row.student_hash.strip()
         }
     )
-    existing_students = {
-        student.student_hash: student
-        for student in db.query(ImportStudent)
+    student_id_by_hash = {
+        student_hash: int(student_id)
+        for student_id, student_hash in db.query(
+            ImportStudent.id,
+            ImportStudent.student_hash,
+        )
         .filter(ImportStudent.student_hash.in_(unique_hashes))
         .all()
     }
-    missing_students = [
-        ImportStudent(student_hash=student_hash)
-        for student_hash in unique_hashes
-        if student_hash not in existing_students
+    missing_student_hashes = [
+        student_hash for student_hash in unique_hashes if student_hash not in student_id_by_hash
     ]
-    if missing_students:
-        db.add_all(missing_students)
+    if missing_student_hashes:
+        _bulk_insert_mappings(
+            db,
+            ImportStudent,
+            [{"student_hash": student_hash} for student_hash in missing_student_hashes],
+        )
         db.flush()
-        for student in missing_students:
-            existing_students[student.student_hash] = student
-
-    row_entities: list[ImportRow] = []
-    for row in rows:
-        student = existing_students.get(row.student_hash) if row.student_hash else None
-        row_entities.append(
-            ImportRow(
-                import_run_id=int(import_run.id),
-                student_id=int(student.id) if student else None,
-                row_number=row.row_number,
-                raw_course_path_no=_normalized_path_value(row.course_path_no),
-                raw_course_code=row.course_code,
-                raw_year=row.year,
-                raw_academic_year=row.academic_year,
-                raw_attempt=row.attempt,
-                raw_stream=row.stream,
-                raw_batch=row.batch,
-                raw_student_hash=row.student_hash,
-                module_subject_code=row.module_subject_code,
-                module_nominal_year=row.module_nominal_year,
-                module_nominal_semester_code=row.module_nominal_semester_code,
-                module_nominal_semester=row.module_nominal_semester,
-                is_full_year=bool(row.is_full_year),
-                anomaly_codes_json=_json_list(row.anomaly_codes),
-                resolved_anomaly_codes_json=_json_list(row.resolved_anomaly_codes),
-                matched_rule_actions_json=_json_list(row.matched_rule_actions),
-                review_status=row.status,
-                effective_course_path_no=_normalized_path_value(
-                    row.effective_course_path_no
-                ),
-            )
+        student_id_by_hash.update(
+            {
+                student_hash: int(student_id)
+                for student_id, student_hash in db.query(
+                    ImportStudent.id,
+                    ImportStudent.student_hash,
+                )
+                .filter(ImportStudent.student_hash.in_(missing_student_hashes))
+                .all()
+            }
         )
-    db.add_all(row_entities)
-    db.flush()
+    logger.info(
+        "Import materialization students existing=%s created=%s",
+        len(student_id_by_hash) - len(missing_student_hashes),
+        len(missing_student_hashes),
+    )
 
-    row_entity_by_number = {row.row_number: entity for row, entity in zip(rows, row_entities)}
-
-    enrollment_entities: list[ImportEnrollment] = []
+    row_mappings: list[dict] = []
     for row in rows:
-        student = existing_students.get(row.student_hash) if row.student_hash else None
-        row_entity = row_entity_by_number[row.row_number]
-        enrollment_entities.append(
-            ImportEnrollment(
-                import_run_id=int(import_run.id),
-                import_row_id=int(row_entity.id),
-                student_id=int(student.id) if student else None,
-                academic_year=row.academic_year or None,
-                attempt=row.attempt or None,
-                stream_code=row.stream or None,
-                study_year=int(row.year) if row.year.isdigit() else None,
-                batch=row.batch or None,
-                raw_course_path_no=_normalized_path_value(row.course_path_no),
-                effective_course_path_no=_normalized_path_value(
-                    row.effective_course_path_no
-                ),
-                course_code=row.course_code or None,
-                module_subject_code=row.module_subject_code,
-                module_nominal_year=row.module_nominal_year,
-                module_nominal_semester_code=row.module_nominal_semester_code,
-                module_nominal_semester=row.module_nominal_semester,
-                is_full_year=bool(row.is_full_year),
-                review_status=row.status,
-            )
+        student_id = student_id_by_hash.get(row.student_hash) if row.student_hash else None
+        row_mappings.append(
+            {
+                "import_run_id": int(import_run.id),
+                "student_id": student_id,
+                "row_number": row.row_number,
+                "raw_course_path_no": _normalized_path_value(row.course_path_no),
+                "raw_course_code": row.course_code,
+                "raw_year": row.year,
+                "raw_academic_year": row.academic_year,
+                "raw_attempt": row.attempt,
+                "raw_stream": row.stream,
+                "raw_batch": row.batch,
+                "raw_student_hash": row.student_hash,
+                "module_subject_code": row.module_subject_code,
+                "module_nominal_year": row.module_nominal_year,
+                "module_nominal_semester_code": row.module_nominal_semester_code,
+                "module_nominal_semester": row.module_nominal_semester,
+                "is_full_year": bool(row.is_full_year),
+                "anomaly_codes_json": _json_list(row.anomaly_codes),
+                "resolved_anomaly_codes_json": _json_list(row.resolved_anomaly_codes),
+                "matched_rule_actions_json": _json_list(row.matched_rule_actions),
+                "review_status": row.status,
+                "effective_course_path_no": _normalized_path_value(row.effective_course_path_no),
+            }
         )
-    db.add_all(enrollment_entities)
+    _bulk_insert_mappings(db, ImportRow, row_mappings)
     db.flush()
+    logger.info("Import materialization persisted import_rows=%s", len(row_mappings))
+
+    row_id_by_number = {
+        int(row_number): int(row_id)
+        for row_id, row_number in db.query(ImportRow.id, ImportRow.row_number)
+        .filter(ImportRow.import_run_id == int(import_run.id))
+        .all()
+    }
+
+    enrollment_mappings: list[dict] = []
+    for row in rows:
+        student_id = student_id_by_hash.get(row.student_hash) if row.student_hash else None
+        enrollment_mappings.append(
+            {
+                "import_run_id": int(import_run.id),
+                "import_row_id": row_id_by_number[row.row_number],
+                "student_id": student_id,
+                "academic_year": row.academic_year or None,
+                "attempt": row.attempt or None,
+                "stream_code": row.stream or None,
+                "study_year": int(row.year) if row.year.isdigit() else None,
+                "batch": row.batch or None,
+                "raw_course_path_no": _normalized_path_value(row.course_path_no),
+                "effective_course_path_no": _normalized_path_value(row.effective_course_path_no),
+                "course_code": row.course_code or None,
+                "module_subject_code": row.module_subject_code,
+                "module_nominal_year": row.module_nominal_year,
+                "module_nominal_semester_code": row.module_nominal_semester_code,
+                "module_nominal_semester": row.module_nominal_semester,
+                "is_full_year": bool(row.is_full_year),
+                "review_status": row.status,
+            }
+        )
+    _bulk_insert_mappings(db, ImportEnrollment, enrollment_mappings)
+    db.flush()
+    logger.info("Import materialization persisted import_enrollments=%s", len(enrollment_mappings))
 
     projected_streams = sorted({row.stream for row in projected_rows if row.stream})
     existing_programmes = {
@@ -358,6 +396,11 @@ def materialize_import_run(
         db.flush()
         for programme in new_programmes:
             existing_programmes[programme.code] = programme
+    logger.info(
+        "Import materialization programmes total=%s created=%s",
+        len(existing_programmes),
+        len(new_programmes),
+    )
 
     projected_path_keys = sorted(
         {
@@ -404,6 +447,19 @@ def materialize_import_run(
         for path in new_paths:
             key = (int(path.programme_id), int(path.study_year), path.code)
             existing_paths[key] = path
+    logger.info(
+        "Import materialization programme_paths total=%s created=%s",
+        len(existing_paths),
+        len(new_paths),
+    )
+
+    sample_row_by_module_key: dict[tuple[str, int | None, int | None], StagedEnrollmentRow] = {}
+    for row in projected_rows:
+        if row.course_code:
+            sample_row_by_module_key.setdefault(
+                (row.course_code, row.module_nominal_year, row.module_nominal_semester),
+                row,
+            )
 
     module_keys = sorted(
         {
@@ -427,13 +483,7 @@ def materialize_import_run(
         key = (course_code, nominal_year, semester_bucket)
         if key in existing_modules:
             continue
-        sample_row = next(
-            row
-            for row in projected_rows
-            if row.course_code == course_code
-            and row.module_nominal_year == nominal_year
-            and row.module_nominal_semester == semester_bucket
-        )
+        sample_row = sample_row_by_module_key[key]
         new_modules.append(
             CurriculumModule(
                 code=course_code,
@@ -452,22 +502,37 @@ def materialize_import_run(
         for module in new_modules:
             key = (module.code, module.nominal_year, module.semester_bucket)
             existing_modules[key] = module
+    logger.info(
+        "Import materialization curriculum_modules total=%s created=%s",
+        len(existing_modules),
+        len(new_modules),
+    )
 
-    projected_enrollment_by_row_number = {
-        row.row_number: enrollment
-        for row, enrollment in zip(rows, enrollment_entities)
-        if row in projected_rows
+    projected_row_numbers = [row.row_number for row in projected_rows]
+    projected_enrollment_id_by_row_number = {
+        int(row_number): int(enrollment_id)
+        for row_number, enrollment_id in db.query(
+            ImportRow.row_number,
+            ImportEnrollment.id,
+        )
+        .join(ImportEnrollment, ImportEnrollment.import_row_id == ImportRow.id)
+        .filter(
+            ImportRow.import_run_id == int(import_run.id),
+            ImportEnrollment.import_run_id == int(import_run.id),
+            ImportRow.row_number.in_(projected_row_numbers),
+        )
+        .all()
     }
 
     context_rows: dict[tuple[int, str, int, int], list[StagedEnrollmentRow]] = defaultdict(list)
     for row in projected_rows:
-        student = existing_students.get(row.student_hash) if row.student_hash else None
-        if not student or not row.year.isdigit() or not row.stream:
+        student_id = student_id_by_hash.get(row.student_hash) if row.student_hash else None
+        if not student_id or not row.year.isdigit() or not row.stream:
             continue
         programme = existing_programmes[row.stream]
         context_rows[
             (
-                int(student.id),
+                int(student_id),
                 row.academic_year,
                 int(row.year),
                 int(programme.id),
@@ -501,16 +566,20 @@ def materialize_import_run(
         context_entities[key] = context
     if context_entities:
         db.flush()
+    logger.info(
+        "Import materialization student_programme_contexts=%s",
+        len(context_entities),
+    )
 
-    membership_entities: list[StudentModuleMembership] = []
+    membership_mappings: list[dict] = []
     membership_rows_by_module: dict[int, list[tuple[int, str, int | None, int | None]]] = defaultdict(list)
     for row in projected_rows:
-        student = existing_students.get(row.student_hash) if row.student_hash else None
-        if not student or not row.year.isdigit() or not row.stream:
+        student_id = student_id_by_hash.get(row.student_hash) if row.student_hash else None
+        if not student_id or not row.year.isdigit() or not row.stream:
             continue
         programme = existing_programmes[row.stream]
         context_key = (
-            int(student.id),
+            int(student_id),
             row.academic_year,
             int(row.year),
             int(programme.id),
@@ -521,34 +590,47 @@ def materialize_import_run(
         )
         if not module:
             continue
-        enrollment = projected_enrollment_by_row_number.get(row.row_number)
+        enrollment_id = projected_enrollment_id_by_row_number.get(row.row_number)
         membership_role, is_common_module = _membership_role(row)
-        membership = StudentModuleMembership(
-            import_run_id=int(import_run.id),
-            student_id=int(student.id),
-            student_programme_context_id=int(context.id) if context else None,
-            curriculum_module_id=int(module.id),
-            import_enrollment_id=int(enrollment.id) if enrollment else None,
-            membership_source="import",
-            membership_role=membership_role,
-            is_common_module=is_common_module,
-            is_optional=False,
-            interpretation_confidence=_interpretation_confidence(row),
+        membership_mappings.append(
+            {
+                "import_run_id": int(import_run.id),
+                "student_id": int(student_id),
+                "student_programme_context_id": int(context.id) if context else None,
+                "curriculum_module_id": int(module.id),
+                "import_enrollment_id": int(enrollment_id) if enrollment_id else None,
+                "membership_source": "import",
+                "membership_role": membership_role,
+                "is_common_module": is_common_module,
+                "is_optional": False,
+                "interpretation_confidence": _interpretation_confidence(row),
+            }
         )
-        membership_entities.append(membership)
         membership_rows_by_module[int(module.id)].append(
             (
-                int(student.id),
+                int(student_id),
                 row.academic_year,
                 int(programme.id),
                 int(context.programme_path_id) if context and context.programme_path_id else None,
             )
         )
-    if membership_entities:
-        db.add_all(membership_entities)
+    if membership_mappings:
+        _bulk_insert_mappings(db, StudentModuleMembership, membership_mappings)
         db.flush()
+    logger.info(
+        "Import materialization student_module_memberships=%s",
+        len(membership_mappings),
+    )
 
-    attendance_groups_by_signature: dict[tuple[str, str], AttendanceGroup] = {}
+    programme_by_id = {int(programme.id): programme for programme in existing_programmes.values()}
+    path_by_id = {int(path.id): path for path in existing_paths.values()}
+    study_year_by_student_and_year: dict[tuple[int, str], int] = {}
+    for context in context_entities.values():
+        study_year_by_student_and_year[(int(context.student_id), context.academic_year)] = int(
+            context.study_year
+        )
+
+    pending_attendance_groups: dict[tuple[str, str], tuple[AttendanceGroup, list[int]]] = {}
     attendance_group_students: list[AttendanceGroupStudent] = []
     for module_id, member_rows in membership_rows_by_module.items():
         student_ids = sorted({student_id for student_id, *_ in member_rows})
@@ -557,46 +639,30 @@ def materialize_import_run(
         academic_year = member_rows[0][1]
         signature = ",".join(str(student_id) for student_id in student_ids)
         key = (academic_year, signature)
-        if key not in attendance_groups_by_signature:
+        if key not in pending_attendance_groups:
             programme_counts = Counter(programme_id for _, _, programme_id, _ in member_rows if programme_id)
             path_counts = Counter(path_id for _, _, _, path_id in member_rows if path_id)
             dominant_programme_id = programme_counts.most_common(1)[0][0] if programme_counts else None
             dominant_path_id = path_counts.most_common(1)[0][0] if path_counts else None
-            programme = next(
-                (p for p in existing_programmes.values() if int(p.id) == dominant_programme_id),
-                None,
-            )
-            path = next(
+            programme = programme_by_id.get(dominant_programme_id)
+            path = path_by_id.get(dominant_path_id)
+            study_year = next(
                 (
-                    path_entity
-                    for path_entity in existing_paths.values()
-                    if int(path_entity.id) == dominant_path_id
+                    study_year_by_student_and_year.get((student_id, academic_year))
+                    for student_id in student_ids
+                    if study_year_by_student_and_year.get((student_id, academic_year)) is not None
                 ),
                 None,
             )
             attendance_group = AttendanceGroup(
                 import_run_id=int(import_run.id),
                 academic_year=academic_year,
-                study_year=next(
-                    (
-                        context.study_year
-                        for context in context_entities.values()
-                        if int(context.student_id) in student_ids
-                    ),
-                    None,
-                ),
+                study_year=study_year,
                 programme_id=dominant_programme_id,
                 programme_path_id=dominant_path_id,
                 label=_group_label(
                     academic_year=academic_year,
-                    study_year=next(
-                        (
-                            context.study_year
-                            for context in context_entities.values()
-                            if int(context.student_id) in student_ids
-                        ),
-                        None,
-                    ),
+                    study_year=study_year,
                     programme_code=programme.code if programme else None,
                     path_code=path.code if path else None,
                     student_count=len(student_ids),
@@ -606,9 +672,11 @@ def materialize_import_run(
                 interpretation_confidence="medium",
                 student_count=len(student_ids),
             )
-            db.add(attendance_group)
-            db.flush()
-            attendance_groups_by_signature[key] = attendance_group
+            pending_attendance_groups[key] = (attendance_group, student_ids)
+    if pending_attendance_groups:
+        db.add_all([attendance_group for attendance_group, _ in pending_attendance_groups.values()])
+        db.flush()
+        for attendance_group, student_ids in pending_attendance_groups.values():
             attendance_group_students.extend(
                 [
                     AttendanceGroupStudent(
@@ -621,5 +689,11 @@ def materialize_import_run(
     if attendance_group_students:
         db.add_all(attendance_group_students)
 
+    logger.info(
+        "Import materialization attendance_groups=%s attendance_group_students=%s",
+        len(pending_attendance_groups),
+        len(attendance_group_students),
+    )
     db.flush()
+    logger.info("Import materialization finished import_run_id=%s", int(import_run.id))
     return import_run

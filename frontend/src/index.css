@@ -443,6 +443,101 @@ a {
   color: var(--ink-900);
 }
 
+.setup-flow-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.flow-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: var(--surface-dim);
+}
+
+.flow-card.current {
+  border-color: var(--accent-focus);
+  box-shadow: inset 0 0 0 1px var(--accent-focus-ring);
+}
+
+.flow-card.done {
+  border-color: color-mix(in srgb, var(--banner-info-border) 70%, var(--line-soft));
+  background: color-mix(in srgb, var(--banner-info-bg) 40%, var(--surface-dim));
+}
+
+.flow-card-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.flow-card strong {
+  display: block;
+  color: var(--ink-900);
+  margin-bottom: 4px;
+}
+
+.flow-card p {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--ink-600);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.file-picker-btn {
+  position: relative;
+  cursor: pointer;
+}
+
+.import-source-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-dim) 75%, transparent);
+  margin-bottom: 16px;
+}
+
+.import-source-banner strong {
+  color: var(--ink-900);
+}
+
+.import-source-banner span {
+  color: var(--ink-600);
+}
+
+.import-source-banner.is-ready {
+  border-style: solid;
+  border-color: var(--accent-focus);
+  background: color-mix(in srgb, var(--accent-focus-ring) 55%, var(--surface-dim));
+}
+
 .section-row {
   display: flex;
   justify-content: space-between;
