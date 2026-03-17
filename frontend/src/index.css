@@ -600,6 +600,120 @@ a {
   gap: 14px;
 }
 
+.lecturer-table-wrap,
+.room-table-wrap,
+.session-table-wrap {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.data-table th {
+  text-align: left;
+  padding: 12px 14px;
+  background: var(--toolbar-strip-bg);
+  border-bottom: 2px solid var(--line-soft);
+  font-weight: 700;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-500);
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line-faint);
+  color: var(--ink-700);
+  vertical-align: middle;
+}
+
+.data-table tr:hover td {
+  background: var(--line-soft);
+}
+
+.table-actions-header {
+  text-align: right;
+  width: 140px;
+}
+
+.table-actions-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.table-action-btn {
+  margin-right: 6px;
+  padding: 5px 12px;
+  font-size: 0.8rem;
+}
+
+.lecturer-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.lecturer-table th {
+  text-align: left;
+  padding: 12px 16px;
+  background: var(--toolbar-strip-bg);
+  border-bottom: 2px solid var(--line-soft);
+  font-weight: 700;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-600);
+}
+
+.lecturer-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line-faint);
+  color: var(--ink-800);
+}
+
+.lecturer-table tr:hover td {
+  background: var(--line-soft);
+}
+
+.lecturer-actions-header {
+  text-align: right;
+  width: 140px;
+}
+
+.lecturer-actions-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.lecturer-edit-btn {
+  margin-right: 8px;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 640px) {
+  .lecturer-table th,
+  .lecturer-table td {
+    padding: 10px 12px;
+  }
+
+  .lecturer-actions-header,
+  .lecturer-actions-cell {
+    width: 100px;
+  }
+
+  .lecturer-edit-btn {
+    margin-right: 4px;
+    padding: 5px 10px;
+    font-size: 0.8rem;
+  }
+}
+
 .module-search-wrap {
   margin-bottom: 14px;
   display: flex;

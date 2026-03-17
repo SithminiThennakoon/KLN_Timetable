@@ -8,6 +8,7 @@ export function LecturersStep({
   removeRecord,
   addRecord,
   addLecturerTemplateBatch,
+  onEdit,
 }) {
   return (
     <section className="studio-card">
@@ -31,7 +32,7 @@ export function LecturersStep({
         </div>
       </div>
 
-      <div className="editor-list">
+      <div className="lecturer-table-wrap">
         {draft.lecturers.length === 0 ? (
           <div className="empty-state-with-action">
             <p className="empty-state">No lecturers added yet.</p>
@@ -45,34 +46,36 @@ export function LecturersStep({
             </button>
           </div>
         ) : (
-          draft.lecturers.map((lecturer) => (
-            <div key={lecturer.id} className="editor-card">
-              <div className="form-grid two-column">
-                <label>
-                  <span>Name</span>
-                  <input
-                    value={lecturer.name}
-                    onChange={(e) => updateRecord("lecturers", lecturer.id, "name", e.target.value)}
-                  />
-                </label>
-                <label>
-                  <span>Email</span>
-                  <input
-                    type="email"
-                    value={lecturer.email}
-                    onChange={(e) => updateRecord("lecturers", lecturer.id, "email", e.target.value)}
-                  />
-                </label>
-              </div>
-              <div className="record-actions">
-                <ConfirmDelete
-                  label="Remove Lecturer"
-                  confirmMessage={`Remove "${lecturer.name || "this lecturer"}"?`}
-                  onConfirm={() => removeRecord("lecturers", lecturer.id)}
-                />
-              </div>
-            </div>
-          ))
+          <table className="lecturer-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th className="lecturer-actions-header">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {draft.lecturers.map((lecturer) => (
+                <tr key={lecturer.id}>
+                  <td>{lecturer.name}</td>
+                  <td>{lecturer.email}</td>
+                  <td className="lecturer-actions-cell">
+                    <button
+                      className="ghost-btn lecturer-edit-btn"
+                      onClick={() => onEdit && onEdit(lecturer)}
+                    >
+                      Edit
+                    </button>
+                    <ConfirmDelete
+                      label="Remove"
+                      confirmMessage={`Remove "${lecturer.name || "this lecturer"}"?`}
+                      onConfirm={() => removeRecord("lecturers", lecturer.id)}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
     </section>

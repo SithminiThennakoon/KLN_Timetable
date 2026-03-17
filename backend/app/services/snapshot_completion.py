@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import math
 import re
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.academic import (
@@ -14,7 +16,14 @@ from app.models.academic import (
 )
 from app.models.imports import ImportRun
 from app.models.imports import ImportStudent
-from app.models.snapshot import SnapshotLecturer, SnapshotRoom, SnapshotSharedSession
+from app.models.snapshot import (
+    SnapshotLecturer,
+    SnapshotRoom,
+    SnapshotSharedSession,
+    snapshot_shared_session_attendance_group_table,
+    snapshot_shared_session_lecturer_table,
+    snapshot_shared_session_module_table,
+)
 from app.models.solver import AttendanceGroup, AttendanceGroupStudent
 from app.services.enrollment_inference import (
     LAB_SPLIT_LIMIT_BY_TYPE,
@@ -660,7 +669,8 @@ def build_import_workspace(db: Session, import_run_id: int) -> dict:
     module_attendance_group_ids: dict[int, list[int]] = {}
     for (curriculum_module_id, academic_year), student_ids in module_student_ids.items():
         signature = ",".join(str(student_id) for student_id in sorted(student_ids))
-        attendance_group_id = attendance_group_by_signature.get((academic_year, signature))
+        signature_hash = hashlib.sha1(signature.encode("utf-8")).hexdigest()
+        attendance_group_id = attendance_group_by_signature.get((academic_year, signature_hash))
         if attendance_group_id is None:
             continue
         module_attendance_group_ids.setdefault(curriculum_module_id, []).append(attendance_group_id)
@@ -1292,8 +1302,64 @@ def delete_snapshot_shared_session(
 
 def seed_realistic_snapshot_missing_data(db: Session, *, import_run_id: int) -> dict:
     import_run = _require_import_run(db, import_run_id)
-    workspace = build_import_workspace(db, import_run_id)
     legacy_seed = build_realistic_demo_dataset_from_enrollment_csv(import_run.source_file)
+    legacy_seed_session_client_keys = {
+        session["client_key"]
+        for session in legacy_seed.get("sessions", [])
+        if session.get("client_key")
+    }
+
+    if legacy_seed_session_client_keys:
+        existing_seed_session_ids = [
+            int(shared_session_id)
+            for (shared_session_id,) in db.query(SnapshotSharedSession.id)
+            .filter(
+                SnapshotSharedSession.import_run_id == import_run_id
+            )
+            .filter(
+                or_(
+                    SnapshotSharedSession.client_key.in_(
+                        sorted(legacy_seed_session_client_keys)
+                    ),
+                    SnapshotSharedSession.notes.like("%real enrollment data%"),
+                    SnapshotSharedSession.notes.like(
+                        "%Realistic seed session adapted from the legacy demo builder.%"
+                    ),
+                    SnapshotSharedSession.notes.like(
+                        "%Synthetic laboratory block inferred from real enrollment data%"
+                    ),
+                )
+            )
+            .all()
+        ]
+        if existing_seed_session_ids:
+            db.execute(
+                snapshot_shared_session_lecturer_table.delete().where(
+                    snapshot_shared_session_lecturer_table.c.shared_session_id.in_(
+                        existing_seed_session_ids
+                    )
+                )
+            )
+            db.execute(
+                snapshot_shared_session_module_table.delete().where(
+                    snapshot_shared_session_module_table.c.shared_session_id.in_(
+                        existing_seed_session_ids
+                    )
+                )
+            )
+            db.execute(
+                snapshot_shared_session_attendance_group_table.delete().where(
+                    snapshot_shared_session_attendance_group_table.c.shared_session_id.in_(
+                        existing_seed_session_ids
+                    )
+                )
+            )
+            db.query(SnapshotSharedSession).filter(
+                SnapshotSharedSession.id.in_(existing_seed_session_ids)
+            ).delete(synchronize_session=False)
+            db.flush()
+
+    workspace = build_import_workspace(db, import_run_id)
 
     attendance_group_by_id = {
         int(group["id"]): group for group in workspace["attendance_groups"]
@@ -1342,8 +1408,21 @@ def seed_realistic_snapshot_missing_data(db: Session, *, import_run_id: int) -> 
     )
 
     modules_by_code: dict[str, list[dict]] = {}
+    modules_by_prefix_year_semester: dict[tuple[str, int, int], list[dict]] = {}
+    modules_by_prefix_year: dict[tuple[str, int], list[dict]] = {}
+    modules_by_prefix: dict[str, list[dict]] = {}
     for module in modules:
         modules_by_code.setdefault(module["code"], []).append(module)
+        code = module.get("code", "")
+        prefix = code.split()[0].strip().upper() if code else ""
+        year = int(module.get("nominal_year", module.get("year", 0)))
+        semester = int(module.get("semester_bucket", module.get("semester", 0)))
+        if prefix:
+            modules_by_prefix.setdefault(prefix, []).append(module)
+            if year > 0:
+                modules_by_prefix_year.setdefault((prefix, year), []).append(module)
+                if semester > 0:
+                    modules_by_prefix_year_semester.setdefault((prefix, year, semester), []).append(module)
 
     lecturers_to_create: list[dict] = []
     legacy_lecturer_by_client_key = {
@@ -1472,7 +1551,37 @@ def seed_realistic_snapshot_missing_data(db: Session, *, import_run_id: int) -> 
         module_code = legacy_module_code_by_client_key.get(legacy_session["module_client_key"])
         if not module_code:
             continue
-        matching_modules = modules_by_code.get(module_code, [])
+
+        def find_matching_modules(code: str) -> list[dict]:
+            if not code:
+                return []
+            prefix = code.split()[0].strip().upper()
+            if not prefix:
+                return []
+            exact = modules_by_code.get(code, [])
+            if exact:
+                return exact
+            parts = code.split()
+            year = 0
+            semester = 0
+            if len(parts) > 1:
+                num_part = parts[-1] if parts[-1].isdigit() else ""
+                if len(num_part) >= 2:
+                    year = int(num_part[0]) if num_part[0].isdigit() else 0
+                    semester = int(num_part[1]) if num_part[1].isdigit() else 0
+            if year > 0 and semester > 0:
+                by_year_sem = modules_by_prefix_year_semester.get((prefix, year, semester), [])
+                if by_year_sem:
+                    return by_year_sem
+            if year > 0:
+                by_year = modules_by_prefix_year.get((prefix, year), [])
+                if by_year:
+                    return by_year
+            return modules_by_prefix.get(prefix, [])
+
+        matching_modules = find_matching_modules(module_code)
+        if not matching_modules:
+            continue
         curriculum_module_ids = [
             int(module["id"])
             for module in matching_modules
