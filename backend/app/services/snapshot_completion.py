@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import hashlib
 import math
 import re
 
-from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.academic import (
@@ -16,14 +14,7 @@ from app.models.academic import (
 )
 from app.models.imports import ImportRun
 from app.models.imports import ImportStudent
-from app.models.snapshot import (
-    SnapshotLecturer,
-    SnapshotRoom,
-    SnapshotSharedSession,
-    snapshot_shared_session_attendance_group_table,
-    snapshot_shared_session_lecturer_table,
-    snapshot_shared_session_module_table,
-)
+from app.models.snapshot import SnapshotLecturer, SnapshotRoom, SnapshotSharedSession
 from app.models.solver import AttendanceGroup, AttendanceGroupStudent
 from app.services.enrollment_inference import (
     LAB_SPLIT_LIMIT_BY_TYPE,
@@ -669,8 +660,7 @@ def build_import_workspace(db: Session, import_run_id: int) -> dict:
     module_attendance_group_ids: dict[int, list[int]] = {}
     for (curriculum_module_id, academic_year), student_ids in module_student_ids.items():
         signature = ",".join(str(student_id) for student_id in sorted(student_ids))
-        signature_hash = hashlib.sha1(signature.encode("utf-8")).hexdigest()
-        attendance_group_id = attendance_group_by_signature.get((academic_year, signature_hash))
+        attendance_group_id = attendance_group_by_signature.get((academic_year, signature))
         if attendance_group_id is None:
             continue
         module_attendance_group_ids.setdefault(curriculum_module_id, []).append(attendance_group_id)
@@ -1302,64 +1292,8 @@ def delete_snapshot_shared_session(
 
 def seed_realistic_snapshot_missing_data(db: Session, *, import_run_id: int) -> dict:
     import_run = _require_import_run(db, import_run_id)
-    legacy_seed = build_realistic_demo_dataset_from_enrollment_csv(import_run.source_file)
-    legacy_seed_session_client_keys = {
-        session["client_key"]
-        for session in legacy_seed.get("sessions", [])
-        if session.get("client_key")
-    }
-
-    if legacy_seed_session_client_keys:
-        existing_seed_session_ids = [
-            int(shared_session_id)
-            for (shared_session_id,) in db.query(SnapshotSharedSession.id)
-            .filter(
-                SnapshotSharedSession.import_run_id == import_run_id
-            )
-            .filter(
-                or_(
-                    SnapshotSharedSession.client_key.in_(
-                        sorted(legacy_seed_session_client_keys)
-                    ),
-                    SnapshotSharedSession.notes.like("%real enrollment data%"),
-                    SnapshotSharedSession.notes.like(
-                        "%Realistic seed session adapted from the legacy demo builder.%"
-                    ),
-                    SnapshotSharedSession.notes.like(
-                        "%Synthetic laboratory block inferred from real enrollment data%"
-                    ),
-                )
-            )
-            .all()
-        ]
-        if existing_seed_session_ids:
-            db.execute(
-                snapshot_shared_session_lecturer_table.delete().where(
-                    snapshot_shared_session_lecturer_table.c.shared_session_id.in_(
-                        existing_seed_session_ids
-                    )
-                )
-            )
-            db.execute(
-                snapshot_shared_session_module_table.delete().where(
-                    snapshot_shared_session_module_table.c.shared_session_id.in_(
-                        existing_seed_session_ids
-                    )
-                )
-            )
-            db.execute(
-                snapshot_shared_session_attendance_group_table.delete().where(
-                    snapshot_shared_session_attendance_group_table.c.shared_session_id.in_(
-                        existing_seed_session_ids
-                    )
-                )
-            )
-            db.query(SnapshotSharedSession).filter(
-                SnapshotSharedSession.id.in_(existing_seed_session_ids)
-            ).delete(synchronize_session=False)
-            db.flush()
-
     workspace = build_import_workspace(db, import_run_id)
+    legacy_seed = build_realistic_demo_dataset_from_enrollment_csv(import_run.source_file)
 
     attendance_group_by_id = {
         int(group["id"]): group for group in workspace["attendance_groups"]

@@ -14,7 +14,6 @@ ACADEMIC_YEAR_RE = re.compile(r"^(?P<start>\d{4})/(?P<end>\d{4})$")
 COURSE_CODE_RE = re.compile(r"^(?P<prefix>[A-Z]+)\s+(?P<digits>\d{5})$")
 MIN_COHORT_SIZE = 0
 MAX_COURSES_PER_STREAM_YEAR_SEMESTER = 100
-MAX_DEMO_COURSES = 24
 TARGET_WEEKLY_LECTURER_HOURS = 35
 PATH_CORE_PARTICIPATION_THRESHOLD = 0.8
 OPTIONAL_MODULE_CODES = {
@@ -412,8 +411,6 @@ def build_realistic_demo_dataset_from_enrollment_csv(
         for course_code in selected_courses
         if _is_default_mandatory_demo_course(course_code)
     }
-
-    selected_courses = set(sorted(selected_courses)[:MAX_DEMO_COURSES])
 
     modules = []
     lecturer_prefixes = sorted({_course_parts(course_code)[0] for course_code in selected_courses})

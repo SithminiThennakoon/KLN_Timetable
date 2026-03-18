@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { timetableStudioService } from "../services/timetableStudioService";
 import SearchableMultiSelect from "../components/SearchableMultiSelect";
-import { ConfirmDelete } from "./setup/ConfirmDelete";
 
 const activeImportRunStorageKey = "kln_active_import_run_id";
 
@@ -857,9 +856,14 @@ function SetupStudio() {
   const [tempDegree, setTempDegree] = useState({ code: "", name: "", duration_years: 3, intake_label: "" });
   const [tempPath, setTempPath] = useState({ degreeId: "", year: 1, code: "", name: "" });
   const [tempLecturer, setTempLecturer] = useState({ name: "", email: "" });
-  const [editingLecturerId, setEditingLecturerId] = useState(null);
-  const [tempRoom, setTempRoom] = useState({});
-  const [editingRoomId, setEditingRoomId] = useState(null);
+  const [tempRoom, setTempRoom] = useState({
+    name: "",
+    capacity: "",
+    room_type: "lecture",
+    lab_type: "",
+    location: "",
+    year_restriction: "",
+  });
   const [tempModule, setTempModule] = useState({
     code: "",
     name: "",
@@ -901,7 +905,6 @@ function SetupStudio() {
     lecturerIds: [],
     cohortIds: [],
   });
-  const [editingSessionId, setEditingSessionId] = useState(null);
   const [importAnalysis, setImportAnalysis] = useState(null);
   const [importProjection, setImportProjection] = useState(null);
   const [materializedImport, setMaterializedImport] = useState(null);
@@ -2807,7 +2810,6 @@ function SetupStudio() {
                     className="ghost-btn"
                     onClick={() => {
                       setTempLecturer({ name: "", email: "" });
-                      setEditingLecturerId(null);
                       setShowLecturerModal(true);
                     }}
                   >
@@ -2815,44 +2817,39 @@ function SetupStudio() {
                   </button>
                 </div>
               </div>
-              <div className="lecturer-table-wrap">
+              <div className="editor-list">
                 {draft.lecturers.length === 0 ? (
                   <p className="empty-state">No lecturers added yet.</p>
                 ) : (
-                  <table className="lecturer-table">
-                    <thead>
-                      <tr>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th className="lecturer-actions-header">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {draft.lecturers.slice(0, visibleLecturerCount).map((lecturer) => (
-                        <tr key={lecturer.id}>
-                          <td>{lecturer.name}</td>
-                          <td>{lecturer.email}</td>
-                          <td className="lecturer-actions-cell">
-                            <button
-                              className="ghost-btn lecturer-edit-btn"
-                              onClick={() => {
-                                setTempLecturer({ name: lecturer.name, email: lecturer.email });
-                                setEditingLecturerId(lecturer.id);
-                                setShowLecturerModal(true);
-                              }}
-                            >
-                              Edit
-                            </button>
-                            <ConfirmDelete
-                              label="Remove"
-                              confirmMessage={`Remove "${lecturer.name || "this lecturer"}"?`}
-                              onConfirm={() => removeRecord("lecturers", lecturer.id)}
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  draft.lecturers.slice(0, visibleLecturerCount).map((lecturer) => (
+                    <div key={lecturer.id} className="editor-card">
+                      <div className="form-grid two-column">
+                        <label>
+                          <span>Name</span>
+                          <input
+                            value={lecturer.name}
+                            onChange={(event) =>
+                              updateRecord("lecturers", lecturer.id, "name", event.target.value)
+                            }
+                            onBlur={() => persistSnapshotRecordUpdate("lecturers", lecturer)}
+                          />
+                        </label>
+                        <label>
+                          <span>Email</span>
+                          <input
+                            value={lecturer.email}
+                            onChange={(event) =>
+                              updateRecord("lecturers", lecturer.id, "email", event.target.value)
+                            }
+                            onBlur={() => persistSnapshotRecordUpdate("lecturers", lecturer)}
+                          />
+                        </label>
+                      </div>
+                      <button className="danger-btn" onClick={() => removeRecord("lecturers", lecturer.id)}>
+                        Remove Lecturer
+                      </button>
+                    </div>
+                  ))
                 )}
                 {draft.lecturers.length > INITIAL_VISIBLE_RECORDS && (
                   <div className="list-see-more-wrap">
@@ -2899,7 +2896,6 @@ function SetupStudio() {
                         location: "",
                         year_restriction: "",
                       });
-                      setEditingRoomId(null);
                       setShowRoomModal(true);
                     }}
                   >
@@ -2907,79 +2903,128 @@ function SetupStudio() {
                   </button>
                 </div>
               </div>
-              <div className="room-table-wrap">
-                {draft.rooms.length === 0 ? (
-                  <p className="empty-state">No rooms added yet.</p>
-                ) : (
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Name</th>
-                        <th>Capacity</th>
-                        <th>Room type</th>
-                        <th>Lab type</th>
-                        <th>Location</th>
-                        <th>Year restriction</th>
-                        <th className="table-actions-header">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {draft.rooms.slice(0, visibleRoomCount).map((room) => (
-                        <tr key={room.id}>
-                          <td>{room.name}</td>
-                          <td>{room.capacity}</td>
-                          <td>{room.room_type}</td>
-                          <td>{room.lab_type || "—"}</td>
-                          <td>{room.location}</td>
-                          <td>{room.year_restriction ? `Year ${room.year_restriction}` : "—"}</td>
-                          <td className="table-actions-cell">
-                            <button
-                              className="ghost-btn table-action-btn"
-                              onClick={() => {
-                                setTempRoom({
-                                  name: room.name,
-                                  capacity: room.capacity,
-                                  room_type: room.room_type,
-                                  lab_type: room.lab_type,
-                                  location: room.location,
-                                  year_restriction: room.year_restriction,
-                                });
-                                setEditingRoomId(room.id);
-                                setShowRoomModal(true);
-                              }}
-                            >
-                              Edit
-                            </button>
-                            <ConfirmDelete
-                              label="Remove"
-                              confirmMessage={`Remove "${room.name || "this room"}"?`}
-                              onConfirm={() => removeRecord("rooms", room.id)}
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-                {draft.rooms.length > INITIAL_VISIBLE_RECORDS && (
-                  <div className="list-see-more-wrap">
-                    <button
-                      type="button"
-                      className="list-see-more-btn"
-                      onClick={() =>
-                        setVisibleRoomCount((current) =>
-                          current > INITIAL_VISIBLE_RECORDS ? INITIAL_VISIBLE_RECORDS : draft.rooms.length
-                        )
-                      }
-                    >
-                      <span
-                        className={`list-see-more-arrow ${visibleRoomCount > INITIAL_VISIBLE_RECORDS ? "is-open" : ""}`}
-                        aria-hidden="true"
-                      />
-                      {visibleRoomCount > INITIAL_VISIBLE_RECORDS ? "See less" : "See more"}
-                    </button>
+              <div className="editor-list">
+              {draft.rooms.length === 0 ? (
+                <p className="empty-state">No rooms added yet.</p>
+              ) : (
+                draft.rooms.slice(0, visibleRoomCount).map((room) => (
+                  <div key={room.id} className="editor-card">
+                    {(() => {
+                      const roomNameIssue = findRecordIssue(
+                        validation.blocking,
+                        new RegExp(`^Room ${draft.rooms.indexOf(room) + 1} is missing name or location\\.$`)
+                      );
+                      const roomCapacityIssue = findRecordIssue(
+                        validation.blocking,
+                        new RegExp(`^Room ${draft.rooms.indexOf(room) + 1} needs a positive capacity\\.$`)
+                      );
+                      return (
+                    <div className="form-grid four-column">
+                      <label>
+                        <span>Name</span>
+                        <input
+                          className={invalidClass(roomNameIssue)}
+                          value={room.name}
+                          onChange={(event) =>
+                            updateRecord("rooms", room.id, "name", event.target.value)
+                          }
+                          onBlur={() => persistSnapshotRecordUpdate("rooms", room)}
+                        />
+                        {roomNameIssue && <small className="field-hint invalid">{roomNameIssue}</small>}
+                      </label>
+                      <label>
+                        <span>Capacity</span>
+                        <input
+                          className={invalidClass(roomCapacityIssue)}
+                          type="number"
+                          min="1"
+                          value={room.capacity}
+                          onChange={(event) =>
+                            updateRecord("rooms", room.id, "capacity", event.target.value)
+                          }
+                          onBlur={() => persistSnapshotRecordUpdate("rooms", room)}
+                        />
+                        {roomCapacityIssue && <small className="field-hint invalid">{roomCapacityIssue}</small>}
+                      </label>
+                      <label>
+                        <span>Room type</span>
+                        <select
+                          value={room.room_type}
+                          onChange={(event) =>
+                            updateRecord("rooms", room.id, "room_type", event.target.value)
+                          }
+                          onBlur={() => persistSnapshotRecordUpdate("rooms", room)}
+                        >
+                          <option value="lecture">Lecture</option>
+                          <option value="lab">Lab</option>
+                          <option value="seminar">Seminar</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>Lab type</span>
+                        <input
+                          value={room.lab_type}
+                          onChange={(event) =>
+                            updateRecord("rooms", room.id, "lab_type", event.target.value)
+                          }
+                          onBlur={() => persistSnapshotRecordUpdate("rooms", room)}
+                        />
+                      </label>
+                      <label>
+                        <span>Location</span>
+                        <input
+                          className={invalidClass(roomNameIssue)}
+                          value={room.location}
+                          onChange={(event) =>
+                            updateRecord("rooms", room.id, "location", event.target.value)
+                          }
+                          onBlur={() => persistSnapshotRecordUpdate("rooms", room)}
+                        />
+                        {roomNameIssue && <small className="field-hint invalid">{roomNameIssue}</small>}
+                      </label>
+                      <label>
+                        <span>Year restriction</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max="6"
+                          value={room.year_restriction}
+                          onChange={(event) =>
+                            updateRecord("rooms", room.id, "year_restriction", event.target.value)
+                          }
+                          onBlur={() => persistSnapshotRecordUpdate("rooms", room)}
+                        />
+                      </label>
+                    </div>
+                      );
+                    })()}
+                    <div className="record-actions">
+                      <button className="danger-btn" onClick={() => removeRecord("rooms", room.id)}>
+                        Remove Room
+                      </button>
+                    </div>
                   </div>
-                )}
+                ))
+              )}
+              {draft.rooms.length > INITIAL_VISIBLE_RECORDS && (
+                <div className="list-see-more-wrap">
+                  <button
+                    type="button"
+                    className="list-see-more-btn"
+                    onClick={() =>
+                      setVisibleRoomCount((current) =>
+                        current > INITIAL_VISIBLE_RECORDS ? INITIAL_VISIBLE_RECORDS : draft.rooms.length
+                      )
+                    }
+                  >
+                    <span
+                      className={`list-see-more-arrow ${visibleRoomCount > INITIAL_VISIBLE_RECORDS ? "is-open" : ""}`}
+                      aria-hidden="true"
+                    />
+                    {visibleRoomCount > INITIAL_VISIBLE_RECORDS ? "See less" : "See more"}
+                  </button>
+                </div>
+              )}
               </div>
             </section>
           </>
@@ -3534,7 +3579,6 @@ function SetupStudio() {
                         lecturerIds: [],
                         cohortIds: defaultModule?.defaultCohortIds || [],
                       });
-                      setEditingSessionId(null);
                       setShowSessionModal(true);
                     }}
                     disabled={moduleOptions.length === 0}
@@ -3559,100 +3603,323 @@ function SetupStudio() {
                   </select>
                 </div>
               </div>
-              <div className="session-table-wrap">
-                {filteredSessions.length === 0 ? (
-                  <p className="empty-state">
-                    {sessionYearFilter !== "all"
-                      ? `No sessions found for Year ${sessionYearFilter}.`
-                      : "No sessions added yet."}
-                  </p>
-                ) : (
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Module</th>
-                        <th>Name</th>
-                        <th>Type</th>
-                        <th>Duration</th>
-                        <th>Occurrences</th>
-                        <th>Room type</th>
-                        <th>Lecturers</th>
-                        <th>Cohorts</th>
-                        <th className="table-actions-header">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredSessions.slice(0, visibleSessionCount).map((session) => {
-                        const module = moduleOptions.find((m) => m.id === session.moduleId);
-                        const sessionLecturers = lecturerOptions.filter((l) => session.lecturerIds?.includes(l.id));
-                        const sessionCohorts = cohortOptions.filter((c) => session.cohortIds?.includes(c.id));
-                        return (
-                          <tr key={session.id}>
-                            <td>{module?.code || "—"}</td>
-                            <td>{session.name}</td>
-                            <td>{session.session_type}</td>
-                            <td>{session.duration_minutes} min</td>
-                            <td>{session.occurrences_per_week}/week</td>
-                            <td>{session.required_room_type || "Any"}</td>
-                            <td>{sessionLecturers.map((l) => l.name).join(", ") || "—"}</td>
-                            <td>{sessionCohorts.length} cohort{sessionCohorts.length !== 1 ? "s" : ""}</td>
-                            <td className="table-actions-cell">
-                              <button
-                                className="ghost-btn table-action-btn"
-                                onClick={() => {
-                                  setTempSession({
-                                    moduleId: session.moduleId,
-                                    linkedModuleIds: session.linkedModuleIds || [],
-                                    name: session.name,
-                                    session_type: session.session_type,
-                                    duration_minutes: session.duration_minutes,
-                                    occurrences_per_week: session.occurrences_per_week,
-                                    required_room_type: session.required_room_type,
-                                    required_lab_type: session.required_lab_type,
-                                    specific_room_id: session.specific_room_id,
-                                    max_students_per_group: session.max_students_per_group,
-                                    allow_parallel_rooms: session.allow_parallel_rooms,
-                                    notes: session.notes,
-                                    lecturerIds: session.lecturerIds || [],
-                                    cohortIds: session.cohortIds || [],
-                                  });
-                                  setEditingSessionId(session.id);
-                                  setShowSessionModal(true);
-                                }}
-                              >
-                                Edit
-                              </button>
-                              <ConfirmDelete
-                                label="Remove"
-                                confirmMessage={`Remove "${session.name || "this session"}"?`}
-                                onConfirm={() => removeRecord("sessions", session.id)}
-                              />
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
-                {filteredSessions.length > INITIAL_VISIBLE_RECORDS && (
-                  <div className="list-see-more-wrap">
-                    <button
-                      type="button"
-                      className="list-see-more-btn"
-                      onClick={() =>
-                        setVisibleSessionCount((current) =>
-                          current > INITIAL_VISIBLE_RECORDS ? INITIAL_VISIBLE_RECORDS : filteredSessions.length
-                        )
-                      }
-                    >
-                      <span
-                        className={`list-see-more-arrow ${visibleSessionCount > INITIAL_VISIBLE_RECORDS ? "is-open" : ""}`}
-                        aria-hidden="true"
-                      />
-                      {visibleSessionCount > INITIAL_VISIBLE_RECORDS ? "See less" : "See more"}
-                    </button>
+              <div className="editor-list">
+              {filteredSessions.length === 0 ? (
+                <p className="empty-state">
+                  {sessionYearFilter !== "all"
+                    ? `No sessions found for Year ${sessionYearFilter}.`
+                    : "No sessions added yet."}
+                </p>
+              ) : (
+                filteredSessions.slice(0, visibleSessionCount).map((session) => {
+                  const sessionIndex = draft.sessions.findIndex((entry) => entry.id === session.id) + 1;
+                  const sessionIdentityIssue = findRecordIssue(
+                    validation.blocking,
+                    new RegExp(`^Session ${sessionIndex} is missing module, name, or type\\.$`)
+                  );
+                  const sessionDurationIssue = findRecordIssue(
+                    validation.blocking,
+                    new RegExp(`^Session ${sessionIndex} duration must be a positive multiple of 30\\.$`)
+                  );
+                  const sessionOccurrenceIssue = findRecordIssue(
+                    validation.blocking,
+                    new RegExp(`^Session ${sessionIndex} needs a valid weekly occurrence count\\.$`)
+                  );
+                  const sessionCohortIssue = findRecordIssue(
+                    validation.blocking,
+                    new RegExp(`^Session ${sessionIndex} must target at least one cohort\\.$`)
+                  );
+
+                  return (
+                  <div key={session.id} className="editor-card">
+                    <div className="form-grid four-column">
+                      <label>
+                        <span>Module</span>
+                        <select
+                          className={invalidClass(sessionIdentityIssue)}
+                          value={session.moduleId}
+                          onChange={async (event) => {
+                            updateRecord("sessions", session.id, "moduleId", event.target.value);
+                            await persistSnapshotRecordUpdate("sessions", {
+                              ...session,
+                              moduleId: event.target.value,
+                            });
+                          }}
+                        >
+                          <option value="">Select module</option>
+                          {moduleOptions.map((module) => (
+                            <option key={module.id} value={module.id}>
+                              {module.code} - {module.name}
+                            </option>
+                          ))}
+                        </select>
+                        {sessionIdentityIssue && <small className="field-hint invalid">{sessionIdentityIssue}</small>}
+                      </label>
+                      <label>
+                        <span>Name</span>
+                        <input
+                          className={invalidClass(sessionIdentityIssue)}
+                          value={session.name}
+                          onChange={(event) =>
+                            updateRecord("sessions", session.id, "name", event.target.value)
+                          }
+                          onBlur={() => persistSnapshotRecordUpdate("sessions", session)}
+                        />
+                        {sessionIdentityIssue && <small className="field-hint invalid">{sessionIdentityIssue}</small>}
+                      </label>
+                      <label>
+                        <span>Type</span>
+                        <input
+                          className={invalidClass(sessionIdentityIssue)}
+                          value={session.session_type}
+                          onChange={(event) =>
+                            updateRecord("sessions", session.id, "session_type", event.target.value)
+                          }
+                          onBlur={() => persistSnapshotRecordUpdate("sessions", session)}
+                        />
+                        {sessionIdentityIssue && <small className="field-hint invalid">{sessionIdentityIssue}</small>}
+                      </label>
+                      <label>
+                        <span>Duration</span>
+                        <input
+                          className={invalidClass(sessionDurationIssue)}
+                          type="number"
+                          step="30"
+                          min="30"
+                          value={session.duration_minutes}
+                          onChange={(event) =>
+                            updateRecord("sessions", session.id, "duration_minutes", event.target.value)
+                          }
+                          onBlur={() => persistSnapshotRecordUpdate("sessions", session)}
+                        />
+                        {sessionDurationIssue && (
+                          <small className="field-hint invalid">{sessionDurationIssue}</small>
+                        )}
+                      </label>
+                      <label>
+                        <span>Occurrences / week</span>
+                        <input
+                          className={invalidClass(sessionOccurrenceIssue)}
+                          type="number"
+                          min="1"
+                          value={session.occurrences_per_week}
+                          onChange={(event) =>
+                            updateRecord("sessions", session.id, "occurrences_per_week", event.target.value)
+                          }
+                          onBlur={() => persistSnapshotRecordUpdate("sessions", session)}
+                        />
+                        {sessionOccurrenceIssue && (
+                          <small className="field-hint invalid">{sessionOccurrenceIssue}</small>
+                        )}
+                      </label>
+                      <label>
+                        <span>Required room type</span>
+                        <select
+                          value={session.required_room_type}
+                          onChange={async (event) => {
+                            updateRecord("sessions", session.id, "required_room_type", event.target.value);
+                            await persistSnapshotRecordUpdate("sessions", {
+                              ...session,
+                              required_room_type: event.target.value,
+                            });
+                          }}
+                        >
+                          <option value="">Any</option>
+                          <option value="lecture">Lecture</option>
+                          <option value="lab">Lab</option>
+                          <option value="seminar">Seminar</option>
+                        </select>
+                      </label>
+                      <div className="full-span">
+                        <label>
+                          <span>Also counts as modules</span>
+                          <SearchableMultiSelect
+                            options={moduleOptions.filter(
+                              (module) => module.id !== session.moduleId
+                            )}
+                            selectedIds={session.linkedModuleIds || []}
+                            getLabel={(module) => `${module.code} - ${module.name}`}
+                            placeholder="Search linked modules..."
+                            onChange={async (linkedModuleIds) => {
+                              updateRecord("sessions", session.id, "linkedModuleIds", linkedModuleIds);
+                              await persistSnapshotRecordUpdate("sessions", {
+                                ...session,
+                                linkedModuleIds,
+                              });
+                            }}
+                          />
+                          <small className="field-hint">
+                            Use this when one real lecture, tutorial, or lab should appear under
+                            more than one module identity for different degree or path groups.
+                          </small>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="advanced-session">
+                      <h3>Advanced options</h3>
+                      <p className="helper-copy">
+                        A split limit lets the generator divide one large cohort into internal parts
+                        when a single room cannot hold everyone. You do not need to create manual
+                        override groups for that case.
+                      </p>
+                      <div className="form-grid four-column">
+                        <label>
+                          <span>Specific room</span>
+                          <select
+                            value={session.specific_room_id}
+                            onChange={async (event) => {
+                              updateRecord("sessions", session.id, "specific_room_id", event.target.value);
+                              await persistSnapshotRecordUpdate("sessions", {
+                                ...session,
+                                specific_room_id: event.target.value,
+                              });
+                            }}
+                          >
+                            <option value="">Any matching room</option>
+                            {roomOptions.map((room) => (
+                              <option key={room.id} value={room.id}>
+                                {room.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          <span>Required lab type</span>
+                          <input
+                            value={session.required_lab_type}
+                            onChange={(event) =>
+                              updateRecord("sessions", session.id, "required_lab_type", event.target.value)
+                            }
+                            onBlur={() => persistSnapshotRecordUpdate("sessions", session)}
+                          />
+                        </label>
+                        <label>
+                          <span>Split limit per room</span>
+                          <input
+                            type="number"
+                            min="1"
+                            value={session.max_students_per_group}
+                            onChange={(event) =>
+                              updateRecord(
+                                "sessions",
+                                session.id,
+                                "max_students_per_group",
+                                event.target.value
+                              )
+                            }
+                            onBlur={() => persistSnapshotRecordUpdate("sessions", session)}
+                          />
+                        </label>
+                        <label className="checkbox-field">
+                          <input
+                            type="checkbox"
+                            checked={session.allow_parallel_rooms}
+                            onChange={async (event) => {
+                              updateRecord(
+                                "sessions",
+                                session.id,
+                                "allow_parallel_rooms",
+                                event.target.checked
+                              );
+                              await persistSnapshotRecordUpdate("sessions", {
+                                ...session,
+                                allow_parallel_rooms: event.target.checked,
+                              });
+                            }}
+                          />
+                          <span>Same-time parallel rooms for all split parts</span>
+                        </label>
+                        <label className="full-span">
+                          <span>Notes</span>
+                          <textarea
+                            className="compact-textarea"
+                            value={session.notes}
+                            onChange={(event) =>
+                              updateRecord("sessions", session.id, "notes", event.target.value)
+                            }
+                            onBlur={() => persistSnapshotRecordUpdate("sessions", session)}
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="selection-grid">
+                      <div>
+                        <h3>Lecturers</h3>
+                        <SearchableMultiSelect
+                          options={lecturerOptions}
+                          selectedIds={session.lecturerIds}
+                          onChange={async (ids) => {
+                            updateRecord("sessions", session.id, "lecturerIds", ids);
+                            await persistSnapshotRecordUpdate("sessions", {
+                              ...session,
+                              lecturerIds: ids,
+                            });
+                          }}
+                          getLabel={(l) => l.name}
+                          placeholder="Search lecturers..."
+                        />
+                      </div>
+                      <div>
+                        <h3>Attending cohorts</h3>
+                        <div className="session-cohort-year-filter">
+                          <select
+                            value={sessionCohortYearFilter}
+                            onChange={(e) => setSessionCohortYearFilter(Number(e.target.value))}
+                          >
+                            {[2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015].map((y) => (
+                              <option key={y} value={y}>
+                                {y}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {sessionCohortIssue && <p className="field-hint invalid">{sessionCohortIssue}</p>}
+                        <SearchableMultiSelect
+                          options={filteredCohortsByYear}
+                          selectedIds={session.cohortIds}
+                          onChange={async (ids) => {
+                            updateRecord("sessions", session.id, "cohortIds", ids);
+                            await persistSnapshotRecordUpdate("sessions", {
+                              ...session,
+                              cohortIds: ids,
+                            });
+                          }}
+                          getLabel={(c) => c.name || "Unnamed cohort"}
+                          placeholder="Search cohorts..."
+                        />
+                      </div>
+                    </div>
+
+                    <div className="record-actions">
+                      <button className="danger-btn" onClick={() => removeRecord("sessions", session.id)}>
+                        Remove Session
+                      </button>
+                    </div>
                   </div>
-                )}
+                );
+                })
+              )}
+              {filteredSessions.length > INITIAL_VISIBLE_RECORDS && (
+                <div className="list-see-more-wrap">
+                  <button
+                    type="button"
+                    className="list-see-more-btn"
+                    onClick={() =>
+                      setVisibleSessionCount((current) =>
+                        current > INITIAL_VISIBLE_RECORDS ? INITIAL_VISIBLE_RECORDS : filteredSessions.length
+                      )
+                    }
+                  >
+                    <span
+                      className={`list-see-more-arrow ${visibleSessionCount > INITIAL_VISIBLE_RECORDS ? "is-open" : ""}`}
+                      aria-hidden="true"
+                    />
+                    {visibleSessionCount > INITIAL_VISIBLE_RECORDS ? "See less" : "See more"}
+                  </button>
+                </div>
+              )}
               </div>
             </section>
           </>
@@ -3926,7 +4193,7 @@ function SetupStudio() {
             <div className="setup-add-modal-header">
               <div className="setup-add-modal-title-block">
                 <span className="setup-add-modal-kicker">Lecturer setup</span>
-                <h3>{editingLecturerId ? "Edit Lecturer" : "Add New Lecturer"}</h3>
+                <h3>Add New Lecturer</h3>
                 <p>
                   {activeImportRunId
                     ? "Enter the lecturer details and save them into the active import snapshot."
@@ -3976,34 +4243,23 @@ function SetupStudio() {
                   className="primary-btn"
                   disabled={saving}
                   onClick={async () => {
-                    if (editingLecturerId) {
-                      await updateRecord("lecturers", editingLecturerId, "name", tempLecturer.name);
-                      await updateRecord("lecturers", editingLecturerId, "email", tempLecturer.email);
-                      const lecturer = draft.lecturers.find((l) => l.id === editingLecturerId);
-                      if (lecturer) {
-                        await persistSnapshotRecordUpdate("lecturers", { ...lecturer, name: tempLecturer.name, email: tempLecturer.email });
-                      }
+                    const lecturer = {
+                      id: makeId("lecturer"),
+                      name: tempLecturer.name,
+                      email: tempLecturer.email,
+                    };
+                    const saved = await persistAddedRecord(
+                      "lecturers",
+                      lecturer,
+                      "Lecturer saved to the setup dataset."
+                    );
+                    if (saved) {
+                      setVisibleLecturerCount((current) => current + 1);
                       setShowLecturerModal(false);
-                      setEditingLecturerId(null);
-                    } else {
-                      const lecturer = {
-                        id: makeId("lecturer"),
-                        name: tempLecturer.name,
-                        email: tempLecturer.email,
-                      };
-                      const saved = await persistAddedRecord(
-                        "lecturers",
-                        lecturer,
-                        "Lecturer saved to the setup dataset."
-                      );
-                      if (saved) {
-                        setVisibleLecturerCount((current) => current + 1);
-                        setShowLecturerModal(false);
-                      }
                     }
                   }}
                 >
-                  {saving ? "Saving..." : editingLecturerId ? "Update Lecturer" : "Save Lecturer"}
+                  {saving ? "Saving..." : "Save Lecturer"}
                 </button>
               </div>
             </div>
@@ -4017,7 +4273,7 @@ function SetupStudio() {
             <div className="setup-add-modal-header">
               <div className="setup-add-modal-title-block">
                 <span className="setup-add-modal-kicker">Room setup</span>
-                <h3>{editingRoomId ? "Edit Room" : "Add New Room"}</h3>
+                <h3>Add New Room</h3>
                 <p>
                   {activeImportRunId
                     ? "Capture the room details and save them into the active import snapshot."
@@ -4106,42 +4362,27 @@ function SetupStudio() {
                   className="primary-btn"
                   disabled={saving}
                   onClick={async () => {
-                    if (editingRoomId) {
-                      await updateRecord("rooms", editingRoomId, "name", tempRoom.name);
-                      await updateRecord("rooms", editingRoomId, "capacity", tempRoom.capacity);
-                      await updateRecord("rooms", editingRoomId, "room_type", tempRoom.room_type);
-                      await updateRecord("rooms", editingRoomId, "lab_type", tempRoom.lab_type);
-                      await updateRecord("rooms", editingRoomId, "location", tempRoom.location);
-                      await updateRecord("rooms", editingRoomId, "year_restriction", tempRoom.year_restriction);
-                      const room = draft.rooms.find((r) => r.id === editingRoomId);
-                      if (room) {
-                        await persistSnapshotRecordUpdate("rooms", { ...room, ...tempRoom });
-                      }
+                    const room = {
+                      id: makeId("room"),
+                      name: tempRoom.name,
+                      capacity: tempRoom.capacity,
+                      room_type: tempRoom.room_type,
+                      lab_type: tempRoom.lab_type,
+                      location: tempRoom.location,
+                      year_restriction: tempRoom.year_restriction,
+                    };
+                    const saved = await persistAddedRecord(
+                      "rooms",
+                      room,
+                      "Room saved to the setup dataset."
+                    );
+                    if (saved) {
+                      setVisibleRoomCount((current) => current + 1);
                       setShowRoomModal(false);
-                      setEditingRoomId(null);
-                    } else {
-                      const room = {
-                        id: makeId("room"),
-                        name: tempRoom.name,
-                        capacity: tempRoom.capacity,
-                        room_type: tempRoom.room_type,
-                        lab_type: tempRoom.lab_type,
-                        location: tempRoom.location,
-                        year_restriction: tempRoom.year_restriction,
-                      };
-                      const saved = await persistAddedRecord(
-                        "rooms",
-                        room,
-                        "Room saved to the setup dataset."
-                      );
-                      if (saved) {
-                        setVisibleRoomCount((current) => current + 1);
-                        setShowRoomModal(false);
-                      }
                     }
                   }}
                 >
-                  {saving ? "Saving..." : editingRoomId ? "Update Room" : "Save Room"}
+                  {saving ? "Saving..." : "Save Room"}
                 </button>
               </div>
             </div>
@@ -4398,7 +4639,7 @@ function SetupStudio() {
             <div className="setup-add-modal-header">
               <div className="setup-add-modal-title-block">
                 <span className="setup-add-modal-kicker">Session setup</span>
-                <h3>{editingSessionId ? "Edit Session" : "Add New Session"}</h3>
+                <h3>Add New Session</h3>
                 <p>
                   {activeImportRunId
                     ? "Enter the shared session details and save them into the active import snapshot."
@@ -4626,53 +4867,35 @@ function SetupStudio() {
                   className="primary-btn"
                   disabled={saving}
                   onClick={async () => {
-                    if (editingSessionId) {
-                      const fieldsToUpdate = [
-                        "moduleId", "linkedModuleIds", "name", "session_type",
-                        "duration_minutes", "occurrences_per_week", "required_room_type",
-                        "required_lab_type", "specific_room_id", "max_students_per_group",
-                        "allow_parallel_rooms", "notes", "lecturerIds", "cohortIds"
-                      ];
-                      for (const field of fieldsToUpdate) {
-                        await updateRecord("sessions", editingSessionId, field, tempSession[field]);
-                      }
-                      const session = draft.sessions.find((s) => s.id === editingSessionId);
-                      if (session) {
-                        await persistSnapshotRecordUpdate("sessions", { ...session, ...tempSession });
-                      }
+                    const session = {
+                      id: makeId("session"),
+                      moduleId: tempSession.moduleId,
+                      linkedModuleIds: tempSession.linkedModuleIds,
+                      name: tempSession.name,
+                      session_type: tempSession.session_type,
+                      duration_minutes: tempSession.duration_minutes,
+                      occurrences_per_week: tempSession.occurrences_per_week,
+                      required_room_type: tempSession.required_room_type,
+                      required_lab_type: tempSession.required_lab_type,
+                      specific_room_id: tempSession.specific_room_id,
+                      max_students_per_group: tempSession.max_students_per_group,
+                      allow_parallel_rooms: tempSession.allow_parallel_rooms,
+                      notes: tempSession.notes,
+                      lecturerIds: tempSession.lecturerIds,
+                      cohortIds: tempSession.cohortIds,
+                    };
+                    const saved = await persistAddedRecord(
+                      "sessions",
+                      session,
+                      `Session saved to import snapshot #${activeImportRunId}.`
+                    );
+                    if (saved) {
+                      setVisibleSessionCount((current) => current + 1);
                       setShowSessionModal(false);
-                      setEditingSessionId(null);
-                    } else {
-                      const session = {
-                        id: makeId("session"),
-                        moduleId: tempSession.moduleId,
-                        linkedModuleIds: tempSession.linkedModuleIds,
-                        name: tempSession.name,
-                        session_type: tempSession.session_type,
-                        duration_minutes: tempSession.duration_minutes,
-                        occurrences_per_week: tempSession.occurrences_per_week,
-                        required_room_type: tempSession.required_room_type,
-                        required_lab_type: tempSession.required_lab_type,
-                        specific_room_id: tempSession.specific_room_id,
-                        max_students_per_group: tempSession.max_students_per_group,
-                        allow_parallel_rooms: tempSession.allow_parallel_rooms,
-                        notes: tempSession.notes,
-                        lecturerIds: tempSession.lecturerIds,
-                        cohortIds: tempSession.cohortIds,
-                      };
-                      const saved = await persistAddedRecord(
-                        "sessions",
-                        session,
-                        `Session saved to import snapshot #${activeImportRunId}.`
-                      );
-                      if (saved) {
-                        setVisibleSessionCount((current) => current + 1);
-                        setShowSessionModal(false);
-                      }
                     }
                   }}
                 >
-                  {saving ? "Saving..." : editingSessionId ? "Update Session" : "Save Session"}
+                  {saving ? "Saving..." : "Save Session"}
                 </button>
               </div>
             </div>
