@@ -139,7 +139,8 @@ class SessionTask:
     session_id: int
     session_name: str
     session_type: str
-    module_id: int
+    module_id: int | None
+    module_ids: tuple[int, ...]
     module_code: str
     module_name: str
     occurrence_index: int
@@ -487,6 +488,7 @@ def _build_tasks(db: Session) -> list[SessionTask]:
                         session_name=session.name,
                         session_type=session.session_type,
                         module_id=int(session.module_id),
+                        module_ids=(int(session.module_id),),
                         module_code=session.module.code,
                         module_name=session.module.name,
                         occurrence_index=occurrence_index,
@@ -561,7 +563,6 @@ def _build_snapshot_tasks(
         module_ids = sorted(int(module.id) for module in session.curriculum_modules)
         module_codes = [module.code for module in session.curriculum_modules]
         module_names = [module.name for module in session.curriculum_modules]
-        primary_module_id = module_ids[0] if module_ids else 0
         module_code = " / ".join(module_codes) if module_codes else session.name
         module_name = " / ".join(module_names) if module_names else session.name
 
@@ -594,7 +595,8 @@ def _build_snapshot_tasks(
                         session_id=int(session.id),
                         session_name=session.name,
                         session_type=session.session_type,
-                        module_id=primary_module_id,
+                        module_id=None,
+                        module_ids=tuple(module_ids),
                         module_code=module_code,
                         module_name=module_name,
                         occurrence_index=occurrence_index,

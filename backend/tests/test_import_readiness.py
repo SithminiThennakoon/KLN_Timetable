@@ -18,6 +18,7 @@ from app.services.snapshot_completion import (  # noqa: E402
     build_import_readiness_summary,
     require_import_ready_for_generation,
 )
+from app.services.timetable_v2 import _build_snapshot_tasks  # noqa: E402
 
 
 class ImportReadinessTestCase(unittest.TestCase):
@@ -269,6 +270,83 @@ class ImportReadinessTestCase(unittest.TestCase):
 
         summary = require_import_ready_for_generation(self.db, self.import_run_id)
         self.assertTrue(summary["ready"])
+
+    def test_snapshot_task_builder_keeps_all_module_ids_for_shared_session(self):
+        room = SnapshotRoom(
+            import_run_id=self.import_run_id,
+            client_key="A7-H1",
+            name="A7 Hall 1",
+            capacity=300,
+            room_type="lecture",
+            lab_type=None,
+            location="A7",
+            year_restriction=None,
+            notes="",
+        )
+        lecturer = SnapshotLecturer(
+            import_run_id=self.import_run_id,
+            client_key="LECT-01",
+            name="Dr. Silva",
+            email=None,
+            notes="",
+        )
+        group = AttendanceGroup(
+            import_run_id=self.import_run_id,
+            academic_year="2022/2023",
+            study_year=1,
+            programme_id=None,
+            programme_path_id=None,
+            label="Y1 Chemistry",
+            derivation_basis="student_membership",
+            membership_signature="3",
+            interpretation_confidence="high",
+            student_count=40,
+            notes="",
+        )
+        extra_module = CurriculumModule(
+            code="CHEM 11631",
+            canonical_code="CHEM 11631",
+            name="Chemistry Laboratory",
+            subject_name="Chemistry",
+            subject_code="CHEM",
+            nominal_year=1,
+            semester_bucket=1,
+            is_full_year=False,
+        )
+        session = SnapshotSharedSession(
+            import_run_id=self.import_run_id,
+            client_key="CHEM11612-SHARED",
+            name="Shared Chemistry Event",
+            session_type="lecture",
+            duration_minutes=120,
+            occurrences_per_week=1,
+            required_room_type="lecture",
+            required_lab_type=None,
+            specific_room=room,
+            max_students_per_group=None,
+            allow_parallel_rooms=False,
+            notes="",
+        )
+        session.lecturers.append(lecturer)
+        session.attendance_groups.append(group)
+        session.curriculum_modules.append(self.db.query(CurriculumModule).filter(CurriculumModule.code == "CHEM 11612").one())
+        session.curriculum_modules.append(extra_module)
+        self.db.add_all([room, lecturer, group, extra_module, session])
+        self.db.commit()
+
+        tasks, _sessions, _rooms, _lecturer_names, _group_names = _build_snapshot_tasks(
+            self.db, self.import_run_id
+        )
+        shared_tasks = [
+            task for task in tasks if task.session_name == "Shared Chemistry Event"
+        ]
+
+        self.assertEqual(len(shared_tasks), 1)
+        self.assertIsNone(shared_tasks[0].module_id)
+        self.assertEqual(
+            set(shared_tasks[0].module_ids),
+            {module.id for module in session.curriculum_modules},
+        )
 
 
 if __name__ == "__main__":

@@ -724,6 +724,139 @@ def build_import_workspace(db: Session, import_run_id: int) -> dict:
     }
 
 
+def build_import_readiness_summary(db: Session, import_run_id: int) -> dict:
+    workspace = build_import_workspace(db, import_run_id)
+    room_by_id = {int(room["id"]): room for room in workspace["rooms"]}
+    attendance_group_by_id = {
+        int(group["id"]): group for group in workspace["attendance_groups"]
+    }
+
+    blocking: list[str] = []
+    warnings: list[str] = []
+
+    if not workspace["rooms"]:
+        blocking.append("Import rooms.csv or add rooms manually.")
+    if not workspace["lecturers"]:
+        blocking.append("Import lecturers.csv or add lecturers manually.")
+    if not workspace["shared_sessions"]:
+        blocking.append("Import sessions.csv or add teaching sessions manually.")
+
+    sessions_without_lecturers = sum(
+        1 for session in workspace["shared_sessions"] if not session["lecturer_ids"]
+    )
+    sessions_without_attendance_groups = sum(
+        1
+        for session in workspace["shared_sessions"]
+        if not session["attendance_group_ids"]
+    )
+    sessions_without_module_links = sum(
+        1
+        for session in workspace["shared_sessions"]
+        if not session["curriculum_module_ids"]
+    )
+
+    if sessions_without_lecturers:
+        blocking.append(f"{sessions_without_lecturers} session still need lecturers.")
+    if sessions_without_attendance_groups:
+        blocking.append(
+            f"{sessions_without_attendance_groups} session still need attendance groups."
+        )
+    if sessions_without_module_links:
+        blocking.append(f"{sessions_without_module_links} session still need module links.")
+
+    invalid_lab_sessions = sum(
+        1
+        for session in workspace["shared_sessions"]
+        if (
+            (session["session_type"] or "").strip().lower() in {"lab", "practical"}
+            and int(session["duration_minutes"]) != 180
+        )
+    )
+    if invalid_lab_sessions:
+        warnings.append(f"{invalid_lab_sessions} lab-like session are not 180 minutes.")
+
+    split_without_parallel = sum(
+        1
+        for session in workspace["shared_sessions"]
+        if session["max_students_per_group"] and not session["allow_parallel_rooms"]
+    )
+    if split_without_parallel:
+        warnings.append(
+            f"{split_without_parallel} split-limited session do not allow parallel rooms."
+        )
+
+    for session in workspace["shared_sessions"]:
+        specific_room_id = session.get("specific_room_id")
+        if not specific_room_id:
+            continue
+        room = room_by_id.get(int(specific_room_id))
+        if not room:
+            continue
+        required_room_type = session.get("required_room_type")
+        required_lab_type = session.get("required_lab_type")
+        if required_room_type and room["room_type"] != required_room_type:
+            blocking.append(
+                f'{session["name"]} has no room that can host it in required room {room["name"]}.'
+            )
+            continue
+        if required_lab_type and room.get("lab_type") != required_lab_type:
+            blocking.append(
+                f'{session["name"]} has no room that can host it in required room {room["name"]}.'
+            )
+            continue
+        session_group_ids = [
+            int(group_id) for group_id in session.get("attendance_group_ids", [])
+        ]
+        if session_group_ids:
+            total_students = sum(
+                int(attendance_group_by_id[group_id]["student_count"])
+                for group_id in session_group_ids
+                if group_id in attendance_group_by_id
+            )
+            if total_students > int(room["capacity"]):
+                blocking.append(
+                    f'{session["name"]} has no room that can host it in required room {room["name"]}.'
+                )
+
+    from app.services.timetable_v2 import _build_snapshot_tasks, _precheck_diagnostics
+
+    tasks, _sessions, rooms, lecturer_names, group_names = _build_snapshot_tasks(
+        db, import_run_id
+    )
+    diagnostics = _precheck_diagnostics(tasks, rooms, lecturer_names, group_names)
+    for issue in diagnostics:
+        if issue not in blocking and issue not in warnings:
+            if "has no room that can host" in issue:
+                continue
+            warnings.append(issue)
+
+    counts = {
+        "programmes": len(workspace["programmes"]),
+        "programme_paths": len(workspace["programme_paths"]),
+        "curriculum_modules": len(workspace["curriculum_modules"]),
+        "attendance_groups": len(workspace["attendance_groups"]),
+        "lecturers": len(workspace["lecturers"]),
+        "rooms": len(workspace["rooms"]),
+        "shared_sessions": len(workspace["shared_sessions"]),
+    }
+
+    return {
+        "import_run_id": int(import_run_id),
+        "ready": len(blocking) == 0,
+        "blocking": blocking,
+        "warnings": warnings,
+        "counts": counts,
+    }
+
+
+def require_import_ready_for_generation(db: Session, import_run_id: int) -> dict:
+    summary = build_import_readiness_summary(db, import_run_id)
+    if not summary["ready"]:
+        joined = "; ".join(summary["blocking"])
+        raise ValueError(f"Import snapshot is not ready for generation: {joined}")
+    return summary
+
+
 def _unique_legacy_module_code(
     used_codes: set[str],
     *,
