@@ -21,11 +21,21 @@ vi.mock("../services/timetableStudioService", () => ({
     previewEnrollmentImport: vi.fn(),
     materializeEnrollmentImport: vi.fn(),
     seedRealisticSnapshotMissingData: vi.fn(),
+    createSnapshotLecturersBatch: vi.fn(),
+    createSnapshotRoomsBatch: vi.fn(),
+    createSnapshotSharedSessionsBatch: vi.fn(),
+    updateSnapshotLecturer: vi.fn(),
+    updateSnapshotRoom: vi.fn(),
+    updateSnapshotSharedSession: vi.fn(),
+    deleteSnapshotLecturer: vi.fn(),
+    deleteSnapshotRoom: vi.fn(),
+    deleteSnapshotSharedSession: vi.fn(),
   },
 }));
 
 function workspaceWithSnapshot() {
   return {
+    import_run_id: 77,
     selected_academic_year: "2022/2023",
     programmes: [],
     programme_paths: [],
@@ -37,27 +47,31 @@ function workspaceWithSnapshot() {
   };
 }
 
-describe("SetupStudio current UI", () => {
+describe("SetupStudio snapshot-first UI", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     window.localStorage.clear();
     timetableStudioService.getImportWorkspace.mockResolvedValue(workspaceWithSnapshot());
   });
 
-  it("shows compact enrollment controls", async () => {
+  it("shows the import-first landing state when no snapshot is active", async () => {
     render(
       <MemoryRouter>
         <SetupStudio />
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Import student enrollments")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Download enrollment template/i })).toBeInTheDocument();
-    expect(screen.getByText("Choose CSV File")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Use Sample CSV" })).toBeInTheDocument();
+    expect(await screen.findByText("Import Student Enrolments")).toBeInTheDocument();
+    expect(screen.getByText("Start with the easiest path")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Start Demo with Sample Data" })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Review The CSV")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Analyze Enrollment CSV" })).toBeDisabled();
+    expect(screen.getByText("No CSV selected yet")).toBeInTheDocument();
   });
 
-  it("shows teaching data step after restoring a snapshot", async () => {
+  it("restores the snapshot completion flow when an active import exists", async () => {
     window.localStorage.setItem("kln_active_import_run_id", "77");
 
     render(
@@ -66,9 +80,15 @@ describe("SetupStudio current UI", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Current Snapshot")).toBeInTheDocument();
-    expect(screen.getByText("Step 2: Add Teaching Data")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Fill Demo Teaching Data" }).length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Edit Manually" })).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Restored snapshot #77\. Continue completing the missing teaching details\./i)
+    ).toBeInTheDocument();
+    expect(screen.getByText("Complete Missing Details")).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "Fill Demo Teaching Data" }).length
+    ).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Review Before Generate" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit Manually" })).not.toBeInTheDocument();
+    expect(screen.queryByText("CSV Uploads")).not.toBeInTheDocument();
   });
 });
