@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 import unittest
+import hashlib
 from pathlib import Path
 
 
@@ -10,11 +11,17 @@ os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_FILE}"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.database import Base, SessionLocal, engine  # noqa: E402
-from app.models.academic import CurriculumModule, StudentModuleMembership  # noqa: E402
+from app.models.academic import (  # noqa: E402
+    CurriculumModule,
+    Programme,
+    StudentModuleMembership,
+    StudentProgrammeContext,
+)
 from app.models.imports import ImportRun, ImportStudent  # noqa: E402
 from app.models.snapshot import SnapshotLecturer, SnapshotRoom, SnapshotSharedSession  # noqa: E402
 from app.models.solver import AttendanceGroup  # noqa: E402
 from app.services.snapshot_completion import (  # noqa: E402
+    build_import_workspace,
     build_import_readiness_summary,
     require_import_ready_for_generation,
 )
@@ -75,6 +82,51 @@ class ImportReadinessTestCase(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             require_import_ready_for_generation(self.db, self.import_run_id)
         self.assertIn("Import snapshot is not ready for generation:", str(context.exception))
+
+    def test_workspace_reconnects_module_membership_to_hashed_attendance_group(self):
+        student_id = self.db.query(ImportStudent).one().id
+        programme = Programme(code="PS", name="Physical Science")
+        self.db.add(programme)
+        self.db.flush()
+        context = StudentProgrammeContext(
+            import_run_id=self.import_run_id,
+            student_id=student_id,
+            programme_id=programme.id,
+            programme_path_id=None,
+            academic_year="2022/2023",
+            study_year=1,
+            batch="2022",
+            inferred_primary_path_code=None,
+            interpretation_confidence="high",
+            ambiguity_flags_json="[]",
+            notes="",
+        )
+        self.db.add(context)
+        self.db.flush()
+        membership = self.db.query(StudentModuleMembership).one()
+        membership.student_programme_context_id = context.id
+        hashed_signature = hashlib.sha1(str(student_id).encode("utf-8")).hexdigest()
+        self.db.add(
+            AttendanceGroup(
+                import_run_id=self.import_run_id,
+                academic_year="2022/2023",
+                study_year=1,
+                programme_id=None,
+                programme_path_id=None,
+                label="Y1 Chemistry",
+                derivation_basis="module_membership_signature",
+                membership_signature=hashed_signature,
+                interpretation_confidence="high",
+                student_count=1,
+                notes="",
+            )
+        )
+        self.db.commit()
+
+        workspace = build_import_workspace(self.db, self.import_run_id)
+
+        self.assertEqual(len(workspace["curriculum_modules"]), 1)
+        self.assertEqual(len(workspace["curriculum_modules"][0]["attendance_group_ids"]), 1)
 
     def test_reports_session_level_gaps(self):
         room = SnapshotRoom(

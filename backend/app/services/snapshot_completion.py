@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import math
 import re
 
@@ -660,6 +661,7 @@ def build_import_workspace(db: Session, import_run_id: int) -> dict:
     module_attendance_group_ids: dict[int, list[int]] = {}
     for (curriculum_module_id, academic_year), student_ids in module_student_ids.items():
         signature = ",".join(str(student_id) for student_id in sorted(student_ids))
+        signature = hashlib.sha1(signature.encode("utf-8")).hexdigest()
         attendance_group_id = attendance_group_by_signature.get((academic_year, signature))
         if attendance_group_id is None:
             continue
