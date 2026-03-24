@@ -1345,18 +1345,26 @@ function SetupStudio() {
                       >
                         Download Template
                       </button>
-                      <label className="ghost-btn file-picker-btn">
+                      <label
+                        className={`ghost-btn file-picker-btn${!activeImportRunId ? " disabled" : ""}`}
+                        htmlFor={`support-upload-${definition.key}`}
+                        aria-disabled={!activeImportRunId}
+                      >
                         Import CSV
-                        <input
-                          type="file"
-                          accept=".csv,text/csv"
-                          hidden
-                          disabled={!activeImportRunId}
-                          onChange={(event) =>
-                            handleSupportCsvUpload(definition, event.target.files?.[0] || null)
-                          }
-                        />
                       </label>
+                      <input
+                        id={`support-upload-${definition.key}`}
+                        aria-label={`${definition.title} CSV file`}
+                        type="file"
+                        accept=".csv,text/csv"
+                        hidden
+                        disabled={!activeImportRunId}
+                        onChange={(event) => {
+                          const nextFile = event.target.files?.[0] || null;
+                          handleSupportCsvUpload(definition, nextFile);
+                          event.target.value = "";
+                        }}
+                      />
                     </div>
                   </div>
                 );

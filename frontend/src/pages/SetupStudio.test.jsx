@@ -563,4 +563,66 @@ describe("SetupStudio", () => {
     expect(screen.getByText(/Missing room assignment\./i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Repair Session" })).toBeInTheDocument();
   });
+
+  it("uploads a support CSV after a snapshot is opened", async () => {
+    timetableStudioService.listImportRuns.mockResolvedValue({
+      runs: [
+        {
+          import_run_id: 77,
+          source_file: "students_processed_TT_J.csv",
+          status: "materialized",
+          selected_academic_year: "2022/2023",
+        },
+      ],
+    });
+    timetableStudioService.getImportWorkspace.mockResolvedValueOnce({
+      ...emptyWorkspace(),
+      import_run_id: 77,
+      selected_academic_year: "2022/2023",
+    });
+    timetableStudioService.getImportWorkspace.mockResolvedValueOnce({
+      ...emptyWorkspace(),
+      import_run_id: 77,
+      selected_academic_year: "2022/2023",
+      rooms: [
+        {
+          id: 20,
+          name: "A7 Hall 1",
+          capacity: 180,
+          room_type: "lecture",
+          lab_type: null,
+          location: "A7",
+          year_restriction: null,
+          notes: null,
+        },
+      ],
+    });
+    timetableStudioService.uploadRoomsCsv.mockResolvedValue({
+      created_count: 1,
+      updated_count: 0,
+      warnings: [],
+    });
+
+    renderSetupStudio();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Utilities" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open" }));
+    expect(await screen.findByText("Snapshot available")).toBeInTheDocument();
+
+    const roomsInput = screen.getByLabelText("Rooms CSV file");
+    const roomsFile = new File(
+      ["room_code,room_name,capacity,room_type\nA7-H1,A7 Hall 1,180,lecture\n"],
+      "rooms.csv",
+      { type: "text/csv" }
+    );
+    fireEvent.change(roomsInput, { target: { files: [roomsFile] } });
+
+    await waitFor(() => {
+      expect(timetableStudioService.uploadRoomsCsv).toHaveBeenCalledWith(77, roomsFile);
+      expect(timetableStudioService.getImportWorkspace).toHaveBeenLastCalledWith(77);
+    });
+    expect(
+      await screen.findByText(/Rooms CSV imported into snapshot #77\./i)
+    ).toBeInTheDocument();
+  });
 });
