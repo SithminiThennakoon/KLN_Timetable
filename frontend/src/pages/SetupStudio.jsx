@@ -96,6 +96,76 @@ const supportCsvDefinitions = [
   },
 ];
 
+const localImportTemplates = {
+  student_enrollments: {
+    filename: "student_enrollments_template.csv",
+    label: "Student Enrollments",
+    columns: [
+      "CoursePathNo",
+      "CourseCode",
+      "Year",
+      "AcYear",
+      "Attempt",
+      "stream",
+      "batch",
+      "student_hash",
+    ],
+  },
+  rooms: {
+    filename: "rooms_template.csv",
+    label: "Rooms",
+    columns: [
+      "room_code",
+      "room_name",
+      "capacity",
+      "room_type",
+      "lab_type",
+      "location",
+      "year_restriction",
+    ],
+  },
+  lecturers: {
+    filename: "lecturers_template.csv",
+    label: "Lecturers",
+    columns: ["lecturer_code", "name", "email"],
+  },
+  modules: {
+    filename: "modules_template.csv",
+    label: "Modules",
+    columns: [
+      "module_code",
+      "module_name",
+      "subject_name",
+      "nominal_year",
+      "semester_bucket",
+      "is_full_year",
+    ],
+  },
+  sessions: {
+    filename: "sessions_template.csv",
+    label: "Sessions",
+    columns: [
+      "session_code",
+      "module_code",
+      "session_name",
+      "session_type",
+      "duration_minutes",
+      "occurrences_per_week",
+      "required_room_type",
+      "required_lab_type",
+      "specific_room_code",
+      "max_students_per_group",
+      "allow_parallel_rooms",
+      "notes",
+    ],
+  },
+  session_lecturers: {
+    filename: "session_lecturers_template.csv",
+    label: "Session Lecturers",
+    columns: ["session_code", "lecturer_code"],
+  },
+};
+
 function downloadTextFile(filename, content, contentType = "text/csv;charset=utf-8") {
   const blob = new Blob([content], { type: contentType });
   const url = URL.createObjectURL(blob);
@@ -480,7 +550,9 @@ function SetupStudio() {
   async function handleDownloadTemplate(templateName) {
     setError("");
     try {
-      const localTemplate = importTemplates.find((item) => item.name === templateName);
+      const localTemplate =
+        importTemplates.find((item) => item.name === templateName) ||
+        localImportTemplates[templateName];
       if (localTemplate?.columns?.length) {
         downloadTextFile(
           localTemplate.filename || `${templateName}_template.csv`,
