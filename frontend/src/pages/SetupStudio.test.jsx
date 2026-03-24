@@ -35,6 +35,7 @@ vi.mock("../services/timetableStudioService", () => ({
     createSnapshotLecturersBatch: vi.fn(),
     createSnapshotRoomsBatch: vi.fn(),
     createSnapshotSharedSessionsBatch: vi.fn(),
+    updateSnapshotSharedSession: vi.fn(),
   },
 }));
 
@@ -240,5 +241,173 @@ describe("SetupStudio", () => {
     expect(
       await screen.findByText(/The CSV import has been materialized into snapshot #88\./i)
     ).toBeInTheDocument();
+  });
+
+  it("opens a targeted repair flow for sessions missing lecturer links", async () => {
+    timetableStudioService.listImportRuns.mockResolvedValue({
+      runs: [
+        {
+          import_run_id: 77,
+          source_file: "students_processed_TT_J.csv",
+          status: "materialized",
+          selected_academic_year: "2022/2023",
+        },
+      ],
+    });
+    timetableStudioService.getImportWorkspace.mockResolvedValueOnce({
+      ...emptyWorkspace(),
+      import_run_id: 77,
+      lecturers: [{ id: 10, name: "Dr Silva", email: "silva@example.com", notes: null }],
+      rooms: [
+        {
+          id: 20,
+          name: "A7 301",
+          capacity: 120,
+          room_type: "lecture",
+          lab_type: null,
+          location: "A7",
+          year_restriction: null,
+          notes: null,
+        },
+      ],
+      attendance_groups: [
+        {
+          id: 30,
+          programme_id: 1,
+          programme_path_id: null,
+          academic_year: "2022/2023",
+          study_year: 1,
+          label: "PS Y1 General",
+          student_count: 80,
+        },
+      ],
+      curriculum_modules: [
+        {
+          id: 40,
+          code: "CHEM 11612",
+          name: "Foundations of Chemistry",
+          subject_name: "Chemistry",
+          nominal_year: 1,
+          semester_bucket: 1,
+          is_full_year: false,
+          attendance_group_ids: [30],
+        },
+      ],
+      shared_sessions: [
+        {
+          id: 50,
+          name: "Chemistry Lecture",
+          session_type: "lecture",
+          duration_minutes: 120,
+          occurrences_per_week: 1,
+          required_room_type: "lecture",
+          required_lab_type: null,
+          specific_room_id: 20,
+          max_students_per_group: null,
+          allow_parallel_rooms: false,
+          notes: null,
+          lecturer_ids: [],
+          curriculum_module_ids: [40],
+          attendance_group_ids: [30],
+        },
+      ],
+      readiness: {
+        ready: false,
+        import_needed: [],
+        repair_needed: [
+          {
+            key: "sessions-missing-lecturers",
+            title: "Sessions missing lecturers",
+            detail: "1 session still need lecturers.",
+            action: "Repair lecturers",
+            form: "lecturer",
+          },
+        ],
+        warnings: [],
+      },
+    });
+    timetableStudioService.getImportWorkspace.mockResolvedValueOnce({
+      ...emptyWorkspace(),
+      import_run_id: 77,
+      lecturers: [{ id: 10, name: "Dr Silva", email: "silva@example.com", notes: null }],
+      rooms: [
+        {
+          id: 20,
+          name: "A7 301",
+          capacity: 120,
+          room_type: "lecture",
+          lab_type: null,
+          location: "A7",
+          year_restriction: null,
+          notes: null,
+        },
+      ],
+      attendance_groups: [
+        {
+          id: 30,
+          programme_id: 1,
+          programme_path_id: null,
+          academic_year: "2022/2023",
+          study_year: 1,
+          label: "PS Y1 General",
+          student_count: 80,
+        },
+      ],
+      curriculum_modules: [
+        {
+          id: 40,
+          code: "CHEM 11612",
+          name: "Foundations of Chemistry",
+          subject_name: "Chemistry",
+          nominal_year: 1,
+          semester_bucket: 1,
+          is_full_year: false,
+          attendance_group_ids: [30],
+        },
+      ],
+      shared_sessions: [
+        {
+          id: 50,
+          name: "Chemistry Lecture",
+          session_type: "lecture",
+          duration_minutes: 120,
+          occurrences_per_week: 1,
+          required_room_type: "lecture",
+          required_lab_type: null,
+          specific_room_id: 20,
+          max_students_per_group: null,
+          allow_parallel_rooms: false,
+          notes: null,
+          lecturer_ids: [10],
+          curriculum_module_ids: [40],
+          attendance_group_ids: [30],
+        },
+      ],
+      readiness: { ready: true, import_needed: [], repair_needed: [], warnings: [] },
+    });
+
+    renderSetupStudio();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Utilities" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Repair Session" }));
+
+    expect(await screen.findByText(/Repairing shared session: Chemistry Lecture\./i)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Dr Silva"));
+    fireEvent.click(screen.getByRole("button", { name: "Save Shared Session Repair" }));
+
+    await waitFor(() => {
+      expect(timetableStudioService.updateSnapshotSharedSession).toHaveBeenCalledWith(
+        77,
+        50,
+        expect.objectContaining({
+          name: "Chemistry Lecture",
+          lecturer_ids: [10],
+          curriculum_module_ids: [40],
+          attendance_group_ids: [30],
+        })
+      );
+    });
+    expect(await screen.findByText(/Shared session repaired in the current snapshot\./i)).toBeInTheDocument();
   });
 });

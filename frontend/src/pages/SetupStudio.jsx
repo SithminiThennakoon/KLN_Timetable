@@ -48,6 +48,26 @@ const emptySessionForm = {
   attendance_group_ids: [],
 };
 
+function buildSessionFormFromWorkspaceSession(session) {
+  return {
+    name: session.name || "",
+    session_type: session.session_type || "lecture",
+    duration_minutes: Number(session.duration_minutes || 60),
+    occurrences_per_week: Number(session.occurrences_per_week || 1),
+    required_room_type: session.required_room_type || "lecture",
+    required_lab_type: session.required_lab_type || "",
+    specific_room_id: session.specific_room_id ? String(session.specific_room_id) : "",
+    max_students_per_group: session.max_students_per_group
+      ? String(session.max_students_per_group)
+      : "",
+    allow_parallel_rooms: Boolean(session.allow_parallel_rooms),
+    notes: session.notes || "",
+    lecturer_ids: [...(session.lecturer_ids || [])],
+    curriculum_module_ids: [...(session.curriculum_module_ids || [])],
+    attendance_group_ids: [...(session.attendance_group_ids || [])],
+  };
+}
+
 const supportCsvDefinitions = [
   {
     key: "rooms",
@@ -410,6 +430,7 @@ function SetupStudio() {
   const [bucketDecision, setBucketDecision] = useState("accept_exception");
   const [openForm, setOpenForm] = useState("");
   const [showUtilities, setShowUtilities] = useState(false);
+  const [editingSharedSessionId, setEditingSharedSessionId] = useState(null);
   const [importTemplates, setImportTemplates] = useState([]);
   const [recentRuns, setRecentRuns] = useState([]);
   const [lecturerForm, setLecturerForm] = useState(emptyLecturerForm);
@@ -424,6 +445,24 @@ function SetupStudio() {
   const summaryCards = useMemo(() => buildWorkspaceSummary(workspace), [workspace]);
   const readiness = useMemo(
     () => workspace.readiness || buildReadiness(workspace),
+    [workspace]
+  );
+  const readinessBlocking = useMemo(
+    () =>
+      readiness.blocking || [
+        ...(readiness.import_needed || readiness.importNeeded || []),
+        ...(readiness.repair_needed || readiness.repairNeeded || []),
+      ],
+    [readiness]
+  );
+  const sessionsNeedingRepair = useMemo(
+    () =>
+      workspace.shared_sessions.filter(
+        (session) =>
+          !session.lecturer_ids?.length ||
+          !session.curriculum_module_ids?.length ||
+          !session.attendance_group_ids?.length
+      ),
     [workspace]
   );
 
@@ -702,33 +741,46 @@ function SetupStudio() {
     event.preventDefault();
     setWorking(true);
     setError("");
+    const payload = {
+      name: sessionForm.name.trim(),
+      session_type: sessionForm.session_type,
+      duration_minutes: Number(sessionForm.duration_minutes),
+      occurrences_per_week: Number(sessionForm.occurrences_per_week),
+      required_room_type: sessionForm.required_room_type || null,
+      required_lab_type: sessionForm.required_lab_type.trim() || null,
+      specific_room_id: sessionForm.specific_room_id
+        ? Number(sessionForm.specific_room_id)
+        : null,
+      max_students_per_group: sessionForm.max_students_per_group
+        ? Number(sessionForm.max_students_per_group)
+        : null,
+      allow_parallel_rooms: Boolean(sessionForm.allow_parallel_rooms),
+      notes: sessionForm.notes.trim() || null,
+      lecturer_ids: sessionForm.lecturer_ids,
+      curriculum_module_ids: sessionForm.curriculum_module_ids,
+      attendance_group_ids: sessionForm.attendance_group_ids,
+    };
     try {
-      await timetableStudioService.createSnapshotSharedSessionsBatch(activeImportRunId, [
-        {
-          name: sessionForm.name.trim(),
-          session_type: sessionForm.session_type,
-          duration_minutes: Number(sessionForm.duration_minutes),
-          occurrences_per_week: Number(sessionForm.occurrences_per_week),
-          required_room_type: sessionForm.required_room_type || null,
-          required_lab_type: sessionForm.required_lab_type.trim() || null,
-          specific_room_id: sessionForm.specific_room_id
-            ? Number(sessionForm.specific_room_id)
-            : null,
-          max_students_per_group: sessionForm.max_students_per_group
-            ? Number(sessionForm.max_students_per_group)
-            : null,
-          allow_parallel_rooms: Boolean(sessionForm.allow_parallel_rooms),
-          notes: sessionForm.notes.trim() || null,
-          lecturer_ids: sessionForm.lecturer_ids,
-          curriculum_module_ids: sessionForm.curriculum_module_ids,
-          attendance_group_ids: sessionForm.attendance_group_ids,
-        },
-      ]);
+      if (editingSharedSessionId) {
+        await timetableStudioService.updateSnapshotSharedSession(
+          activeImportRunId,
+          editingSharedSessionId,
+          payload
+        );
+      } else {
+        await timetableStudioService.createSnapshotSharedSessionsBatch(activeImportRunId, [payload]);
+      }
       setSessionForm(emptySessionForm);
+      setEditingSharedSessionId(null);
       setOpenForm("");
-      await loadWorkspace(activeImportRunId, "Shared session added to the current snapshot.");
+      await loadWorkspace(
+        activeImportRunId,
+        editingSharedSessionId
+          ? "Shared session repaired in the current snapshot."
+          : "Shared session added to the current snapshot."
+      );
     } catch (err) {
-      setError(err.message || "Failed to add the shared session.");
+      setError(err.message || "Failed to save the shared session.");
     } finally {
       setWorking(false);
     }
@@ -741,6 +793,20 @@ function SetupStudio() {
         ? current[field].filter((value) => value !== id)
         : [...current[field], id],
     }));
+  }
+
+  function handleEditSharedSession(session) {
+    setEditingSharedSessionId(session.id);
+    setSessionForm(buildSessionFormFromWorkspaceSession(session));
+    setOpenForm("session");
+    setError("");
+    setStatus(`Repairing shared session: ${session.name}.`);
+  }
+
+  function handleCancelSessionEdit() {
+    setEditingSharedSessionId(null);
+    setSessionForm(emptySessionForm);
+    setOpenForm("");
   }
 
   return (
@@ -1093,7 +1159,7 @@ function SetupStudio() {
                 <span>Import needed</span>
                 <strong>
                   {
-                    readiness.blocking.filter((item) =>
+                    readinessBlocking.filter((item) =>
                       ["rooms-empty", "lecturers-empty", "sessions-empty"].includes(item.key)
                     ).length
                   }
@@ -1103,7 +1169,7 @@ function SetupStudio() {
                 <span>Repair needed</span>
                 <strong>
                   {
-                    readiness.blocking.filter(
+                    readinessBlocking.filter(
                       (item) =>
                         !["rooms-empty", "lecturers-empty", "sessions-empty"].includes(item.key)
                     ).length
@@ -1117,9 +1183,9 @@ function SetupStudio() {
             </div>
           )}
 
-          {readiness.blocking.length > 0 && (
+          {readinessBlocking.length > 0 && (
             <div className="constraint-list">
-              {readiness.blocking.map((item) => (
+              {readinessBlocking.map((item) => (
                 <div key={item.key} className="constraint-row static">
                   <div>
                     <strong>{item.title}</strong>
@@ -1134,6 +1200,41 @@ function SetupStudio() {
                   </button>
                 </div>
               ))}
+            </div>
+          )}
+
+          {sessionsNeedingRepair.length > 0 && (
+            <div className="schema-notes compact">
+              <h3>Repair Queue</h3>
+              <div className="constraint-list">
+                {sessionsNeedingRepair.map((session) => {
+                  const missing = [];
+                  if (!session.lecturer_ids?.length) {
+                    missing.push("lecturers");
+                  }
+                  if (!session.curriculum_module_ids?.length) {
+                    missing.push("module links");
+                  }
+                  if (!session.attendance_group_ids?.length) {
+                    missing.push("attendance groups");
+                  }
+                  return (
+                    <div key={session.id} className="constraint-row static">
+                      <div>
+                        <strong>{session.name}</strong>
+                        <span>Missing {missing.join(", ")}.</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        onClick={() => handleEditSharedSession(session)}
+                      >
+                        Repair Session
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -1200,9 +1301,17 @@ function SetupStudio() {
                 <button
                   type="button"
                   className={openForm === "session" ? "primary-btn" : "ghost-btn"}
-                  onClick={() => setOpenForm(openForm === "session" ? "" : "session")}
+                  onClick={() => {
+                    if (openForm === "session") {
+                      handleCancelSessionEdit();
+                      return;
+                    }
+                    setEditingSharedSessionId(null);
+                    setSessionForm(emptySessionForm);
+                    setOpenForm("session");
+                  }}
                 >
-                  Add Shared Session
+                  {editingSharedSessionId ? "Editing Shared Session" : "Add Shared Session"}
                 </button>
               </div>
             </div>
@@ -1337,6 +1446,12 @@ function SetupStudio() {
 
             {openForm === "session" && (
               <form onSubmit={handleAddSession}>
+                {editingSharedSessionId && (
+                  <div className="info-banner">
+                    Repairing shared session #{editingSharedSessionId}. Update the missing links or
+                    fields, then save.
+                  </div>
+                )}
                 <div className="form-grid two-column">
                   <label>
                     <span>Session name</span>
@@ -1516,8 +1631,17 @@ function SetupStudio() {
 
                 <div className="studio-actions">
                   <button type="submit" className="primary-btn" disabled={working}>
-                    Save Shared Session
+                    {editingSharedSessionId ? "Save Shared Session Repair" : "Save Shared Session"}
                   </button>
+                  {editingSharedSessionId && (
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={handleCancelSessionEdit}
+                    >
+                      Cancel Repair
+                    </button>
+                  )}
                 </div>
               </form>
             )}
