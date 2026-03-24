@@ -287,6 +287,57 @@ describe("GenerateStudio", () => {
     );
   });
 
+  it("shows a blocking overlay while generation is running", async () => {
+    timetableStudioService.latestGeneration.mockRejectedValue(new Error("empty"));
+
+    let resolveGenerate;
+    timetableStudioService.generate.mockReturnValue(
+      new Promise((resolve) => {
+        resolveGenerate = resolve;
+      })
+    );
+
+    render(<GenerateStudio />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Generate Timetable/i }));
+
+    expect(await screen.findByText("Generating timetable")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Generating timetable solutions from the current snapshot/i)
+    ).toBeInTheDocument();
+
+    resolveGenerate({
+      generation_run_id: 15,
+      status: "optimal",
+      message: "Generated timetable solutions.",
+      performance_preset: "balanced",
+      timing: { precheck_ms: 10, model_build_ms: 20, solve_ms: 30, fallback_search_ms: 0, total_ms: 60 },
+      stats: {
+        task_count: 1,
+        assignment_variable_count: 4,
+        candidate_option_count: 4,
+        feasible_combo_count: 0,
+        fallback_combo_evaluated_count: 0,
+        fallback_combo_truncated: false,
+        exact_enumeration_single_worker: true,
+        machine_cpu_count: 8,
+      },
+      counts: {
+        total_solutions_found: 1,
+        preview_solution_count: 1,
+        truncated: false,
+      },
+      selected_soft_constraints: [],
+      available_soft_constraints: [],
+      possible_soft_constraint_combinations: [],
+      solutions: [],
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Generating timetable")).not.toBeInTheDocument();
+    });
+  });
+
   it("clamps advanced performance values to backend limits before submit", async () => {
     timetableStudioService.latestGeneration.mockRejectedValue(new Error("empty"));
     timetableStudioService.generate.mockResolvedValue({

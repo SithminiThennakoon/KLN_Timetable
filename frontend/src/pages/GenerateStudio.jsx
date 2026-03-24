@@ -137,6 +137,7 @@ function GenerateStudio() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [settings, setSettings] = useState(defaultPerformanceSettings);
   const [loading, setLoading] = useState(false);
+  const [blockingMessage, setBlockingMessage] = useState("");
   const [error, setError] = useState("");
 
   const loadVerification = async (importRunId, nextGeneration = null) => {
@@ -187,6 +188,7 @@ function GenerateStudio() {
 
   const handleGenerate = async () => {
     setLoading(true);
+    setBlockingMessage("Generating timetable solutions from the current snapshot...");
     setError("");
     const requestSettings = {
       performance_preset: settings.performance_preset,
@@ -220,6 +222,7 @@ function GenerateStudio() {
       setVerification(null);
       setVerificationError("");
     } finally {
+      setBlockingMessage("");
       setLoading(false);
     }
   };
@@ -273,6 +276,19 @@ function GenerateStudio() {
 
   return (
     <div className="page-shell">
+      {blockingMessage ? (
+        <div className="setup-blocking-overlay" role="status" aria-live="polite" aria-busy="true">
+          <div className="setup-blocking-dialog">
+            <div className="setup-blocking-spinner" aria-hidden="true" />
+            <strong>Generating timetable</strong>
+            <p>{blockingMessage}</p>
+            <div className="setup-indeterminate-progress" aria-hidden="true">
+              <span />
+            </div>
+            <span>The page is locked until the generation run finishes.</span>
+          </div>
+        </div>
+      ) : null}
       <div className="panel studio-panel">
         <div className="studio-header">
           <div>
@@ -368,7 +384,7 @@ function GenerateStudio() {
               </p>
             </div>
           )}
-          <div className="constraint-list">
+          <div className="ob-constraint-list">
             {availableSoftConstraints.map((option) => (
               <label key={option.key} className="ob-constraint-row">
                 <input
