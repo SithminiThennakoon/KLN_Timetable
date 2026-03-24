@@ -370,7 +370,7 @@ function GenerateStudio() {
           )}
           <div className="constraint-list">
             {availableSoftConstraints.map((option) => (
-              <label key={option.key} className="constraint-row">
+              <label key={option.key} className="ob-constraint-row">
                 <input
                   type="checkbox"
                   checked={softConstraints.includes(option.key)}

@@ -32,7 +32,7 @@ describe("GenerateStudio", () => {
     expect(screen.getByLabelText(/Balance teaching load across the week/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Avoid Monday overload/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/Save your faculty data in Setup, then generate timetable solutions here/i)
+      screen.getByText(/Finish the setup first, then generate the timetable here/i)
     ).toBeInTheDocument();
   });
 
@@ -277,11 +277,12 @@ describe("GenerateStudio", () => {
 
     await waitFor(() =>
       expect(timetableStudioService.generate).toHaveBeenCalledWith({
+        import_run_id: undefined,
         soft_constraints: ["spread_sessions_across_days"],
         performance_preset: "thorough",
         max_solutions: 1000,
         preview_limit: 5,
-        time_limit_seconds: 60,
+        time_limit_seconds: 180,
       })
     );
   });
@@ -325,11 +326,12 @@ describe("GenerateStudio", () => {
 
     await waitFor(() =>
       expect(timetableStudioService.generate).toHaveBeenCalledWith({
+        import_run_id: undefined,
         soft_constraints: [],
         performance_preset: "balanced",
         max_solutions: 5000,
         preview_limit: 1,
-        time_limit_seconds: 300,
+        time_limit_seconds: 600,
       })
     );
   });
