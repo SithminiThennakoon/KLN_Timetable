@@ -19,6 +19,7 @@ vi.mock("react-router-dom", async () => {
 vi.mock("../services/timetableStudioService", () => ({
   timetableStudioService: {
     getImportWorkspace: vi.fn(),
+    listImportRuns: vi.fn(),
     listImportTemplates: vi.fn(),
     downloadImportTemplate: vi.fn(),
     analyzeEnrollmentImport: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock("../services/timetableStudioService", () => ({
     uploadLecturersCsv: vi.fn(),
     uploadSessionsCsv: vi.fn(),
     uploadSessionLecturersCsv: vi.fn(),
+    importDemoBundle: vi.fn(),
     seedRealisticSnapshotMissingData: vi.fn(),
     createSnapshotLecturersBatch: vi.fn(),
     createSnapshotRoomsBatch: vi.fn(),
@@ -66,6 +68,9 @@ describe("SetupStudio", () => {
     timetableStudioService.listImportTemplates.mockResolvedValue({
       templates: [],
     });
+    timetableStudioService.listImportRuns.mockResolvedValue({
+      runs: [],
+    });
   });
 
   it("shows the minimal import-first setup flow before a CSV is chosen", async () => {
@@ -80,8 +85,17 @@ describe("SetupStudio", () => {
     expect(screen.getByRole("button", { name: "Continue to Generate" })).toBeDisabled();
   });
 
-  it("restores the snapshot and allows generation when setup is ready", async () => {
-    window.localStorage.setItem("kln_active_import_run_id", "77");
+  it("opens a previous snapshot explicitly from utilities and allows generation when setup is ready", async () => {
+    timetableStudioService.listImportRuns.mockResolvedValue({
+      runs: [
+        {
+          import_run_id: 77,
+          source_file: "students_processed_TT_J.csv",
+          status: "materialized",
+          selected_academic_year: "2022/2023",
+        },
+      ],
+    });
     timetableStudioService.getImportWorkspace.mockResolvedValue({
       ...emptyWorkspace(),
       programmes: [{ id: 1, code: "PS", name: "Physical Science", duration_years: 3 }],
@@ -143,9 +157,10 @@ describe("SetupStudio", () => {
 
     renderSetupStudio();
 
-    expect(
-      await screen.findByText(/Restored snapshot #77\. Continue completing the missing teaching details\./i)
-    ).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Utilities" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open" }));
+
+    expect(await screen.findByText(/Opened snapshot #77\./i)).toBeInTheDocument();
     expect(screen.getByText("This snapshot is currently generation-ready.")).toBeInTheDocument();
     const openGenerateButtons = screen.getAllByRole("button", { name: /generate/i });
     expect(openGenerateButtons.length).toBeGreaterThan(0);
@@ -206,19 +221,19 @@ describe("SetupStudio", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Use This Import" }));
 
-    await waitFor(() => {
-      expect(timetableStudioService.previewEnrollmentImport).toHaveBeenCalledWith(
-        {
-          rules: [
-            expect.objectContaining({
-              bucket_type: "year_code_mismatch",
-              bucket_key: "year=2|nominal_year=1",
-              action: "accept_exception",
-            }),
-          ],
-        },
-        undefined
-      );
+      await waitFor(() => {
+        expect(timetableStudioService.previewEnrollmentImport).toHaveBeenCalledWith(
+          {
+            rules: [
+              expect.objectContaining({
+                bucket_type: "year_code_mismatch",
+                bucket_key: "year=2|nominal_year=1",
+                action: "accept_exception",
+              }),
+            ],
+          },
+          undefined
+        );
       expect(timetableStudioService.materializeEnrollmentImport).toHaveBeenCalledTimes(1);
       expect(timetableStudioService.getImportWorkspace).toHaveBeenCalledWith(88);
     });

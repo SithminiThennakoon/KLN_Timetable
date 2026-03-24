@@ -61,6 +61,7 @@ export const timetableStudioService = {
       buildImportFormData(payload, file)
     );
   },
+  listImportRuns: (limit = 20) => apiClient.get(`/v2/imports/runs?limit=${limit}`),
   listImportTemplates: () => apiClient.get("/v2/imports/templates"),
   downloadImportTemplate: (templateName) =>
     downloadCsvTemplate(`/v2/imports/templates/${templateName}`),
@@ -78,6 +79,7 @@ export const timetableStudioService = {
       buildSimpleCsvFormData(file)
     ),
   getImportWorkspace: (importRunId) => apiClient.get(`/v2/imports/${importRunId}/workspace`),
+  importDemoBundle: (importRunId) => apiClient.post(`/v2/imports/${importRunId}/demo-bundle`, {}),
   seedRealisticSnapshotMissingData: (importRunId) =>
     apiClient.post(`/v2/imports/${importRunId}/snapshot/seed-realistic-missing-data`, {}),
   getImportSnapshot: (importRunId) => apiClient.get(`/v2/imports/${importRunId}/snapshot`),

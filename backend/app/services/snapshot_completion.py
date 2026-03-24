@@ -729,6 +729,26 @@ def build_import_workspace(db: Session, import_run_id: int) -> dict:
     }
 
 
+def list_import_runs(db: Session, *, limit: int = 20) -> list[dict]:
+    runs = (
+        db.query(ImportRun)
+        .order_by(ImportRun.created_at.desc(), ImportRun.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "import_run_id": int(run.id),
+            "source_file": run.source_file,
+            "source_format": run.source_format,
+            "status": run.status,
+            "selected_academic_year": run.selected_academic_year,
+            "created_at": run.created_at.isoformat() if run.created_at else None,
+        }
+        for run in runs
+    ]
+
+
 def build_import_readiness_summary(db: Session, import_run_id: int) -> dict:
     workspace = build_import_workspace(db, import_run_id)
     room_by_id = {int(room["id"]): room for room in workspace["rooms"]}

@@ -397,7 +397,7 @@ function ToggleList({ title, items, selectedIds, onToggle, renderLabel, emptyMes
 
 function SetupStudio() {
   const navigate = useNavigate();
-  const [activeImportRunId, setActiveImportRunId] = useState(readActiveImportRunId);
+  const [activeImportRunId, setActiveImportRunId] = useState(null);
   const [workspace, setWorkspace] = useState(emptyWorkspace);
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
   const [working, setWorking] = useState(false);
@@ -409,8 +409,9 @@ function SetupStudio() {
   const [projection, setProjection] = useState(null);
   const [bucketDecision, setBucketDecision] = useState("accept_exception");
   const [openForm, setOpenForm] = useState("");
+  const [showUtilities, setShowUtilities] = useState(false);
   const [importTemplates, setImportTemplates] = useState([]);
-  const [supportCsvFiles, setSupportCsvFiles] = useState({});
+  const [recentRuns, setRecentRuns] = useState([]);
   const [lecturerForm, setLecturerForm] = useState(emptyLecturerForm);
   const [roomForm, setRoomForm] = useState(emptyRoomForm);
   const [sessionForm, setSessionForm] = useState(emptySessionForm);
@@ -422,6 +423,15 @@ function SetupStudio() {
   );
   const summaryCards = useMemo(() => buildWorkspaceSummary(workspace), [workspace]);
   const readiness = useMemo(() => buildReadiness(workspace), [workspace]);
+
+  async function refreshRecentRuns() {
+    try {
+      const response = await timetableStudioService.listImportRuns(20);
+      setRecentRuns(response?.runs || []);
+    } catch {
+      setRecentRuns([]);
+    }
+  }
 
   async function loadWorkspace(importRunId, nextStatus = "") {
     if (!importRunId) {
@@ -456,19 +466,11 @@ function SetupStudio() {
   }
 
   useEffect(() => {
-    if (activeImportRunId) {
-      loadWorkspace(
-        activeImportRunId,
-        `Restored snapshot #${activeImportRunId}. Continue completing the missing teaching details.`
-      );
-    }
-  }, []);
-
-  useEffect(() => {
     timetableStudioService
       .listImportTemplates()
       .then((response) => setImportTemplates(response.templates || []))
       .catch(() => {});
+    refreshRecentRuns();
   }, []);
 
   function selectedImportFile() {
@@ -480,7 +482,7 @@ function SetupStudio() {
       bucket_type: bucket.bucket_type,
       bucket_key: bucket.bucket_key,
       action: bucketDecision,
-      notes: "Applied from Setup Studio review.",
+      label: "Applied from Setup Studio review.",
     }));
   }
 
@@ -577,8 +579,7 @@ function SetupStudio() {
     }
   }
 
-  async function handleSupportCsvUpload(definition) {
-    const file = supportCsvFiles[definition.key];
+  async function handleSupportCsvUpload(definition, file) {
     if (!activeImportRunId || !file) {
       return;
     }
@@ -587,12 +588,12 @@ function SetupStudio() {
     setStatus("");
     try {
       const response = await timetableStudioService[definition.upload](activeImportRunId, file);
-      setSupportCsvFiles((current) => ({ ...current, [definition.key]: null }));
       const warningCount = response.warnings?.length || 0;
       await loadWorkspace(
         activeImportRunId,
         `${definition.title} CSV imported into snapshot #${activeImportRunId}. Created ${response.created_count || 0}, updated ${response.updated_count || 0}${warningCount ? `, warnings ${warningCount}` : ""}.`
       );
+      await refreshRecentRuns();
     } catch (err) {
       setError(err.message || `Failed to import ${definition.title.toLowerCase()} CSV.`);
     } finally {
@@ -600,7 +601,7 @@ function SetupStudio() {
     }
   }
 
-  async function handleSeedDemo() {
+  async function handleImportDemoBundle() {
     if (!activeImportRunId) {
       return;
     }
@@ -608,17 +609,39 @@ function SetupStudio() {
     setError("");
     setStatus("");
     try {
-      const response = await timetableStudioService.seedRealisticSnapshotMissingData(
-        activeImportRunId
-      );
+      const response = await timetableStudioService.importDemoBundle(activeImportRunId);
       await loadWorkspace(
         activeImportRunId,
-        `Filled demo teaching data for snapshot #${activeImportRunId}: ${response.lecturers_created} lecturers, ${response.rooms_created} rooms, ${response.shared_sessions_created} shared sessions.`
+        `Imported demo bundle into snapshot #${activeImportRunId}: ${response.lecturers_created} lecturers, ${response.rooms_created} rooms, ${response.shared_sessions_created} shared sessions.`
       );
+      await refreshRecentRuns();
     } catch (err) {
-      setError(err.message || "Failed to seed the demo teaching data.");
+      setError(err.message || "Failed to import the demo bundle.");
     } finally {
       setWorking(false);
+    }
+  }
+
+  async function handleOpenSnapshot(importRunId) {
+    setAnalysis(null);
+    setProjection(null);
+    setSelectedFile(null);
+    setUseSampleCsv(false);
+    await loadWorkspace(importRunId, `Opened snapshot #${importRunId}.`);
+  }
+
+  function handleStartFresh() {
+    setActiveImportRunId(null);
+    setWorkspace(emptyWorkspace);
+    setAnalysis(null);
+    setProjection(null);
+    setSelectedFile(null);
+    setUseSampleCsv(false);
+    setOpenForm("");
+    setError("");
+    setStatus("Starting a fresh setup session. Import student enrolments to create a new snapshot.");
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(activeImportRunStorageKey);
     }
   }
 
@@ -724,8 +747,8 @@ function SetupStudio() {
           <div>
             <h1 className="section-title">Setup Studio</h1>
             <p className="section-subtitle">
-              Import the data you already have, confirm what the system understood, then fill only
-              the missing teaching details.
+              Start from student enrolments, then enrich the snapshot with support CSVs and repair
+              only the missing local issues.
             </p>
             {activeImportRunId ? (
               <p className="helper-copy">
@@ -741,19 +764,84 @@ function SetupStudio() {
               </p>
             )}
           </div>
-          <button
-            className="primary-btn"
-            type="button"
-            onClick={() => navigate("/generate")}
-            disabled={!readiness.ready}
-          >
-            Continue to Generate
-          </button>
+          <div className="studio-actions">
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => setShowUtilities((current) => !current)}
+            >
+              {showUtilities ? "Hide Utilities" : "Utilities"}
+            </button>
+            <button
+              className="primary-btn"
+              type="button"
+              onClick={() => navigate("/generate")}
+              disabled={!readiness.ready}
+            >
+              Continue to Generate
+            </button>
+          </div>
         </div>
 
         {status && <div className="info-banner valid">{status}</div>}
         {error && <div className="error-banner">{error}</div>}
         {loadingWorkspace && <div className="info-banner">Loading the current import snapshot...</div>}
+
+        {showUtilities && (
+          <section className="studio-card">
+            <div className="studio-header compact">
+              <div>
+                <h2>Utilities</h2>
+                <p className="helper-copy">
+                  Keep the main flow simple. Use this area only when you intentionally want an older
+                  snapshot or demo data.
+                </p>
+              </div>
+              <div className="studio-actions">
+                <button type="button" className="ghost-btn" onClick={handleStartFresh}>
+                  Start Fresh
+                </button>
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  onClick={handleImportDemoBundle}
+                  disabled={!activeImportRunId || working}
+                >
+                  Import Demo Bundle
+                </button>
+              </div>
+            </div>
+            <div className="constraint-list">
+              {recentRuns.length === 0 ? (
+                <div className="constraint-row static">
+                  <div>
+                    <strong>No previous snapshots</strong>
+                    <span>Create one by materializing a student enrolment import.</span>
+                  </div>
+                </div>
+              ) : (
+                recentRuns.map((run) => (
+                  <div key={run.import_run_id} className="constraint-row static">
+                    <div>
+                      <strong>Snapshot #{run.import_run_id}</strong>
+                      <span>
+                        {run.source_file} · {run.status}
+                        {run.selected_academic_year ? ` · ${run.selected_academic_year}` : ""}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={() => handleOpenSnapshot(run.import_run_id)}
+                    >
+                      Open
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        )}
 
         <section className="studio-card">
           <h2>Import Files</h2>
@@ -783,7 +871,6 @@ function SetupStudio() {
                   const template = importTemplates.find(
                     (item) => item.name === definition.templateName
                   );
-                  const selectedSupportFile = supportCsvFiles[definition.key];
                   return (
                     <article key={definition.key} className="summary-item">
                       <span>{definition.title}</span>
@@ -798,34 +885,17 @@ function SetupStudio() {
                           Download Template
                         </button>
                         <label className="ghost-btn file-picker-btn">
-                          Choose CSV
+                          Import CSV
                           <input
                             type="file"
                             accept=".csv,text/csv"
                             hidden
-                            onChange={(event) => {
-                              const nextFile = event.target.files?.[0] || null;
-                              setSupportCsvFiles((current) => ({
-                                ...current,
-                                [definition.key]: nextFile,
-                              }));
-                            }}
+                            onChange={(event) =>
+                              handleSupportCsvUpload(definition, event.target.files?.[0] || null)
+                            }
                           />
                         </label>
-                        <button
-                          type="button"
-                          className="primary-btn"
-                          onClick={() => handleSupportCsvUpload(definition)}
-                          disabled={!selectedSupportFile || working}
-                        >
-                          Upload
-                        </button>
                       </div>
-                      <p className="helper-copy">
-                        {selectedSupportFile
-                          ? `Selected file: ${selectedSupportFile.name}`
-                          : "No CSV selected yet."}
-                      </p>
                     </article>
                   );
                 })}
@@ -923,7 +993,7 @@ function SetupStudio() {
                     >
                       <option value="accept_exception">Accept As Exception</option>
                       <option value="exclude">Exclude From Timetable Demand</option>
-                      <option value="keep_ambiguous">Keep Ambiguous</option>
+                      <option value="treat_as_common">Treat As Common Teaching</option>
                     </select>
                   </label>
                   <div className="constraint-list">
@@ -999,20 +1069,10 @@ function SetupStudio() {
             <div>
               <h2>Missing For Generation</h2>
               <p className="helper-copy">
-                Manual entry is only for missing data. The system should block generation for real
-                solver requirements, not for cosmetic completeness.
+                Separate missing imports from local repairs. Generation should block only on real
+                solver requirements.
               </p>
             </div>
-            {activeImportRunId && (
-              <button
-                type="button"
-                className="ghost-btn"
-                onClick={handleSeedDemo}
-                disabled={working}
-              >
-                Fill Demo Teaching Data
-              </button>
-            )}
           </div>
 
           {readiness.ready ? (
@@ -1020,8 +1080,25 @@ function SetupStudio() {
           ) : (
             <div className="summary-grid">
               <div className="summary-item">
-                <span>Blocking issues</span>
-                <strong>{readiness.blocking.length}</strong>
+                <span>Import needed</span>
+                <strong>
+                  {
+                    readiness.blocking.filter((item) =>
+                      ["rooms-empty", "lecturers-empty", "sessions-empty"].includes(item.key)
+                    ).length
+                  }
+                </strong>
+              </div>
+              <div className="summary-item">
+                <span>Repair needed</span>
+                <strong>
+                  {
+                    readiness.blocking.filter(
+                      (item) =>
+                        !["rooms-empty", "lecturers-empty", "sessions-empty"].includes(item.key)
+                    ).length
+                  }
+                </strong>
               </div>
               <div className="summary-item">
                 <span>Warnings</span>
@@ -1089,9 +1166,10 @@ function SetupStudio() {
           <section className="studio-card">
             <div className="studio-header compact">
               <div>
-                <h2>Gap Fill Forms</h2>
+                <h2>Repair Missing Data</h2>
                 <p className="helper-copy">
-                  These forms exist only to resolve missing solver data inside the current snapshot.
+                  Use these forms only for small local fixes. Bulk source-data problems should still
+                  be corrected in CSV and reimported.
                 </p>
               </div>
               <div className="studio-actions">

@@ -38,6 +38,14 @@ class ImportTemplateRoutesTestCase(unittest.TestCase):
         self.assertIn("sessions", names)
         self.assertIn("session_lecturers", names)
 
+    def test_lists_recent_import_runs(self):
+        response = self.client.get("/api/v2/imports/runs")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("runs", payload)
+        self.assertIsInstance(payload["runs"], list)
+
     def test_downloads_student_enrollment_template_csv(self):
         response = self.client.get("/api/v2/imports/templates/student_enrollments")
 

@@ -63,6 +63,7 @@ from app.services.session_csv_import import import_sessions_csv
 from app.services.session_lecturer_csv_import import import_session_lecturers_csv
 from app.services.snapshot_completion import (
     build_legacy_dataset_from_import_run,
+    list_import_runs,
     build_import_workspace,
     create_snapshot_lecturers_batch,
     create_snapshot_lecturer,
@@ -188,6 +189,14 @@ def get_lookups(
 @router.get("/imports/templates", response_model=dict)
 def get_import_templates():
     return {"templates": list_import_templates()}
+
+
+@router.get("/imports/runs", response_model=dict)
+def get_import_runs(
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    return {"runs": list_import_runs(db, limit=limit)}
 
 
 @router.get("/imports/templates/{template_name}", response_model=None)
@@ -617,6 +626,28 @@ def seed_import_snapshot_realistic_missing_data(
         db.rollback()
         raise HTTPException(
             status_code=400, detail="Snapshot seed conflicted with existing records"
+        ) from exc
+
+
+@router.post(
+    "/imports/{import_run_id}/demo-bundle",
+    response_model=SnapshotSeedResponse,
+)
+def import_demo_bundle_into_snapshot(
+    import_run_id: int,
+    db: Session = Depends(get_db),
+):
+    try:
+        summary = seed_realistic_snapshot_missing_data(db, import_run_id=import_run_id)
+        db.commit()
+        return summary
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=400, detail="Demo bundle import conflicted with existing records"
         ) from exc
 
 

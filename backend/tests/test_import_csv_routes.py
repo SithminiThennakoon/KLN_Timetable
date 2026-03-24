@@ -218,6 +218,18 @@ class ImportCsvRoutesTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertIn("Import run 999 was not found", response.json()["detail"])
 
+    def test_imports_demo_bundle_into_snapshot(self):
+        import_run_id, _module_id = self._seed_materialized_import_run()
+
+        response = self.client.post(f"/api/v2/imports/{import_run_id}/demo-bundle")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["import_run_id"], import_run_id)
+        self.assertIn("lecturers_created", payload)
+        self.assertIn("rooms_created", payload)
+        self.assertIn("shared_sessions_created", payload)
+
 
 if __name__ == "__main__":
     unittest.main()
