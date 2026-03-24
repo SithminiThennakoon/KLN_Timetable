@@ -2600,6 +2600,74 @@ select {
    ONBOARDING TUTORIAL MODAL  (ob-*)
    ═══════════════════════════════════════════════════════ */
 
+.ob-tour-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1800;
+  pointer-events: none;
+}
+
+.ob-tour-dim {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 9, 13, 0.3);
+  backdrop-filter: blur(2px);
+}
+
+.ob-tour-spotlight {
+  position: absolute;
+  border-radius: 18px;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.18),
+    0 0 0 9999px rgba(7, 10, 14, 0.26),
+    0 18px 44px rgba(0, 0, 0, 0.28);
+  background: rgba(255, 255, 255, 0.02);
+  transition:
+    top 0.22s ease,
+    left 0.22s ease,
+    width 0.22s ease,
+    height 0.22s ease;
+}
+
+.ob-coachmark {
+  position: fixed;
+  z-index: 1801;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: linear-gradient(160deg, var(--modal-bg-from), var(--modal-bg-to));
+  box-shadow: 0 28px 70px var(--shadow-modal);
+  overflow: hidden;
+}
+
+.ob-coachmark.is-mobile {
+  left: 16px !important;
+  right: 16px;
+  width: auto !important;
+}
+
+.ob-coachmark-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px 0;
+}
+
+.ob-coachmark-body {
+  display: grid;
+  gap: 10px;
+  padding: 8px 18px 14px;
+}
+
+.ob-target-wait {
+  color: var(--ink-500);
+  font-size: 0.88rem;
+}
+
 /* ── Overlay & shell ──────────────────────────────────── */
 
 .ob-overlay {
@@ -2713,7 +2781,8 @@ select {
 
 /* ── Progress dots ────────────────────────────────────── */
 
-.ob-progress {
+.ob-progress,
+.ob-progress-dots {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -2734,6 +2803,7 @@ select {
   transform: scale(1.25);
 }
 
+.ob-dot.active,
 .ob-dot-active {
   background: var(--accent-solid);
   transform: scale(1.2);

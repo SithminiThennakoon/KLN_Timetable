@@ -1,271 +1,273 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
-const STEPS = [
-  {
-    id: "welcome",
-    title: "Welcome to KLN Timetable Studio",
-    subtitle: "A guided path from enrolments to timetable",
-    content: (
-      <div className="ob-step-body">
-        <p className="ob-lead">
-          This tool is meant to guide you through one clear flow: prepare the data, generate a
-          timetable, then inspect the result.
-        </p>
-        <div className="ob-flow-diagram">
-          <div className="ob-flow-node ob-flow-active">
-            <span className="ob-flow-num">1</span>
-            <span className="ob-flow-label">Setup</span>
-          </div>
-          <div className="ob-flow-arrow">→</div>
-          <div className="ob-flow-node">
-            <span className="ob-flow-num">2</span>
-            <span className="ob-flow-label">Generate</span>
-          </div>
-          <div className="ob-flow-arrow">→</div>
-          <div className="ob-flow-node">
-            <span className="ob-flow-num">3</span>
-            <span className="ob-flow-label">Views</span>
-          </div>
-        </div>
-        <div className="ob-info-box">
-          <strong>Fastest route for the demo:</strong> use the guided sample setup in Setup, then
-          generate a timetable, then inspect it in Views.
-        </div>
-      </div>
-    ),
-  },
-  {
-    id: "setup",
-    title: "Step 1 — Setup",
-    subtitle: "Start with student enrolments, then fill the missing teaching details",
-    content: (
-      <div className="ob-step-body">
-        <p className="ob-lead">
-          Setup now starts with the student-enrolment CSV. After that, you only add the teaching
-          details the CSV cannot provide.
-        </p>
-        <div className="ob-step-list">
-          {[
-            "Start Demo with Sample Data for the fastest path",
-            "Or choose your own CSV and continue with the import",
-            "Add lecturers, rooms, and teaching sessions",
-            "Use the final review to catch anything required before generation",
-          ].map((item, index) => (
-            <div key={item} className="ob-step-item">
-              <span className="ob-step-badge">{index + 1}</span>
-              <div>
-                <strong>{item}</strong>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="ob-tip-box">
-          You do not need to build the full faculty structure manually during the demo flow. The
-          import supplies the student-side data first.
-        </div>
-      </div>
-    ),
-  },
-  {
-    id: "generate",
-    title: "Step 2 — Generate",
-    subtitle: "Create timetable options and let the system verify them",
-    content: (
-      <div className="ob-step-body">
-        <p className="ob-lead">
-          Once Setup is ready, Generate creates timetable options from the current snapshot and
-          checks the result automatically.
-        </p>
-        <div className="ob-info-box">
-          <strong>Keep it simple first:</strong> click <em>Generate Timetable</em>. Only use the
-          advanced preferences if you need to narrow a very large result set.
-        </div>
-      </div>
-    ),
-  },
-  {
-    id: "views",
-    title: "Step 3 — Views",
-    subtitle: "Open the result and switch to lecturer or student mode only when needed",
-    content: (
-      <div className="ob-step-body">
-        <p className="ob-lead">
-          Views opens with the default timetable first. You can then switch to lecturer or student
-          mode for filtered views and exports.
-        </p>
-        <div className="ob-tip-box">
-          The normal path is: open the timetable, confirm it looks right, then export what you
-          need.
-        </div>
-      </div>
-    ),
-  },
-];
+const COACHMARK_WIDTH = 320;
+const VIEWPORT_PADDING = 16;
+const SPOTLIGHT_PADDING = 12;
 
-function getFocusableElements(root) {
-  if (!root) return [];
-  return [...root.querySelectorAll(
-    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-  )].filter((el) => !el.hasAttribute("disabled"));
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
 
-function ProgressDots({ total, current, onGoTo }) {
-  return (
-    <div className="ob-progress-dots" role="tablist" aria-label="Tutorial steps">
-      {Array.from({ length: total }).map((_, index) => (
-        <button
-          key={index}
-          type="button"
-          className={index === current ? "ob-dot active" : "ob-dot"}
-          onClick={() => onGoTo(index)}
-          aria-label={`Go to step ${index + 1}`}
-        />
-      ))}
-    </div>
-  );
+function findTarget(step) {
+  if (!step?.targetId || typeof document === "undefined") {
+    return null;
+  }
+  return document.querySelector(`[data-tour="${step.targetId}"]`);
 }
 
-function OnboardingTutorial({ onClose, onComplete, initialStep = 0, onStepChange }) {
-  const [current, setCurrent] = useState(() =>
-    Math.max(0, Math.min(initialStep, STEPS.length - 1))
-  );
-  const modalRef = useRef(null);
-  const contentRef = useRef(null);
+function resolvePlacement(rect, placement, viewportWidth, viewportHeight) {
+  const panelWidth = Math.min(COACHMARK_WIDTH, viewportWidth - VIEWPORT_PADDING * 2);
+  const panelHeight = 210;
+  const spacing = 18;
+  const mobile = viewportWidth < 720;
 
-  const step = STEPS[current];
-  const isFirst = current === 0;
-  const isLast = current === STEPS.length - 1;
+  if (!rect || mobile) {
+    return {
+      left: VIEWPORT_PADDING,
+      top: Math.max(VIEWPORT_PADDING, viewportHeight - panelHeight - VIEWPORT_PADDING),
+      width: panelWidth,
+      mobile: true,
+    };
+  }
+
+  const centeredLeft = rect.left + rect.width / 2 - panelWidth / 2;
+  const centeredTop = rect.top + rect.height / 2 - panelHeight / 2;
+
+  const placements = {
+    right: {
+      left: rect.right + spacing,
+      top: centeredTop,
+    },
+    left: {
+      left: rect.left - panelWidth - spacing,
+      top: centeredTop,
+    },
+    top: {
+      left: centeredLeft,
+      top: rect.top - panelHeight - spacing,
+    },
+    bottom: {
+      left: centeredLeft,
+      top: rect.bottom + spacing,
+    },
+  };
+
+  const preferred = placements[placement] || placements.bottom;
+  const fitsPreferred =
+    preferred.left >= VIEWPORT_PADDING &&
+    preferred.left + panelWidth <= viewportWidth - VIEWPORT_PADDING &&
+    preferred.top >= VIEWPORT_PADDING &&
+    preferred.top + panelHeight <= viewportHeight - VIEWPORT_PADDING;
+
+  const fallbackOrder = ["bottom", "right", "left", "top"];
+  const chosen = fitsPreferred
+    ? preferred
+    : fallbackOrder
+        .map((key) => placements[key])
+        .find(
+          (candidate) =>
+            candidate.left >= VIEWPORT_PADDING &&
+            candidate.left + panelWidth <= viewportWidth - VIEWPORT_PADDING &&
+            candidate.top >= VIEWPORT_PADDING &&
+            candidate.top + panelHeight <= viewportHeight - VIEWPORT_PADDING
+        ) || preferred;
+
+  return {
+    left: clamp(chosen.left, VIEWPORT_PADDING, viewportWidth - panelWidth - VIEWPORT_PADDING),
+    top: clamp(chosen.top, VIEWPORT_PADDING, viewportHeight - panelHeight - VIEWPORT_PADDING),
+    width: panelWidth,
+    mobile: false,
+  };
+}
+
+function buildSpotlightRect(rect) {
+  if (!rect) {
+    return null;
+  }
+  return {
+    top: Math.max(rect.top - SPOTLIGHT_PADDING, VIEWPORT_PADDING),
+    left: Math.max(rect.left - SPOTLIGHT_PADDING, VIEWPORT_PADDING),
+    width: rect.width + SPOTLIGHT_PADDING * 2,
+    height: rect.height + SPOTLIGHT_PADDING * 2,
+  };
+}
+
+function OnboardingTutorial({
+  steps,
+  currentStep,
+  onStepChange,
+  onClose,
+  onComplete,
+}) {
+  const [targetRect, setTargetRect] = useState(null);
+  const step = steps[currentStep] || steps[0];
+  const isFirst = currentStep === 0;
+  const isLast = currentStep === steps.length - 1;
 
   useEffect(() => {
-    const previous = document.activeElement;
-    const focusable = getFocusableElements(modalRef.current);
-    if (focusable.length > 0) {
-      focusable[0].focus();
-    } else {
-      modalRef.current?.focus();
-    }
-    return () => previous?.focus();
-  }, []);
+    let frame = null;
+    let cancelled = false;
+    let didScrollToTarget = false;
+    let attempts = 0;
 
-  useEffect(() => {
-    const handle = (event) => {
-      if (event.key === "Tab") {
-        const focusable = getFocusableElements(modalRef.current);
-        if (focusable.length === 0) {
-          event.preventDefault();
-          modalRef.current?.focus();
-          return;
-        }
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        const active = document.activeElement;
-        if (event.shiftKey) {
-          if (active === first || !modalRef.current?.contains(active)) {
-            event.preventDefault();
-            last.focus();
-          }
-          return;
-        }
-        if (active === last || !modalRef.current?.contains(active)) {
-          event.preventDefault();
-          first.focus();
+    const measure = () => {
+      if (cancelled) {
+        return;
+      }
+      const target = findTarget(step);
+      if (target) {
+        const nextRect = target.getBoundingClientRect();
+        setTargetRect(nextRect);
+        if (!didScrollToTarget) {
+          target.scrollIntoView?.({ block: "center", inline: "center", behavior: "smooth" });
+          didScrollToTarget = true;
         }
         return;
       }
+      setTargetRect(null);
+      attempts += 1;
+      if (attempts < 120) {
+        frame = window.requestAnimationFrame(measure);
+      }
+    };
+
+    measure();
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure, true);
+      if (frame) {
+        window.cancelAnimationFrame(frame);
+      }
+    };
+  }, [step]);
+
+  useEffect(() => {
+    const handle = (event) => {
       if (event.key === "Escape") {
         onClose();
         return;
       }
-      if (event.key === "ArrowRight" && !isLast) {
-        setCurrent((value) => Math.min(value + 1, STEPS.length - 1));
+      if (event.key === "ArrowRight") {
+        if (isLast) {
+          onComplete();
+        } else {
+          onStepChange(currentStep + 1);
+        }
         return;
       }
       if (event.key === "ArrowLeft" && !isFirst) {
-        setCurrent((value) => Math.max(value - 1, 0));
+        onStepChange(currentStep - 1);
       }
     };
+
     document.addEventListener("keydown", handle);
     return () => document.removeEventListener("keydown", handle);
-  }, [isFirst, isLast, onClose]);
+  }, [currentStep, isFirst, isLast, onClose, onComplete, onStepChange]);
 
-  useEffect(() => {
-    if (contentRef.current) {
-      contentRef.current.scrollTop = 0;
+  const coachmarkBox = useMemo(() => {
+    if (typeof window === "undefined") {
+      return { left: VIEWPORT_PADDING, top: VIEWPORT_PADDING, width: COACHMARK_WIDTH, mobile: true };
     }
-  }, [current]);
+    return resolvePlacement(
+      targetRect,
+      step?.placement || "bottom",
+      window.innerWidth,
+      window.innerHeight
+    );
+  }, [step, targetRect]);
 
-  useEffect(() => {
-    onStepChange?.(current);
-  }, [current, onStepChange]);
-
-  const handleOverlayClick = (event) => {
-    if (event.target === event.currentTarget) {
-      onClose();
-    }
-  };
+  const spotlightRect = useMemo(() => buildSpotlightRect(targetRect), [targetRect]);
 
   return (
-    <div
-      className="ob-overlay"
-      onClick={handleOverlayClick}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Onboarding tutorial"
-    >
-      <div className="ob-modal" ref={modalRef} tabIndex={-1} role="document">
-        <div className="ob-header">
-          <div className="ob-header-text">
-            <span className="ob-step-counter">Step {current + 1} of {STEPS.length}</span>
-            <h2 className="ob-title">{step.title}</h2>
-            {step.subtitle && <p className="ob-subtitle">{step.subtitle}</p>}
-          </div>
+    <div className="ob-tour-layer" aria-live="polite">
+      <div className="ob-tour-dim" />
+      {spotlightRect ? (
+        <div
+          className="ob-tour-spotlight"
+          style={{
+            top: spotlightRect.top,
+            left: spotlightRect.left,
+            width: spotlightRect.width,
+            height: spotlightRect.height,
+          }}
+        />
+      ) : null}
+
+      <section
+        className={`ob-coachmark${coachmarkBox.mobile ? " is-mobile" : ""}`}
+        style={{
+          top: coachmarkBox.top,
+          left: coachmarkBox.left,
+          width: coachmarkBox.width,
+        }}
+        role="dialog"
+        aria-label="Onboarding tour"
+      >
+        <div className="ob-coachmark-header">
+          <span className="ob-step-counter">Step {currentStep + 1} of {steps.length}</span>
           <button
             type="button"
             className="ob-close-btn"
             onClick={onClose}
             aria-label="Close tutorial"
           >
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path d="M4 4L14 14M14 4L4 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
+            ×
           </button>
         </div>
-
-        <div className="ob-content" ref={contentRef}>
-          {step.content}
+        <div className="ob-coachmark-body">
+          <h2 className="ob-title">{step.title}</h2>
+          <p className="ob-subtitle">{step.body}</p>
+          {!targetRect ? (
+            <p className="ob-target-wait">Preparing the next area of the app…</p>
+          ) : null}
         </div>
-
         <div className="ob-footer">
-          <ProgressDots total={STEPS.length} current={current} onGoTo={setCurrent} />
+          <div className="ob-progress-dots" role="tablist" aria-label="Tutorial steps">
+            {steps.map((tourStep, index) => (
+              <button
+                key={tourStep.id}
+                type="button"
+                className={index === currentStep ? "ob-dot active" : "ob-dot"}
+                aria-label={`Go to step ${index + 1}`}
+                onClick={() => onStepChange(index)}
+              />
+            ))}
+          </div>
           <div className="ob-nav-btns">
             <button
               type="button"
               className="ghost-btn ob-nav-btn"
-              onClick={() => setCurrent((value) => Math.max(value - 1, 0))}
+              onClick={onClose}
+            >
+              Skip
+            </button>
+            <button
+              type="button"
+              className="ghost-btn ob-nav-btn"
+              onClick={() => onStepChange(Math.max(currentStep - 1, 0))}
               disabled={isFirst}
             >
               Back
             </button>
             {isLast ? (
-              <button
-                type="button"
-                className="primary-btn ob-nav-btn"
-                onClick={onComplete || onClose}
-              >
-                Get started
+              <button type="button" className="primary-btn ob-nav-btn" onClick={onComplete}>
+                Done
               </button>
             ) : (
               <button
                 type="button"
                 className="primary-btn ob-nav-btn"
-                onClick={() => setCurrent((value) => Math.min(value + 1, STEPS.length - 1))}
+                onClick={() => onStepChange(currentStep + 1)}
               >
                 Next
               </button>
             )}
           </div>
         </div>
-      </div>
+      </section>
     </div>
   );
 }

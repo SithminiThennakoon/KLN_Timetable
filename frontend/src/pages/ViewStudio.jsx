@@ -1134,7 +1134,7 @@ function ViewStudio() {
               </p>
             )}
           </div>
-          <div className="vs-filter-controls">
+          <div className="vs-filter-controls" data-tour="views-mode-controls">
             <div className="vs-mode-group">
               {["admin", "lecturer", "student"].map((m) => (
                 <button
@@ -1228,7 +1228,7 @@ function ViewStudio() {
               ))}
             </div>
           </div>
-          <div className="vs-control-group vs-export-group">
+          <div className="vs-control-group vs-export-group" data-tour="views-export-controls">
             <span className="vs-control-label">Export</span>
             <div className="vs-export-buttons">
               <button type="button" className="ghost-btn vs-export-btn" onClick={() => handleExport("pdf")}>PDF</button>

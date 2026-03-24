@@ -305,14 +305,19 @@ function GenerateStudio() {
               </>
             )}
           </div>
-          <button className="primary-btn" onClick={handleGenerate} disabled={loading}>
+          <button
+            className="primary-btn"
+            onClick={handleGenerate}
+            disabled={loading}
+            data-tour="generate-run-button"
+          >
             {loading ? "Generating..." : "Generate Timetable"}
           </button>
         </div>
 
         {error && <div className="error-banner">{error}</div>}
 
-        <section className="studio-card">
+        <section className="studio-card" data-tour="generate-preferences">
           <h2>Optional Preferences</h2>
           <p className="helper-copy">
             Start without extra preferences if you want the broadest result. Add them only when you need the system to narrow a large solution set.
@@ -402,7 +407,7 @@ function GenerateStudio() {
         </section>
 
         {!generation && !error && (
-          <section className="studio-card">
+          <section className="studio-card" data-tour="generate-results">
               <h2>No generation run yet</h2>
               <p className="empty-state">
                 {activeImportRunId
@@ -414,7 +419,7 @@ function GenerateStudio() {
 
         {generation && (
           <>
-            <section className={`studio-card result-card ${generation.status}`}>
+            <section className={`studio-card result-card ${generation.status}`} data-tour="generate-results">
               <h2>{generation.message}</h2>
               <p className="helper-copy">
                 Use the stored preview solutions below to inspect alternatives. One solution can be marked as the default timetable used by the Views page.

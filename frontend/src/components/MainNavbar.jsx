@@ -15,7 +15,7 @@ const MainNavbar = ({ onHelp }) => {
         </div>
       </div>
       <div className="header-right">
-        <nav className="main-menu">
+        <nav className="main-menu" data-tour="nav-pages">
           <NavLink to="/setup" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Setup</NavLink>
           <NavLink to="/generate" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Generate</NavLink>
           <NavLink to="/views" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Views</NavLink>
@@ -25,6 +25,7 @@ const MainNavbar = ({ onHelp }) => {
           onClick={onHelp}
           title="Open tutorial"
           aria-label="Open tutorial"
+          data-tour="nav-help"
         >
           ?
         </button>

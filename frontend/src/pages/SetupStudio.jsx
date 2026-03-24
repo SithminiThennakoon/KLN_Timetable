@@ -971,7 +971,7 @@ function SetupStudio() {
         </div>
       ) : null}
       <div className="panel studio-panel">
-        <div className="studio-header">
+        <div className="studio-header" data-tour="setup-header">
           <div>
             <h1 className="section-title">Setup Studio</h1>
             <p className="section-subtitle">
@@ -1005,6 +1005,7 @@ function SetupStudio() {
               type="button"
               onClick={() => navigate("/generate")}
               disabled={!readiness.ready}
+              data-tour="setup-continue"
             >
               Continue to Generate
             </button>
@@ -1109,7 +1110,10 @@ function SetupStudio() {
             from the main system. Anything still missing can be repaired locally below.
           </p>
           <div className="summary-grid setup-import-grid">
-            <article className="summary-item setup-import-card setup-import-card-primary">
+            <article
+              className="summary-item setup-import-card setup-import-card-primary"
+              data-tour="setup-enrollment-import"
+            >
               <span>Student Enrolments</span>
               <strong className="setup-card-status">
                 {activeImportRunId ? "Snapshot available" : "Creates the snapshot"}
@@ -1360,7 +1364,7 @@ function SetupStudio() {
             </article>
           </div>
 
-          <div className="setup-support-imports">
+          <div className="setup-support-imports" data-tour="setup-support-imports">
             <div className="setup-support-imports-head">
               <h3>Support CSVs</h3>
               <p className="helper-copy">
@@ -1445,7 +1449,7 @@ function SetupStudio() {
           )}
         </section>
 
-        <section className="studio-card setup-readiness-section">
+        <section className="studio-card setup-readiness-section" data-tour="setup-readiness">
           <div className="studio-header compact">
             <div>
               <h2>Missing For Generation</h2>
