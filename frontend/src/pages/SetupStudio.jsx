@@ -115,7 +115,7 @@ function readActiveImportRunId() {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
-function buildImportCards(activeImportRunId) {
+function buildImportCards(activeImportRunId, workspace) {
   return [
     {
       key: "enrollment",
@@ -127,23 +127,35 @@ function buildImportCards(activeImportRunId) {
     {
       key: "rooms",
       title: "Rooms",
-      status: "Manual for now",
+      status: activeImportRunId
+        ? workspace.rooms.length > 0
+          ? "Imported"
+          : "Ready to import"
+        : "Needs snapshot",
       detail:
-        "Room CSV support should be added next. For now, add rooms only when the readiness list asks for them.",
+        "Import rooms.csv if the admin can export it. Otherwise add only the missing rooms manually.",
     },
     {
       key: "lecturers",
       title: "Lecturers",
-      status: "Manual for now",
+      status: activeImportRunId
+        ? workspace.lecturers.length > 0
+          ? "Imported"
+          : "Ready to import"
+        : "Needs snapshot",
       detail:
-        "Lecturer CSV support should be added next. For now, add lecturers only when the readiness list asks for them.",
+        "Import lecturers.csv if available. Anything the main system cannot export can still be added manually.",
     },
     {
       key: "sessions",
       title: "Sessions",
-      status: "Manual for now",
+      status: activeImportRunId
+        ? workspace.shared_sessions.length > 0
+          ? "Imported"
+          : "Ready to import"
+        : "Needs snapshot",
       detail:
-        "Shared session CSV support should be added next. For now, define only the missing sessions manually.",
+        "Import sessions.csv and session_lecturers.csv when possible. Use the shared-session form only for unresolved gaps.",
     },
   ];
 }
@@ -328,8 +340,8 @@ function SetupStudio() {
 
   const hasChosenImportSource = useSampleCsv || Boolean(selectedFile);
   const importCards = useMemo(
-    () => buildImportCards(activeImportRunId),
-    [activeImportRunId]
+    () => buildImportCards(activeImportRunId, workspace),
+    [activeImportRunId, workspace]
   );
   const summaryCards = useMemo(() => buildWorkspaceSummary(workspace), [workspace]);
   const readiness = useMemo(() => buildReadiness(workspace), [workspace]);
@@ -649,8 +661,8 @@ function SetupStudio() {
         <section className="studio-card">
           <h2>Import Files</h2>
           <p className="helper-copy">
-            Each schema should have its own clear import contract. For now, only student enrolments
-            are fully first-class end to end.
+            Each schema has its own import contract. Start with student enrolments, then add any
+            support CSVs the admin can export from the main system.
           </p>
           <div className="summary-grid">
             {importCards.map((card) => (

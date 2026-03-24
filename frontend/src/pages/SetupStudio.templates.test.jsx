@@ -70,6 +70,7 @@ describe("SetupStudio minimal setup UI", () => {
     expect(screen.getByText("What The System Understood")).toBeInTheDocument();
     expect(screen.getByText("Missing For Generation")).toBeInTheDocument();
     expect(screen.getByText("Continue")).toBeInTheDocument();
+    expect(screen.getAllByText("Needs snapshot").length).toBeGreaterThan(0);
     expect(screen.queryByText("Edit Manually")).not.toBeInTheDocument();
     expect(screen.queryByText("CSV Uploads")).not.toBeInTheDocument();
   });
@@ -87,6 +88,7 @@ describe("SetupStudio minimal setup UI", () => {
       await screen.findByText(/Restored snapshot #77\. Continue completing the missing teaching details\./i)
     ).toBeInTheDocument();
     expect(screen.getByText("Gap Fill Forms")).toBeInTheDocument();
+    expect(screen.getAllByText("Ready to import").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Add Lecturer" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add Room" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add Shared Session" })).toBeInTheDocument();
