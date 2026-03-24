@@ -98,44 +98,49 @@ const supportCsvDefinitions = [
     title: "Rooms",
     templateName: "rooms",
     upload: "uploadRoomsCsv",
+    detail: "Rooms, capacities, room types, lab types, locations, and restrictions.",
     statusFromWorkspace: (workspace) =>
-      workspace.rooms.length > 0 ? `${workspace.rooms.length} imported` : "Not imported",
+      workspace.rooms.length > 0 ? `${workspace.rooms.length} imported` : "Import needed",
   },
   {
     key: "lecturers",
     title: "Lecturers",
     templateName: "lecturers",
     upload: "uploadLecturersCsv",
+    detail: "Lecturer identities that sessions can be linked to.",
     statusFromWorkspace: (workspace) =>
       workspace.lecturers.length > 0
         ? `${workspace.lecturers.length} imported`
-        : "Not imported",
+        : "Import needed",
   },
   {
     key: "modules",
     title: "Modules",
     templateName: "modules",
     upload: "uploadModulesCsv",
+    detail: "Optional corrections and enrichment for module metadata.",
     statusFromWorkspace: (workspace) =>
       workspace.curriculum_modules.length > 0
         ? `${workspace.curriculum_modules.length} available`
-        : "Not imported",
+        : "Import needed",
   },
   {
     key: "sessions",
     title: "Sessions",
     templateName: "sessions",
     upload: "uploadSessionsCsv",
+    detail: "The shared teaching sessions the solver should schedule.",
     statusFromWorkspace: (workspace) =>
       workspace.shared_sessions.length > 0
         ? `${workspace.shared_sessions.length} imported`
-        : "Not imported",
+        : "Import needed",
   },
   {
     key: "session_lecturers",
     title: "Session Lecturers",
     templateName: "session_lecturers",
     upload: "uploadSessionLecturersCsv",
+    detail: "Links existing sessions to existing lecturers.",
     statusFromWorkspace: () => "Import after sessions + lecturers",
   },
 ];
@@ -234,51 +239,6 @@ function buildLocalTemplateCsv(template) {
     return "";
   }
   return `${template.columns.join(",")}\n`;
-}
-
-function buildImportCards(activeImportRunId, workspace) {
-  return [
-    {
-      key: "enrollment",
-      title: "Student Enrolments",
-      status: activeImportRunId ? "Imported" : "Not imported",
-      detail:
-        "Import the registration CSV that tells the system which students take which modules.",
-    },
-    {
-      key: "rooms",
-      title: "Rooms",
-      status: activeImportRunId
-        ? workspace.rooms.length > 0
-          ? "Imported"
-          : "Ready to import"
-        : "Needs snapshot",
-      detail:
-        "Import rooms.csv if the admin can export it. Otherwise add only the missing rooms manually.",
-    },
-    {
-      key: "lecturers",
-      title: "Lecturers",
-      status: activeImportRunId
-        ? workspace.lecturers.length > 0
-          ? "Imported"
-          : "Ready to import"
-        : "Needs snapshot",
-      detail:
-        "Import lecturers.csv if available. Anything the main system cannot export can still be added manually.",
-    },
-    {
-      key: "sessions",
-      title: "Sessions",
-      status: activeImportRunId
-        ? workspace.shared_sessions.length > 0
-          ? "Imported"
-          : "Ready to import"
-        : "Needs snapshot",
-      detail:
-        "Import sessions.csv and session_lecturers.csv when possible. Use the shared-session form only for unresolved gaps.",
-    },
-  ];
 }
 
 function buildWorkspaceSummary(workspace) {
@@ -462,10 +422,6 @@ function SetupStudio() {
   const [sessionForm, setSessionForm] = useState(emptySessionForm);
 
   const hasChosenImportSource = useSampleCsv || Boolean(selectedFile);
-  const importCards = useMemo(
-    () => buildImportCards(activeImportRunId, workspace),
-    [activeImportRunId, workspace]
-  );
   const summaryCards = useMemo(() => buildWorkspaceSummary(workspace), [workspace]);
   const readiness = useMemo(
     () => workspace.readiness || buildReadiness(workspace),
@@ -945,208 +901,186 @@ function SetupStudio() {
         <section className="studio-card">
           <h2>Import Files</h2>
           <p className="helper-copy">
-            Each schema has its own import contract. Start with student enrolments, then add any
-            support CSVs the admin can export from the main system.
+            Start with student enrolments, then add whichever support CSVs the admin can export
+            from the main system. Anything still missing can be repaired locally below.
           </p>
           <div className="summary-grid">
-            {importCards.map((card) => (
-              <article key={card.key} className="summary-item">
-                <span>{card.title}</span>
-                <strong>{card.status}</strong>
-                <p>{card.detail}</p>
-              </article>
-            ))}
-          </div>
-
-          {activeImportRunId && (
-            <div className="schema-notes compact">
-              <h3>Support CSVs For This Snapshot</h3>
+            <article className="summary-item">
+              <span>Student Enrolments</span>
+              <strong>{activeImportRunId ? "Snapshot available" : "Creates the snapshot"}</strong>
               <p>
-                Once student enrolments are materialized, import the support CSVs your admin can
-                actually export. Anything still missing can be filled manually below.
+                Import the registration CSV that tells the system which students take which modules.
               </p>
-              <div className="summary-grid">
-                {supportCsvDefinitions.map((definition) => {
-                  const template = importTemplates.find(
-                    (item) => item.name === definition.templateName
-                  );
-                  return (
-                    <article key={definition.key} className="summary-item">
-                      <span>{definition.title}</span>
-                      <strong>{definition.statusFromWorkspace(workspace)}</strong>
-                      <p>{template?.description || "Template available for this CSV schema."}</p>
-                      <div className="studio-actions">
-                        <button
-                          type="button"
-                          className="ghost-btn"
-                          onClick={() => handleDownloadTemplate(definition.templateName)}
-                        >
-                          Download Template
-                        </button>
-                        <label className="ghost-btn file-picker-btn">
-                          Import CSV
-                          <input
-                            type="file"
-                            accept=".csv,text/csv"
-                            hidden
-                            onChange={(event) =>
-                              handleSupportCsvUpload(definition, event.target.files?.[0] || null)
-                            }
-                          />
-                        </label>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          <div className="schema-notes">
-            <h3>Student Enrolments</h3>
-            <p>
-              Import the CSV that tells the system which students take which modules. This is the
-              starting point for programme structure, attendance groups, and solver demand.
-            </p>
-          </div>
-
-          <div className="studio-actions">
-            <button
-              type="button"
-              className="ghost-btn"
-              onClick={() => handleDownloadTemplate("student_enrollments")}
-            >
-              Download Template
-            </button>
-            <label className="ghost-btn file-picker-btn">
-              Import CSV
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                hidden
-                onChange={(event) => {
-                  const nextFile = event.target.files?.[0] || null;
-                  setSelectedFile(nextFile);
-                  setUseSampleCsv(false);
-                  setAnalysis(null);
-                  setProjection(null);
-                  setStatus("");
-                  setError("");
-                }}
-              />
-            </label>
-            <button
-              type="button"
-              className={useSampleCsv ? "primary-btn" : "ghost-btn"}
-              onClick={() => {
-                setUseSampleCsv(true);
-                setSelectedFile(null);
-                setAnalysis(null);
-                setProjection(null);
-                setStatus("Using the bundled sample enrollment CSV.");
-                setError("");
-              }}
-            >
-              Use Sample CSV
-            </button>
-            <button
-              type="button"
-              className="primary-btn"
-              onClick={handleAnalyze}
-              disabled={!hasChosenImportSource || working}
-            >
-              {working ? "Working..." : "Analyze Import"}
-            </button>
-          </div>
-
-          <p className="helper-copy">
-            {selectedFile
-              ? `Selected file: ${selectedFile.name}`
-              : useSampleCsv
-                ? "Using the bundled sample CSV."
-                : "No CSV selected yet."}
-          </p>
-
-          {analysis && (
-            <div className="schema-notes compact">
-              <h3>Review The CSV</h3>
-              <p>
-                Review import patterns in bulk. The system should not silently guess what ambiguous
-                rows mean.
-              </p>
-              <div className="summary-grid">
-                <div className="summary-item">
-                  <span>Total rows</span>
-                  <strong>{analysis.summary?.total_rows ?? 0}</strong>
-                </div>
-                <div className="summary-item">
-                  <span>Unique students</span>
-                  <strong>{analysis.summary?.unique_students ?? 0}</strong>
-                </div>
-                <div className="summary-item">
-                  <span>Review buckets</span>
-                  <strong>{analysis.buckets?.length ?? 0}</strong>
-                </div>
-              </div>
-
-              {(analysis.buckets || []).length > 0 ? (
-                <>
-                  <label>
-                    <span>Apply this decision to all current review buckets</span>
-                    <select
-                      value={bucketDecision}
-                      onChange={(event) => setBucketDecision(event.target.value)}
-                    >
-                      <option value="accept_exception">Accept As Exception</option>
-                      <option value="exclude">Exclude From Timetable Demand</option>
-                      <option value="treat_as_common">Treat As Common Teaching</option>
-                    </select>
-                  </label>
-                  <div className="constraint-list">
-                    {analysis.buckets.map((bucket) => (
-                      <div
-                        key={`${bucket.bucket_type}-${bucket.bucket_key}`}
-                        className="constraint-row static"
-                      >
-                        <div>
-                          <strong>{bucket.description}</strong>
-                          <span>{bucket.row_count} rows</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <p className="helper-copy">No review buckets were created for this import.</p>
-              )}
-
               <div className="studio-actions">
                 <button
                   type="button"
                   className="ghost-btn"
-                  onClick={handleReviewImport}
-                  disabled={working}
+                  onClick={() => handleDownloadTemplate("student_enrollments")}
                 >
-                  Review Import
+                  Download Template
+                </button>
+                <label className="ghost-btn file-picker-btn">
+                  Import CSV
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    hidden
+                    onChange={(event) => {
+                      const nextFile = event.target.files?.[0] || null;
+                      setSelectedFile(nextFile);
+                      setUseSampleCsv(false);
+                      setAnalysis(null);
+                      setProjection(null);
+                      setStatus("");
+                      setError("");
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className={useSampleCsv ? "primary-btn" : "ghost-btn"}
+                  onClick={() => {
+                    setUseSampleCsv(true);
+                    setSelectedFile(null);
+                    setAnalysis(null);
+                    setProjection(null);
+                    setStatus("Using the bundled sample enrollment CSV.");
+                    setError("");
+                  }}
+                >
+                  Use Sample CSV
                 </button>
                 <button
                   type="button"
                   className="primary-btn"
-                  onClick={handleUseImport}
-                  disabled={working}
+                  onClick={handleAnalyze}
+                  disabled={!hasChosenImportSource || working}
                 >
-                  Use This Import
+                  {working ? "Working..." : "Analyze Import"}
                 </button>
               </div>
-            </div>
-          )}
+              <p className="helper-copy">
+                {selectedFile
+                  ? `Selected file: ${selectedFile.name}`
+                  : useSampleCsv
+                    ? "Using the bundled sample CSV."
+                    : "No CSV selected yet."}
+              </p>
 
-          {projection && (
-            <div className="info-banner">
-              Review result: {projection.projection_summary?.projected_rows ?? 0} projected rows
-              are ready to materialize into a working snapshot.
-            </div>
-          )}
+              {analysis && (
+                <div className="schema-notes compact">
+                  <h3>Review</h3>
+                  <div className="summary-grid">
+                    <div className="summary-item">
+                      <span>Total rows</span>
+                      <strong>{analysis.summary?.total_rows ?? 0}</strong>
+                    </div>
+                    <div className="summary-item">
+                      <span>Unique students</span>
+                      <strong>{analysis.summary?.unique_students ?? 0}</strong>
+                    </div>
+                    <div className="summary-item">
+                      <span>Review buckets</span>
+                      <strong>{analysis.buckets?.length ?? 0}</strong>
+                    </div>
+                  </div>
+
+                  {(analysis.buckets || []).length > 0 ? (
+                    <>
+                      <label>
+                        <span>Apply this decision to all current review buckets</span>
+                        <select
+                          value={bucketDecision}
+                          onChange={(event) => setBucketDecision(event.target.value)}
+                        >
+                          <option value="accept_exception">Accept As Exception</option>
+                          <option value="exclude">Exclude From Timetable Demand</option>
+                          <option value="treat_as_common">Treat As Common Teaching</option>
+                        </select>
+                      </label>
+                      <div className="constraint-list">
+                        {analysis.buckets.slice(0, 6).map((bucket) => (
+                          <div
+                            key={`${bucket.bucket_type}-${bucket.bucket_key}`}
+                            className="constraint-row static"
+                          >
+                            <div>
+                              <strong>{bucket.description}</strong>
+                              <span>{bucket.row_count} rows</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="helper-copy">No review buckets were created for this import.</p>
+                  )}
+
+                  <div className="studio-actions">
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={handleReviewImport}
+                      disabled={working}
+                    >
+                      Review Import
+                    </button>
+                    <button
+                      type="button"
+                      className="primary-btn"
+                      onClick={handleUseImport}
+                      disabled={working}
+                    >
+                      Use This Import
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {projection && (
+                <div className="info-banner">
+                  Review result: {projection.projection_summary?.projected_rows ?? 0} projected
+                  rows are ready to materialize into a working snapshot.
+                </div>
+              )}
+            </article>
+
+            {supportCsvDefinitions.map((definition) => {
+              const template = importTemplates.find((item) => item.name === definition.templateName);
+              return (
+                <article key={definition.key} className="summary-item">
+                  <span>{definition.title}</span>
+                  <strong>
+                    {activeImportRunId
+                      ? definition.statusFromWorkspace(workspace)
+                      : "Waiting for student enrolments"}
+                  </strong>
+                  <p>{template?.description || definition.detail}</p>
+                  <div className="studio-actions">
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={() => handleDownloadTemplate(definition.templateName)}
+                    >
+                      Download Template
+                    </button>
+                    <label className="ghost-btn file-picker-btn">
+                      Import CSV
+                      <input
+                        type="file"
+                        accept=".csv,text/csv"
+                        hidden
+                        disabled={!activeImportRunId}
+                        onChange={(event) =>
+                          handleSupportCsvUpload(definition, event.target.files?.[0] || null)
+                        }
+                      />
+                    </label>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
         </section>
 
         <section className="studio-card">

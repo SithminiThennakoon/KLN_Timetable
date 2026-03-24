@@ -75,7 +75,7 @@ describe("SetupStudio minimal setup UI", () => {
     expect(screen.getByText("What The System Understood")).toBeInTheDocument();
     expect(screen.getByText("Missing For Generation")).toBeInTheDocument();
     expect(screen.getByText("Continue")).toBeInTheDocument();
-    expect(screen.getAllByText("Needs snapshot").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Waiting for student enrolments").length).toBeGreaterThan(0);
     expect(screen.queryByText("Edit Manually")).not.toBeInTheDocument();
     expect(screen.queryByText("CSV Uploads")).not.toBeInTheDocument();
   });
