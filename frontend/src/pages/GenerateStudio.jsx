@@ -80,6 +80,7 @@ const generationLimits = {
   preview_limit: { min: 1, max: 100 },
   time_limit_seconds: { min: 1, max: 600 },
 };
+const activeImportRunStorageKey = "kln_active_import_run_id";
 
 function formatMilliseconds(value) {
   if (!value) {
@@ -121,29 +122,63 @@ function formatCombinationCount(suggestion) {
 
 function GenerateStudio() {
   const [generation, setGeneration] = useState(null);
+  const [verification, setVerification] = useState(null);
+  const [verificationLoading, setVerificationLoading] = useState(false);
+  const [verificationError, setVerificationError] = useState("");
+  const [activeImportRunId, setActiveImportRunId] = useState(() => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    const raw = window.localStorage.getItem(activeImportRunStorageKey);
+    const parsed = Number(raw);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  });
   const [softConstraints, setSoftConstraints] = useState([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [settings, setSettings] = useState(defaultPerformanceSettings);
   const [loading, setLoading] = useState(false);
+  const [blockingMessage, setBlockingMessage] = useState("");
   const [error, setError] = useState("");
+
+  const loadVerification = async (importRunId, nextGeneration = null) => {
+    if (!importRunId || !nextGeneration || (nextGeneration.solutions || []).length === 0) {
+      setVerification(null);
+      setVerificationError("");
+      return;
+    }
+    setVerificationLoading(true);
+    setVerificationError("");
+    try {
+      const response = await timetableStudioService.verifySnapshotGeneration(importRunId);
+      setVerification(response);
+    } catch (err) {
+      setVerification(null);
+      setVerificationError(err.message);
+    } finally {
+      setVerificationLoading(false);
+    }
+  };
 
   const loadLatest = async () => {
     try {
-      const response = await timetableStudioService.latestGeneration();
+      const response = await timetableStudioService.latestGeneration(activeImportRunId);
       setGeneration(response);
       setSoftConstraints(response.selected_soft_constraints || []);
       setSettings((prev) => ({
         ...prev,
         performance_preset: response.performance_preset || prev.performance_preset,
       }));
+      await loadVerification(activeImportRunId, response);
     } catch {
-      // ignore empty state
+      setGeneration(null);
+      setVerification(null);
+      setVerificationError("");
     }
   };
 
   useEffect(() => {
     loadLatest();
-  }, []);
+  }, [activeImportRunId]);
 
   const handleToggle = (key) => {
     setSoftConstraints((prev) =>
@@ -153,6 +188,7 @@ function GenerateStudio() {
 
   const handleGenerate = async () => {
     setLoading(true);
+    setBlockingMessage("Generating timetable solutions from the current snapshot...");
     setError("");
     const requestSettings = {
       performance_preset: settings.performance_preset,
@@ -175,13 +211,18 @@ function GenerateStudio() {
     setSettings((prev) => ({ ...prev, ...requestSettings }));
     try {
       const response = await timetableStudioService.generate({
+        import_run_id: activeImportRunId || undefined,
         soft_constraints: softConstraints,
         ...requestSettings,
       });
       setGeneration(response);
+      await loadVerification(activeImportRunId, response);
     } catch (err) {
       setError(err.message);
+      setVerification(null);
+      setVerificationError("");
     } finally {
+      setBlockingMessage("");
       setLoading(false);
     }
   };
@@ -190,8 +231,12 @@ function GenerateStudio() {
     setLoading(true);
     setError("");
     try {
-      const response = await timetableStudioService.setDefault(solutionId);
+      const response = await timetableStudioService.setDefault(
+        solutionId,
+        activeImportRunId
+      );
       setGeneration(response);
+      await loadVerification(activeImportRunId, response);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -222,28 +267,55 @@ function GenerateStudio() {
   const allConstraintsSelected =
     availableSoftConstraints.length > 0 &&
     availableSoftConstraints.every((option) => softConstraints.includes(option.key));
+  const requiresConstraintNarrowing =
+    Boolean(generation) &&
+    generation.counts.total_solutions_found > 100 &&
+    !allConstraintsSelected;
+  const representativePreviewMode =
+    Boolean(generation) && generation.counts.total_solutions_found > 100;
 
   return (
     <div className="page-shell">
+      {blockingMessage ? (
+        <div className="setup-blocking-overlay" role="status" aria-live="polite" aria-busy="true">
+          <div className="setup-blocking-dialog">
+            <div className="setup-blocking-spinner" aria-hidden="true" />
+            <strong>Generating timetable</strong>
+            <p>{blockingMessage}</p>
+            <div className="setup-indeterminate-progress" aria-hidden="true">
+              <span />
+            </div>
+            <span>The page is locked until the generation run finishes.</span>
+          </div>
+        </div>
+      ) : null}
       <div className="panel studio-panel">
         <div className="studio-header">
           <div>
-            <h1 className="section-title">Generate Solutions</h1>
+            <h1 className="section-title">Generate Timetable</h1>
             <p className="section-subtitle">
-              Generate the full faculty timetable from the saved setup data. Hard constraints are always enforced. Nice-to-have constraints only help reduce large solution counts.
+              Generate timetable options from the current setup. The system checks the result automatically before you use it.
             </p>
+            {activeImportRunId && (
+              <>
+                <p className="helper-copy">Using import snapshot #{activeImportRunId} directly.</p>
+                <p className="helper-copy">
+                  This run uses the current snapshot directly, and the selected timetable is verified against the same snapshot before it is considered trusted.
+                </p>
+              </>
+            )}
           </div>
           <button className="primary-btn" onClick={handleGenerate} disabled={loading}>
-            {loading ? "Generating..." : "Generate Timetable Solutions"}
+            {loading ? "Generating..." : "Generate Timetable"}
           </button>
         </div>
 
         {error && <div className="error-banner">{error}</div>}
 
         <section className="studio-card">
-          <h2>Nice-to-Have Constraints</h2>
+          <h2>Optional Preferences</h2>
           <p className="helper-copy">
-            Start without extra constraints if you want to measure how many valid timetables exist. Add nice-to-have constraints when the result count is too high and you need the solver to narrow the search.
+            Start without extra preferences if you want the broadest result. Add them only when you need the system to narrow a large solution set.
           </p>
           <div className="studio-actions">
             <button
@@ -312,9 +384,9 @@ function GenerateStudio() {
               </p>
             </div>
           )}
-          <div className="constraint-list">
+          <div className="ob-constraint-list">
             {availableSoftConstraints.map((option) => (
-              <label key={option.key} className="constraint-row">
+              <label key={option.key} className="ob-constraint-row">
                 <input
                   type="checkbox"
                   checked={softConstraints.includes(option.key)}
@@ -331,12 +403,14 @@ function GenerateStudio() {
 
         {!generation && !error && (
           <section className="studio-card">
-            <h2>No generation run yet</h2>
-            <p className="empty-state">
-              Save your faculty data in Setup, then generate timetable solutions here. The system will count valid solutions, stop at the configured threshold or time limit, and keep preview solutions for review.
-            </p>
-          </section>
-        )}
+              <h2>No generation run yet</h2>
+              <p className="empty-state">
+                {activeImportRunId
+                ? "Complete the setup in Setup, then generate the timetable here."
+                : "Finish the setup first, then generate the timetable here."}
+              </p>
+            </section>
+          )}
 
         {generation && (
           <>
@@ -412,9 +486,14 @@ function GenerateStudio() {
                   limit {generation.stats?.memory_limit_mb || 0} MB
                 </p>
               )}
-              {generation.counts.total_solutions_found > 100 && (
+              {requiresConstraintNarrowing && (
                 <div className="info-banner invalid">
-                  More than 100 valid timetables exist. Add nice-to-have constraints if you need a smaller solution set. If you keep this run, the stored previews are representative options rather than the full list.
+                  More than 100 valid timetables exist. Select more nice-to-have constraints and generate again before choosing a default timetable.
+                </div>
+              )}
+              {!requiresConstraintNarrowing && representativePreviewMode && (
+                <div className="info-banner invalid">
+                  More than 100 valid timetables still exist even with the current nice-to-have set. The stored previews are representative options rather than the full list, so pick one only if you are satisfied with that reduced guidance.
                 </div>
               )}
               {generation.counts.truncated && (
@@ -469,8 +548,112 @@ function GenerateStudio() {
               )}
             </section>
 
+            {activeImportRunId && (
+              <section className="studio-card">
+                <div className="studio-header compact">
+                  <div>
+                    <h2>Verification</h2>
+                    <p className="helper-copy">
+                      The selected timetable is checked against the normalized snapshot using three independent verifiers: Python, Rust, and Elixir.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => loadVerification(activeImportRunId, generation)}
+                    disabled={verificationLoading || loading}
+                  >
+                    {verificationLoading ? "Verifying..." : "Run Verification"}
+                  </button>
+                </div>
+                {verificationError && <div className="error-banner">{verificationError}</div>}
+                {!verification && !verificationError && (
+                  <p className="empty-state">
+                    Verification will appear here after a snapshot-backed generation run finishes.
+                  </p>
+                )}
+                {verification && (
+                  <>
+                    <div className="summary-grid">
+                      <div className="summary-item">
+                        <span>Completed verifiers</span>
+                        <strong>{(verification.completed_verifiers || []).join(", ") || "None"}</strong>
+                      </div>
+                      <div className="summary-item">
+                        <span>Hard constraints</span>
+                        <strong>{verification.hard_valid_all ? "Pass" : "Not fully trusted yet"}</strong>
+                      </div>
+                      <div className="summary-item">
+                        <span>Missing verifiers</span>
+                        <strong>{(verification.missing_verifiers || []).join(", ") || "None"}</strong>
+                      </div>
+                      <div className="summary-item">
+                        <span>Verified solution</span>
+                        <strong>{verification.solution_id || "-"}</strong>
+                      </div>
+                    </div>
+                    {(verification.missing_verifiers || []).length > 0 && (
+                      <div className="info-banner invalid">
+                        The timetable is not fully trusted yet because these required verifiers have not completed:{" "}
+                        {(verification.missing_verifiers || []).join(", ")}.
+                      </div>
+                    )}
+                    {Object.entries(verification.errors || {}).length > 0 && (
+                      <div className="constraint-list">
+                        {Object.entries(verification.errors).map(([key, value]) => (
+                          <div key={key} className="constraint-row static">
+                            <div>
+                              <strong>{key}</strong>
+                              <span>{value}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {Object.entries(verification.results || {}).map(([key, result]) => (
+                      <div key={key} className="schema-notes">
+                        <h3>{key} verifier</h3>
+                        <p>
+                          Hard constraints: {result.hard_valid ? "Pass" : "Fail"} | Violations:{" "}
+                          {result.hard_violations?.length || 0} | Checked entries:{" "}
+                          {result.stats?.entry_count || 0}
+                        </p>
+                        {(result.hard_violations || []).length > 0 && (
+                          <div className="info-banner invalid">
+                            {(result.hard_violations || [])
+                              .slice(0, 5)
+                              .map((item) => item.message)
+                              .join(" ")}
+                          </div>
+                        )}
+                        {(result.soft_summary || []).length > 0 && (
+                          <div className="constraint-list">
+                            {result.soft_summary.map((item) => (
+                              <div key={`${key}-${item.key}`} className="constraint-row static">
+                                <div>
+                                  <strong>
+                                    {item.label}: {item.satisfied ? "Satisfied" : "Not satisfied"}
+                                  </strong>
+                                  <span>{item.details}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </>
+                )}
+              </section>
+            )}
+
             <section className="studio-card">
               <h2>Preview Solutions</h2>
+              {requiresConstraintNarrowing && (
+                <p className="helper-copy">
+                  Default selection is locked until you narrow the solution count below 100 or exhaust all nice-to-have constraints.
+                </p>
+              )}
               <div className="solution-list">
                 {generation.solutions.length === 0 ? (
                   <p className="empty-state">No preview solutions available.</p>
@@ -488,9 +671,13 @@ function GenerateStudio() {
                         <button
                           className="ghost-btn"
                           onClick={() => handleDefault(solution.solution_id)}
-                          disabled={loading || solution.is_default}
+                          disabled={loading || solution.is_default || requiresConstraintNarrowing}
                         >
-                          {solution.is_default ? "Selected" : "Set as Default"}
+                          {solution.is_default
+                            ? "Selected"
+                            : requiresConstraintNarrowing
+                              ? "Select More Constraints First"
+                              : "Set as Default"}
                         </button>
                       </div>
                       <div className="mini-entry-list">

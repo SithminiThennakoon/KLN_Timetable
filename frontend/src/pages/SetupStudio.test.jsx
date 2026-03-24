@@ -1,1450 +1,810 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 
 import SetupStudio from "./SetupStudio";
 import { timetableStudioService } from "../services/timetableStudioService";
 
+const navigateMock = vi.fn();
+
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+  };
+});
+
 vi.mock("../services/timetableStudioService", () => ({
   timetableStudioService: {
-    getFullDataset: vi.fn(),
-    saveDataset: vi.fn(),
-    loadDemoDataset: vi.fn(),
+    getImportWorkspace: vi.fn(),
+    listImportFixtures: vi.fn(),
+    listImportRuns: vi.fn(),
+    listImportTemplates: vi.fn(),
+    downloadImportTemplate: vi.fn(),
+    downloadImportFixturePack: vi.fn(),
+    analyzeEnrollmentImport: vi.fn(),
+    previewEnrollmentImport: vi.fn(),
+    materializeEnrollmentImport: vi.fn(),
+    uploadModulesCsv: vi.fn(),
+    uploadRoomsCsv: vi.fn(),
+    uploadLecturersCsv: vi.fn(),
+    uploadSessionsCsv: vi.fn(),
+    uploadSessionLecturersCsv: vi.fn(),
+    importDemoBundle: vi.fn(),
+    seedRealisticSnapshotMissingData: vi.fn(),
+    createSnapshotLecturersBatch: vi.fn(),
+    createSnapshotRoomsBatch: vi.fn(),
+    createSnapshotSharedSessionsBatch: vi.fn(),
+    updateSnapshotSharedSession: vi.fn(),
   },
 }));
 
-function emptyDataset() {
+function renderSetupStudio() {
+  return render(
+    <MemoryRouter>
+      <SetupStudio />
+    </MemoryRouter>
+  );
+}
+
+function emptyWorkspace() {
   return {
-    degrees: [],
-    paths: [],
+    import_run_id: 77,
+    selected_academic_year: "2022/2023",
+    programmes: [],
+    programme_paths: [],
+    curriculum_modules: [],
+    attendance_groups: [],
     lecturers: [],
     rooms: [],
-    student_groups: [],
-    modules: [],
-    sessions: [],
+    shared_sessions: [],
   };
 }
 
 describe("SetupStudio", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    navigateMock.mockReset();
+    window.localStorage.clear();
+    timetableStudioService.listImportTemplates.mockResolvedValue({
+      templates: [],
+    });
+    timetableStudioService.listImportFixtures.mockResolvedValue({
+      packs: [],
+    });
+    timetableStudioService.listImportRuns.mockResolvedValue({
+      runs: [],
+    });
   });
 
-  it("shows operator guidance for the active setup step", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue(emptyDataset());
+  it("shows the minimal import-first setup flow before a CSV is chosen", async () => {
+    renderSetupStudio();
 
-    render(<SetupStudio />);
+    expect(await screen.findByText("Setup Studio")).toBeInTheDocument();
+    expect(screen.getByText("Import Files")).toBeInTheDocument();
+    expect(screen.getByText("What The System Understood")).toBeInTheDocument();
+    expect(screen.getByText("Missing For Generation")).toBeInTheDocument();
+    expect(screen.getByText("No CSV selected yet.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Analyze Import" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Continue to Generate" })).toBeDisabled();
+  });
 
+  it("opens a previous snapshot explicitly from utilities and allows generation when setup is ready", async () => {
+    timetableStudioService.listImportRuns.mockResolvedValue({
+      runs: [
+        {
+          import_run_id: 77,
+          source_file: "students_processed_TT_J.csv",
+          status: "materialized",
+          selected_academic_year: "2022/2023",
+        },
+      ],
+    });
+    timetableStudioService.getImportWorkspace.mockResolvedValue({
+      ...emptyWorkspace(),
+      programmes: [{ id: 1, code: "PS", name: "Physical Science", duration_years: 3 }],
+      lecturers: [{ id: 10, name: "Dr Silva", email: "silva@example.com", notes: null }],
+      rooms: [
+        {
+          id: 20,
+          name: "A7 301",
+          capacity: 120,
+          room_type: "lecture",
+          lab_type: null,
+          location: "A7",
+          year_restriction: null,
+          notes: null,
+        },
+      ],
+      attendance_groups: [
+        {
+          id: 30,
+          programme_id: 1,
+          programme_path_id: null,
+          academic_year: "2022/2023",
+          study_year: 1,
+          label: "PS Y1 General",
+          student_count: 80,
+        },
+      ],
+      curriculum_modules: [
+        {
+          id: 40,
+          code: "CHEM 11612",
+          name: "Foundations of Chemistry",
+          subject_name: "Chemistry",
+          nominal_year: 1,
+          semester_bucket: 1,
+          is_full_year: false,
+          attendance_group_ids: [30],
+        },
+      ],
+      shared_sessions: [
+        {
+          id: 50,
+          name: "Chemistry Lecture",
+          session_type: "lecture",
+          duration_minutes: 120,
+          occurrences_per_week: 1,
+          required_room_type: "lecture",
+          required_lab_type: null,
+          specific_room_id: 20,
+          max_students_per_group: null,
+          allow_parallel_rooms: false,
+          notes: null,
+          lecturer_ids: [10],
+          curriculum_module_ids: [40],
+          attendance_group_ids: [30],
+        },
+      ],
+    });
+
+    renderSetupStudio();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Utilities" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open" }));
+
+    expect(await screen.findByText(/Opened snapshot #77\./i)).toBeInTheDocument();
+    expect(screen.getByText("This snapshot is currently generation-ready.")).toBeInTheDocument();
+    const openGenerateButtons = screen.getAllByRole("button", { name: /generate/i });
+    expect(openGenerateButtons.length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Generate" }));
+
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenCalledWith("/generate");
+    });
+  });
+
+  it("analyzes, reviews, and materializes an enrollment CSV into the active snapshot flow", async () => {
+    timetableStudioService.analyzeEnrollmentImport.mockResolvedValue({
+      source_file: "students_processed_TT_J.csv",
+      summary: {
+        total_rows: 10,
+        unique_students: 3,
+      },
+      buckets: [
+        {
+          bucket_type: "year_code_mismatch",
+          bucket_key: "year=2|nominal_year=1",
+          description: "CSV Year 2 does not match nominal module year 1.",
+          row_count: 6,
+          status: "ambiguous",
+        },
+        {
+          bucket_type: "multi_year_module_code",
+          bucket_key: "course_code=CHEM 11612",
+          description: "The same module code appears with multiple CSV Year values and needs reviewed interpretation.",
+          row_count: 4,
+          status: "ambiguous",
+        },
+      ],
+    });
+    timetableStudioService.previewEnrollmentImport.mockResolvedValue({
+      projection_summary: {
+        projected_rows: 6,
+      },
+    });
+    timetableStudioService.materializeEnrollmentImport.mockResolvedValue({
+      import_run_id: 88,
+      counts: {
+        programmes: 1,
+        attendance_groups: 2,
+      },
+      workspace: {
+        ...emptyWorkspace(),
+        import_run_id: 88,
+      },
+    });
+
+    renderSetupStudio();
+
+    const fileInput = screen.getAllByLabelText("Import CSV")[0];
+    const file = new File(["CoursePathNo,CourseCode\n1,CHEM 11612\n"], "student_enrollments.csv", {
+      type: "text/csv",
+    });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "Analyze Import" }));
+
+    expect(await screen.findByText(/CSV Year 2 does not match nominal module year 1\./i)).toBeInTheDocument();
+    expect(screen.getByText("Needs Review")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Default review action" }), {
+      target: { value: "exclude" },
+    });
+    fireEvent.change(
+      screen.getByRole("combobox", {
+        name: "Decision for CSV Year 2 does not match nominal module year 1.",
+      }),
+      {
+        target: { value: "accept_exception" },
+      }
+    );
+    expect(screen.getByText(/Page 1 of 1/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Search review buckets" }), {
+      target: { value: "multiple CSV Year values" },
+    });
     expect(
-      await screen.findByText(/Start by defining each degree and any allowed year-specific paths/i)
+      screen.getByText(/The same module code appears with multiple CSV Year values/i)
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Search review buckets" }), {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Review Import" }));
+
+    expect(await screen.findByText(/Review result:/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Use This Import" }));
+
+      await waitFor(() => {
+        expect(timetableStudioService.previewEnrollmentImport).toHaveBeenCalledWith(
+          {
+            rules: [
+              expect.objectContaining({
+                bucket_type: "year_code_mismatch",
+                bucket_key: "year=2|nominal_year=1",
+                action: "accept_exception",
+              }),
+              expect.objectContaining({
+                bucket_type: "multi_year_module_code",
+                bucket_key: "course_code=CHEM 11612",
+                action: "exclude",
+              }),
+            ],
+          },
+          file
+        );
+      expect(timetableStudioService.materializeEnrollmentImport).toHaveBeenCalledTimes(1);
+      expect(timetableStudioService.materializeEnrollmentImport).toHaveBeenCalledWith(
+        {
+          rules: [
+            expect.objectContaining({
+              bucket_type: "year_code_mismatch",
+              bucket_key: "year=2|nominal_year=1",
+              action: "accept_exception",
+            }),
+            expect.objectContaining({
+              bucket_type: "multi_year_module_code",
+              bucket_key: "course_code=CHEM 11612",
+              action: "exclude",
+            }),
+          ],
+        },
+        file
+      );
+      expect(timetableStudioService.analyzeEnrollmentImport).toHaveBeenCalledWith(file);
+      expect(timetableStudioService.getImportWorkspace).not.toHaveBeenCalled();
+    });
+    expect(
+      await screen.findByText(/The CSV import has been materialized into snapshot #88\./i)
     ).toBeInTheDocument();
   });
 
-  it("shows current step checks before the review step", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue(emptyDataset());
+  it("shows a blocking materialization overlay while using the enrollment import", async () => {
+    timetableStudioService.analyzeEnrollmentImport.mockResolvedValue({
+      source_file: "students_processed_TT_J.csv",
+      summary: {
+        total_rows: 2,
+        unique_students: 1,
+      },
+      buckets: [],
+    });
 
-    render(<SetupStudio />);
+    let resolveMaterialize;
+    timetableStudioService.materializeEnrollmentImport.mockReturnValue(
+      new Promise((resolve) => {
+        resolveMaterialize = resolve;
+      })
+    );
 
-    expect(await screen.findByText("Current Step Checks")).toBeInTheDocument();
-    expect(screen.getByText(/Add at least one degree before continuing/i)).toBeInTheDocument();
+    renderSetupStudio();
+
+    const fileInput = screen.getAllByLabelText("Import CSV")[0];
+    const file = new File(["CoursePathNo,CourseCode\n1,CHEM 11612\n"], "student_enrollments.csv", {
+      type: "text/csv",
+    });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "Analyze Import" }));
+
+    await screen.findByText("Needs Review");
+    fireEvent.click(screen.getByRole("button", { name: "Use This Import" }));
+
+    expect(await screen.findByText("Working on your import")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Materializing the enrollment import into a working snapshot/i)
+    ).toBeInTheDocument();
+
+    resolveMaterialize({
+      import_run_id: 91,
+      counts: {
+        programmes: 1,
+        attendance_groups: 1,
+      },
+      workspace: {
+        ...emptyWorkspace(),
+        import_run_id: 91,
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Working on your import")).not.toBeInTheDocument();
+    });
   });
 
-  it("adds lecturer templates without duplicating existing names", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue({
-      ...emptyDataset(),
-      degrees: [
+  it("shows a blocking overlay while analyzing the enrollment CSV", async () => {
+    let resolveAnalyze;
+    timetableStudioService.analyzeEnrollmentImport.mockReturnValue(
+      new Promise((resolve) => {
+        resolveAnalyze = resolve;
+      })
+    );
+
+    renderSetupStudio();
+
+    const fileInput = screen.getAllByLabelText("Import CSV")[0];
+    const file = new File(["CoursePathNo,CourseCode\n1,CHEM 11612\n"], "student_enrollments.csv", {
+      type: "text/csv",
+    });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "Analyze Import" }));
+
+    expect(await screen.findByText("Working on your import")).toBeInTheDocument();
+    expect(screen.getByText(/Analyzing the enrollment CSV/i)).toBeInTheDocument();
+
+    resolveAnalyze({
+      source_file: "students_processed_TT_J.csv",
+      summary: {
+        total_rows: 2,
+        unique_students: 1,
+      },
+      buckets: [],
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Working on your import")).not.toBeInTheDocument();
+    });
+  });
+
+  it("shows a blocking overlay while reviewing the enrollment import", async () => {
+    timetableStudioService.analyzeEnrollmentImport.mockResolvedValue({
+      source_file: "students_processed_TT_J.csv",
+      summary: {
+        total_rows: 2,
+        unique_students: 1,
+      },
+      buckets: [],
+    });
+
+    let resolveReview;
+    timetableStudioService.previewEnrollmentImport.mockReturnValue(
+      new Promise((resolve) => {
+        resolveReview = resolve;
+      })
+    );
+
+    renderSetupStudio();
+
+    const fileInput = screen.getAllByLabelText("Import CSV")[0];
+    const file = new File(["CoursePathNo,CourseCode\n1,CHEM 11612\n"], "student_enrollments.csv", {
+      type: "text/csv",
+    });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "Analyze Import" }));
+    await screen.findByText("Needs Review");
+
+    fireEvent.click(screen.getByRole("button", { name: "Review Import" }));
+
+    expect(await screen.findByText("Working on your import")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Reviewing the enrollment CSV decisions and building the projection/i)
+    ).toBeInTheDocument();
+
+    resolveReview({
+      projection_summary: {
+        projected_rows: 2,
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Working on your import")).not.toBeInTheDocument();
+    });
+  });
+
+  it("opens a targeted repair flow for sessions missing lecturer links", async () => {
+    timetableStudioService.listImportRuns.mockResolvedValue({
+      runs: [
         {
-          client_key: "degree_ps",
-          code: "PS",
-          name: "Physical Science",
-          duration_years: 1,
-          intake_label: "PS Intake",
-        },
-      ],
-      lecturers: [
-        {
-          client_key: "lect_existing",
-          name: "Dr. Perera",
-          email: "existing@science.kln.ac.lk",
+          import_run_id: 77,
+          source_file: "students_processed_TT_J.csv",
+          status: "materialized",
+          selected_academic_year: "2022/2023",
         },
       ],
     });
-
-    render(<SetupStudio />);
-
-    await screen.findByDisplayValue("PS");
-    fireEvent.click(screen.getByRole("button", { name: "2. Lecturers" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add Lecturer Templates" }));
-
-    expect(screen.getAllByDisplayValue("Dr. Perera")).toHaveLength(1);
-    expect(screen.getAllByDisplayValue("Dr. Silva")).toHaveLength(1);
-    expect(screen.getAllByDisplayValue("Prof. Fernando")).toHaveLength(1);
-    expect(screen.getAllByDisplayValue("Ms. Jayasinghe")).toHaveLength(1);
-  });
-
-  it("shows inline validation for invalid room capacity on the rooms step", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue({
-      ...emptyDataset(),
-      degrees: [
-        {
-          client_key: "degree_ps",
-          code: "PS",
-          name: "Physical Science",
-          duration_years: 1,
-          intake_label: "PS Intake",
-        },
-      ],
-    });
-
-    render(<SetupStudio />);
-
-    await screen.findByDisplayValue("PS");
-    fireEvent.click(screen.getByRole("button", { name: "3. Rooms" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add Room" }));
-
-    const roomEditor = screen.getByText("Capacity").closest("label");
-    const capacityInput = within(roomEditor).getByRole("spinbutton");
-    fireEvent.change(capacityInput, { target: { value: "0" } });
-    fireEvent.blur(capacityInput);
-
-    expect(await screen.findAllByText(/Room 1 needs a positive capacity/i)).not.toHaveLength(0);
-    expect(capacityInput.className).toContain("field-invalid");
-  });
-
-  it("adds room template batches without duplicating existing template rooms", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue({
-      ...emptyDataset(),
-      degrees: [
-        {
-          client_key: "degree_ps",
-          code: "PS",
-          name: "Physical Science",
-          duration_years: 1,
-          intake_label: "PS Intake",
-        },
-      ],
+    timetableStudioService.getImportWorkspace.mockResolvedValueOnce({
+      ...emptyWorkspace(),
+      import_run_id: 77,
+      lecturers: [{ id: 10, name: "Dr Silva", email: "silva@example.com", notes: null }],
       rooms: [
         {
-          client_key: "room_existing",
-          name: "A7 Hall 1",
-          capacity: 180,
-          room_type: "lecture",
-          lab_type: null,
-          location: "A7 Building",
-          year_restriction: null,
-        },
-      ],
-    });
-
-    render(<SetupStudio />);
-
-    await screen.findByDisplayValue("PS");
-    fireEvent.click(screen.getByRole("button", { name: "3. Rooms" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add Lecture Hall Templates" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add Lab Templates" }));
-
-    expect(screen.getAllByDisplayValue("A7 Hall 1")).toHaveLength(1);
-    expect(screen.getAllByDisplayValue("A7 Hall 2")).toHaveLength(1);
-    expect(screen.getAllByDisplayValue("Physics Lab 1")).toHaveLength(1);
-    expect(screen.getAllByDisplayValue("Chemistry Lab 1")).toHaveLength(1);
-  });
-
-  it("shows inline validation for incomplete degree details on the structure step", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue({
-      ...emptyDataset(),
-      degrees: [
-        {
-          client_key: "degree_ps",
-          code: "",
-          name: "Physical Science",
-          duration_years: 1,
-          intake_label: "",
-        },
-      ],
-    });
-
-    render(<SetupStudio />);
-
-    const codeLabel = (await screen.findByText("Code")).closest("label");
-    const codeInput = within(codeLabel).getByRole("textbox");
-    fireEvent.blur(codeInput);
-
-    expect(await screen.findAllByText(/Degree 1 is missing code, name, or intake label/i)).not.toHaveLength(0);
-    expect(codeInput.className).toContain("field-invalid");
-  });
-
-  it("loads science structure templates without duplicating existing degree codes", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue({
-      ...emptyDataset(),
-      degrees: [
-        {
-          client_key: "degree_ps",
-          code: "PS",
-          name: "Physical Science",
-          duration_years: 3,
-          intake_label: "Existing PS Intake",
-        },
-      ],
-    });
-
-    render(<SetupStudio />);
-
-    await screen.findByDisplayValue("PS");
-    fireEvent.click(screen.getByRole("button", { name: "Load Science Structure Templates" }));
-
-    const degreesSection = screen.getByText("Degrees").closest("section");
-    const pathsSection = screen.getByText("Paths").closest("section");
-
-    expect(within(degreesSection).getAllByDisplayValue("PS")).toHaveLength(1);
-    expect(within(degreesSection).getAllByDisplayValue("BS")).toHaveLength(1);
-    expect(within(degreesSection).getAllByDisplayValue("ENCM")).toHaveLength(1);
-    expect(within(degreesSection).getAllByDisplayValue("AC")).toHaveLength(1);
-    expect(within(degreesSection).getAllByDisplayValue("ECS")).toHaveLength(1);
-    expect(within(degreesSection).getAllByDisplayValue("PE")).toHaveLength(1);
-    expect(within(pathsSection).getAllByDisplayValue("PHY-CHEM-MATH")).toHaveLength(1);
-  });
-
-  it("shows inline validation for incomplete session identity on the sessions step", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue({
-      ...emptyDataset(),
-      degrees: [
-        {
-          client_key: "degree_ps",
-          code: "PS",
-          name: "Physical Science",
-          duration_years: 1,
-          intake_label: "PS Intake",
-        },
-      ],
-      rooms: [
-        {
-          client_key: "room_1",
-          name: "Room 1",
+          id: 20,
+          name: "A7 301",
           capacity: 120,
           room_type: "lecture",
           lab_type: null,
-          location: "Science Block",
+          location: "A7",
           year_restriction: null,
+          notes: null,
         },
       ],
-      student_groups: [
+      attendance_groups: [
         {
-          client_key: "group_main",
-          degree_client_key: "degree_ps",
-          path_client_key: null,
-          year: 1,
-          name: "PS Y1 General",
-          size: 80,
+          id: 30,
+          programme_id: 1,
+          programme_path_id: null,
+          academic_year: "2022/2023",
+          study_year: 1,
+          label: "PS Y1 General",
+          student_count: 80,
         },
       ],
-      modules: [
+      curriculum_modules: [
         {
-          client_key: "mod_1",
-          code: "CHEM101",
+          id: 40,
+          code: "CHEM 11612",
           name: "Foundations of Chemistry",
           subject_name: "Chemistry",
-          year: 1,
-          semester: 1,
+          nominal_year: 1,
+          semester_bucket: 1,
           is_full_year: false,
+          attendance_group_ids: [30],
         },
       ],
-      sessions: [
+      shared_sessions: [
         {
-          client_key: "sess_1",
-          module_client_key: "mod_1",
-          name: "",
-          session_type: "",
-          duration_minutes: 60,
-          occurrences_per_week: 1,
-          required_room_type: "lecture",
-          required_lab_type: null,
-          specific_room_client_key: null,
-          max_students_per_group: null,
-          allow_parallel_rooms: false,
-          notes: null,
-          lecturer_client_keys: [],
-          student_group_client_keys: [],
-        },
-      ],
-    });
-
-    render(<SetupStudio />);
-
-    await screen.findByDisplayValue("PS");
-    fireEvent.click(screen.getByRole("button", { name: "6. Sessions" }));
-
-    expect(await screen.findAllByText(/Session 1 is missing module, name, or type/i)).not.toHaveLength(0);
-    const sessionNameLabel = screen.getByText("Name").closest("label");
-    const sessionNameInput = within(sessionNameLabel).getByRole("textbox");
-    fireEvent.blur(sessionNameInput);
-    expect(sessionNameInput.className).toContain("field-invalid");
-  });
-
-  it("shows inline validation for invalid override groups on the cohorts step", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue({
-      ...emptyDataset(),
-      degrees: [
-        {
-          client_key: "degree_ps",
-          code: "PS",
-          name: "Physical Science",
-          duration_years: 1,
-          intake_label: "PS Intake",
-        },
-      ],
-      student_groups: [
-        {
-          client_key: "group_base",
-          degree_client_key: "degree_ps",
-          path_client_key: null,
-          year: 1,
-          name: "PS Y1 General",
-          size: 80,
-        },
-        {
-          client_key: "group_override",
-          degree_client_key: "degree_ps",
-          path_client_key: null,
-          year: 1,
-          name: "",
-          size: 0,
-        },
-      ],
-    });
-
-    render(<SetupStudio />);
-
-    await screen.findByDisplayValue("PS");
-    fireEvent.click(screen.getByRole("button", { name: "4. Student Cohorts" }));
-
-    expect(await screen.findAllByText(/Override group 1 is missing degree or name/i)).not.toHaveLength(0);
-    expect(await screen.findAllByText(/Override group 1 needs a positive student count/i)).not.toHaveLength(0);
-
-    const overrideNameLabel = screen.getByText("Override group name").closest("label");
-    const overrideNameInput = within(overrideNameLabel).getByRole("textbox");
-    fireEvent.blur(overrideNameInput);
-    expect(overrideNameInput.className).toContain("field-invalid");
-  });
-
-  it("shows lab duration validation that matches the solver", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue({
-      ...emptyDataset(),
-      degrees: [
-        {
-          client_key: "degree_ps",
-          code: "PS",
-          name: "Physical Science",
-          duration_years: 1,
-          intake_label: "PS Intake",
-        },
-      ],
-      rooms: [
-        {
-          client_key: "room_lab_1",
-          name: "Physics Lab 1",
-          capacity: 40,
-          room_type: "lab",
-          lab_type: "physics",
-          location: "Science Block",
-          year_restriction: null,
-        },
-      ],
-      student_groups: [
-        {
-          client_key: "group_main",
-          degree_client_key: "degree_ps",
-          path_client_key: null,
-          year: 1,
-          name: "PS Y1 General",
-          size: 30,
-        },
-      ],
-      modules: [
-        {
-          client_key: "mod_1",
-          code: "PHYS101",
-          name: "Physics Laboratory",
-          subject_name: "Physics",
-          year: 1,
-          semester: 1,
-          is_full_year: false,
-        },
-      ],
-      sessions: [
-        {
-          client_key: "sess_1",
-          module_client_key: "mod_1",
-          name: "Physics Lab",
-          session_type: "lab",
-          duration_minutes: 120,
-          occurrences_per_week: 1,
-          required_room_type: "lab",
-          required_lab_type: "physics",
-          specific_room_client_key: null,
-          max_students_per_group: null,
-          allow_parallel_rooms: false,
-          notes: null,
-          lecturer_client_keys: [],
-          student_group_client_keys: ["group_main"],
-        },
-      ],
-    });
-
-    render(<SetupStudio />);
-
-    await screen.findByDisplayValue("PS");
-    fireEvent.click(screen.getByRole("button", { name: "6. Sessions" }));
-
-    expect(await screen.findAllByText(/Session 1 is treated as a lab and must be 180 minutes/i)).not.toHaveLength(0);
-  });
-
-  it("matches the backend occurrence cap on the sessions step", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue({
-      ...emptyDataset(),
-      degrees: [
-        {
-          client_key: "degree_ps",
-          code: "PS",
-          name: "Physical Science",
-          duration_years: 1,
-          intake_label: "PS Intake",
-        },
-      ],
-      rooms: [
-        {
-          client_key: "room_1",
-          name: "Room 1",
-          capacity: 120,
-          room_type: "lecture",
-          lab_type: null,
-          location: "Science Block",
-          year_restriction: null,
-        },
-      ],
-      student_groups: [
-        {
-          client_key: "group_main",
-          degree_client_key: "degree_ps",
-          path_client_key: null,
-          year: 1,
-          name: "PS Y1 General",
-          size: 80,
-        },
-      ],
-      modules: [
-        {
-          client_key: "mod_1",
-          code: "CHEM101",
-          name: "Foundations of Chemistry",
-          subject_name: "Chemistry",
-          year: 1,
-          semester: 1,
-          is_full_year: false,
-        },
-      ],
-      sessions: [
-        {
-          client_key: "sess_1",
-          module_client_key: "mod_1",
+          id: 50,
           name: "Chemistry Lecture",
           session_type: "lecture",
-          duration_minutes: 60,
-          occurrences_per_week: 11,
+          duration_minutes: 120,
+          occurrences_per_week: 1,
           required_room_type: "lecture",
           required_lab_type: null,
-          specific_room_client_key: null,
+          specific_room_id: 20,
           max_students_per_group: null,
           allow_parallel_rooms: false,
           notes: null,
-          lecturer_client_keys: [],
-          student_group_client_keys: ["group_main"],
+          lecturer_ids: [],
+          curriculum_module_ids: [40],
+          attendance_group_ids: [30],
         },
       ],
+      readiness: {
+        ready: false,
+        import_needed: [],
+        repair_needed: [
+          {
+            key: "sessions-missing-lecturers",
+            title: "Sessions missing lecturers",
+            detail: "1 session still need lecturers.",
+            action: "Repair lecturers",
+            form: "lecturer",
+          },
+        ],
+        warnings: [],
+      },
     });
-
-    render(<SetupStudio />);
-
-    await screen.findByDisplayValue("PS");
-    fireEvent.click(screen.getByRole("button", { name: "6. Sessions" }));
-
-    expect(await screen.findAllByText(/Session 1 weekly occurrence count must be between 1 and 10/i)).not.toHaveLength(0);
-  });
-
-  it("makes it explicit that room year restriction is not enforced by the solver", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue({
-      ...emptyDataset(),
-      degrees: [
-        {
-          client_key: "degree_ps",
-          code: "PS",
-          name: "Physical Science",
-          duration_years: 1,
-          intake_label: "PS Intake",
-        },
-      ],
+    timetableStudioService.getImportWorkspace.mockResolvedValueOnce({
+      ...emptyWorkspace(),
+      import_run_id: 77,
+      lecturers: [{ id: 10, name: "Dr Silva", email: "silva@example.com", notes: null }],
       rooms: [
         {
-          client_key: "room_1",
-          name: "Room 1",
+          id: 20,
+          name: "A7 301",
           capacity: 120,
           room_type: "lecture",
           lab_type: null,
-          location: "Science Block",
-          year_restriction: 1,
-        },
-      ],
-    });
-
-    render(<SetupStudio />);
-
-    await screen.findByDisplayValue("PS");
-    fireEvent.click(screen.getByRole("button", { name: "3. Rooms" }));
-
-    expect(
-      await screen.findAllByText(/stored with the dataset, but not currently enforced during timetable generation/i)
-    ).not.toHaveLength(0);
-  });
-
-  it("warns when a lab session has no lab type", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue({
-      ...emptyDataset(),
-      degrees: [
-        {
-          client_key: "degree_ps",
-          code: "PS",
-          name: "Physical Science",
-          duration_years: 1,
-          intake_label: "PS Intake",
-        },
-      ],
-      rooms: [
-        {
-          client_key: "room_lab_1",
-          name: "Physics Lab 1",
-          capacity: 40,
-          room_type: "lab",
-          lab_type: "physics",
-          location: "Science Block",
+          location: "A7",
           year_restriction: null,
-        },
-      ],
-      student_groups: [
-        {
-          client_key: "group_main",
-          degree_client_key: "degree_ps",
-          path_client_key: null,
-          year: 1,
-          name: "PS Y1 General",
-          size: 30,
-        },
-      ],
-      modules: [
-        {
-          client_key: "mod_1",
-          code: "PHYS101",
-          name: "Physics Laboratory",
-          subject_name: "Physics",
-          year: 1,
-          semester: 1,
-          is_full_year: false,
-        },
-      ],
-      sessions: [
-        {
-          client_key: "sess_1",
-          module_client_key: "mod_1",
-          name: "Physics Lab",
-          session_type: "lab",
-          duration_minutes: 180,
-          occurrences_per_week: 1,
-          required_room_type: "lab",
-          required_lab_type: null,
-          specific_room_client_key: null,
-          max_students_per_group: null,
-          allow_parallel_rooms: false,
           notes: null,
-          lecturer_client_keys: [],
-          student_group_client_keys: ["group_main"],
         },
       ],
-    });
-
-    render(<SetupStudio />);
-
-    await screen.findByDisplayValue("PS");
-    fireEvent.click(screen.getByRole("button", { name: "6. Sessions" }));
-
-    expect(
-      await screen.findAllByText(/uses room type lab but has no lab type, so it may match the wrong lab pool/i)
-    ).not.toHaveLength(0);
-  });
-
-  it("blocks sessions that pin a room with mismatched room type", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue({
-      ...emptyDataset(),
-      degrees: [
+      attendance_groups: [
         {
-          client_key: "degree_ps",
-          code: "PS",
-          name: "Physical Science",
-          duration_years: 1,
-          intake_label: "PS Intake",
+          id: 30,
+          programme_id: 1,
+          programme_path_id: null,
+          academic_year: "2022/2023",
+          study_year: 1,
+          label: "PS Y1 General",
+          student_count: 80,
         },
       ],
-      rooms: [
+      curriculum_modules: [
         {
-          client_key: "room_1",
-          name: "Room 1",
-          capacity: 120,
-          room_type: "lecture",
-          lab_type: null,
-          location: "Science Block",
-          year_restriction: null,
-        },
-      ],
-      student_groups: [
-        {
-          client_key: "group_main",
-          degree_client_key: "degree_ps",
-          path_client_key: null,
-          year: 1,
-          name: "PS Y1 General",
-          size: 80,
-        },
-      ],
-      modules: [
-        {
-          client_key: "mod_1",
-          code: "CHEM101",
+          id: 40,
+          code: "CHEM 11612",
           name: "Foundations of Chemistry",
           subject_name: "Chemistry",
-          year: 1,
-          semester: 1,
+          nominal_year: 1,
+          semester_bucket: 1,
           is_full_year: false,
+          attendance_group_ids: [30],
         },
       ],
-      sessions: [
+      shared_sessions: [
         {
-          client_key: "sess_1",
-          module_client_key: "mod_1",
-          name: "Chemistry Lab",
+          id: 50,
+          name: "Chemistry Lecture",
+          session_type: "lecture",
+          duration_minutes: 120,
+          occurrences_per_week: 1,
+          required_room_type: "lecture",
+          required_lab_type: null,
+          specific_room_id: 20,
+          max_students_per_group: null,
+          allow_parallel_rooms: false,
+          notes: null,
+          lecturer_ids: [10],
+          curriculum_module_ids: [40],
+          attendance_group_ids: [30],
+        },
+      ],
+      readiness: { ready: true, import_needed: [], repair_needed: [], warnings: [] },
+    });
+
+    renderSetupStudio();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Utilities" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Repair Session" }));
+
+    expect(await screen.findByText(/Repairing shared session: Chemistry Lecture\./i)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Dr Silva"));
+    fireEvent.click(screen.getByRole("button", { name: "Save Shared Session Repair" }));
+
+    await waitFor(() => {
+      expect(timetableStudioService.updateSnapshotSharedSession).toHaveBeenCalledWith(
+        77,
+        50,
+        expect.objectContaining({
+          name: "Chemistry Lecture",
+          lecturer_ids: [10],
+          curriculum_module_ids: [40],
+          attendance_group_ids: [30],
+        })
+      );
+    });
+    expect(await screen.findByText(/Shared session repaired in the current snapshot\./i)).toBeInTheDocument();
+  });
+
+  it("lists room-related session blockers in the targeted repair queue", async () => {
+    timetableStudioService.listImportRuns.mockResolvedValue({
+      runs: [
+        {
+          import_run_id: 77,
+          source_file: "students_processed_TT_J.csv",
+          status: "materialized",
+          selected_academic_year: "2022/2023",
+        },
+      ],
+    });
+    timetableStudioService.getImportWorkspace.mockResolvedValue({
+      ...emptyWorkspace(),
+      import_run_id: 77,
+      lecturers: [{ id: 10, name: "Dr Silva", email: "silva@example.com", notes: null }],
+      rooms: [
+        {
+          id: 20,
+          name: "Tiny Lab",
+          capacity: 20,
+          room_type: "lab",
+          lab_type: "chemistry",
+          location: "A7",
+          year_restriction: null,
+          notes: null,
+        },
+      ],
+      attendance_groups: [
+        {
+          id: 30,
+          programme_id: 1,
+          programme_path_id: null,
+          academic_year: "2022/2023",
+          study_year: 1,
+          label: "PS Y1 General",
+          student_count: 80,
+        },
+      ],
+      curriculum_modules: [
+        {
+          id: 40,
+          code: "CHEM 11612",
+          name: "Foundations of Chemistry",
+          subject_name: "Chemistry",
+          nominal_year: 1,
+          semester_bucket: 1,
+          is_full_year: false,
+          attendance_group_ids: [30],
+        },
+      ],
+      shared_sessions: [
+        {
+          id: 50,
+          name: "Chemistry Practical",
           session_type: "lab",
           duration_minutes: 180,
           occurrences_per_week: 1,
           required_room_type: "lab",
           required_lab_type: "chemistry",
-          specific_room_client_key: "room_1",
-          max_students_per_group: 40,
-          allow_parallel_rooms: false,
-          notes: null,
-          lecturer_client_keys: [],
-          student_group_client_keys: ["group_main"],
-        },
-      ],
-    });
-
-    render(<SetupStudio />);
-
-    await screen.findByDisplayValue("PS");
-    fireEvent.click(screen.getByRole("button", { name: "6. Sessions" }));
-
-    expect(
-      await screen.findAllByText(/pins room "Room 1" but its room type does not match the selected requirement/i)
-    ).not.toHaveLength(0);
-  });
-
-  it("blocks sessions that exceed every matching room capacity without a split limit", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue({
-      ...emptyDataset(),
-      degrees: [
-        {
-          client_key: "degree_ps",
-          code: "PS",
-          name: "Physical Science",
-          duration_years: 1,
-          intake_label: "PS Intake",
-        },
-      ],
-      rooms: [
-        {
-          client_key: "room_lab_1",
-          name: "Physics Lab 1",
-          capacity: 25,
-          room_type: "lab",
-          lab_type: "physics",
-          location: "Science Block",
-          year_restriction: null,
-        },
-      ],
-      student_groups: [
-        {
-          client_key: "group_main",
-          degree_client_key: "degree_ps",
-          path_client_key: null,
-          year: 1,
-          name: "PS Y1 General",
-          size: 30,
-        },
-      ],
-      modules: [
-        {
-          client_key: "mod_1",
-          code: "PHYS101",
-          name: "Physics Laboratory",
-          subject_name: "Physics",
-          year: 1,
-          semester: 1,
-          is_full_year: false,
-        },
-      ],
-      sessions: [
-        {
-          client_key: "sess_1",
-          module_client_key: "mod_1",
-          name: "Physics Lab",
-          session_type: "lab",
-          duration_minutes: 180,
-          occurrences_per_week: 1,
-          required_room_type: "lab",
-          required_lab_type: "physics",
-          specific_room_client_key: null,
+          specific_room_id: 20,
           max_students_per_group: null,
           allow_parallel_rooms: false,
           notes: null,
-          lecturer_client_keys: [],
-          student_group_client_keys: ["group_main"],
+          lecturer_ids: [10],
+          curriculum_module_ids: [40],
+          attendance_group_ids: [30],
         },
       ],
-    });
-
-    render(<SetupStudio />);
-
-    await screen.findByDisplayValue("PS");
-    fireEvent.click(screen.getByRole("button", { name: "6. Sessions" }));
-
-    expect(
-      await screen.findAllByText(/exceeds every matching room capacity for 30 students, so add a split limit or expand the room pool/i)
-    ).not.toHaveLength(0);
-  });
-
-  it("duplicates a session with its key settings and links", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue({
-      ...emptyDataset(),
-      degrees: [
-        {
-          client_key: "degree_ps",
-          code: "PS",
-          name: "Physical Science",
-          duration_years: 1,
-          intake_label: "PS Intake",
-        },
-      ],
-      rooms: [
-        {
-          client_key: "room_1",
-          name: "Room 1",
-          capacity: 120,
-          room_type: "lecture",
-          lab_type: null,
-          location: "Science Block",
-          year_restriction: null,
-        },
-      ],
-      student_groups: [
-        {
-          client_key: "group_main",
-          degree_client_key: "degree_ps",
-          path_client_key: null,
-          year: 1,
-          name: "PS Y1 General",
-          size: 80,
-        },
-      ],
-      lecturers: [
-        {
-          client_key: "lect_1",
-          name: "Lecturer 1",
-          email: "lect1@example.com",
-        },
-      ],
-      modules: [
-        {
-          client_key: "mod_1",
-          code: "CHEM101",
-          name: "Foundations of Chemistry",
-          subject_name: "Chemistry",
-          year: 1,
-          semester: 1,
-          is_full_year: false,
-        },
-      ],
-      sessions: [
-        {
-          client_key: "sess_1",
-          module_client_key: "mod_1",
-          name: "Chemistry Lecture",
-          session_type: "lecture",
-          duration_minutes: 60,
-          occurrences_per_week: 1,
-          required_room_type: "lecture",
-          required_lab_type: null,
-          specific_room_client_key: null,
-          max_students_per_group: null,
-          allow_parallel_rooms: false,
-          notes: null,
-          lecturer_client_keys: ["lect_1"],
-          student_group_client_keys: ["group_main"],
-        },
-      ],
-    });
-
-    render(<SetupStudio />);
-
-    await screen.findByDisplayValue("PS");
-    fireEvent.click(screen.getByRole("button", { name: "6. Sessions" }));
-    fireEvent.click(screen.getByRole("button", { name: "Duplicate Session" }));
-
-    expect(screen.getAllByDisplayValue("Chemistry Lecture")).toHaveLength(2);
-    expect(screen.getAllByDisplayValue("60")).toHaveLength(2);
-    expect(screen.getAllByLabelText("Type").map((element) => element.value)).toEqual(["lecture", "lecture"]);
-    expect(screen.getAllByText("Lecturer 1")).not.toHaveLength(0);
-    expect(screen.getAllByText("PS Y1 General")).not.toHaveLength(0);
-  });
-
-  it("creates override templates from existing base cohorts", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue({
-      ...emptyDataset(),
-      degrees: [
-        {
-          client_key: "degree_ps",
-          code: "PS",
-          name: "Physical Science",
-          duration_years: 1,
-          intake_label: "PS Intake",
-        },
-      ],
-      student_groups: [
-        {
-          client_key: "group_base",
-          degree_client_key: "degree_ps",
-          path_client_key: null,
-          year: 1,
-          name: "PS Y1 General",
-          size: 80,
-        },
-      ],
-    });
-
-    render(<SetupStudio />);
-
-    await screen.findByDisplayValue("PS");
-    fireEvent.click(screen.getByRole("button", { name: "4. Student Cohorts" }));
-    fireEvent.click(screen.getByRole("button", { name: "Create Override Templates" }));
-
-    expect(screen.getAllByDisplayValue("PS Y1 General Override")).toHaveLength(1);
-    expect(screen.getAllByText("PS").length).toBeGreaterThan(0);
-  });
-
-  it("creates starter sessions only for modules that do not already have one", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue({
-      ...emptyDataset(),
-      degrees: [
-        {
-          client_key: "degree_ps",
-          code: "PS",
-          name: "Physical Science",
-          duration_years: 1,
-          intake_label: "PS Intake",
-        },
-      ],
-      rooms: [
-        {
-          client_key: "room_1",
-          name: "Room 1",
-          capacity: 120,
-          room_type: "lecture",
-          lab_type: null,
-          location: "Science Block",
-          year_restriction: null,
-        },
-      ],
-      student_groups: [
-        {
-          client_key: "group_main",
-          degree_client_key: "degree_ps",
-          path_client_key: null,
-          year: 1,
-          name: "PS Y1 General",
-          size: 80,
-        },
-      ],
-      modules: [
-        {
-          client_key: "mod_1",
-          code: "CHEM101",
-          name: "Foundations of Chemistry",
-          subject_name: "Chemistry",
-          year: 1,
-          semester: 1,
-          is_full_year: false,
-        },
-        {
-          client_key: "mod_2",
-          code: "PHYS101",
-          name: "Mechanics",
-          subject_name: "Physics",
-          year: 1,
-          semester: 1,
-          is_full_year: false,
-        },
-      ],
-      sessions: [
-        {
-          client_key: "sess_1",
-          module_client_key: "mod_1",
-          name: "Chemistry Lecture",
-          session_type: "lecture",
-          duration_minutes: 60,
-          occurrences_per_week: 1,
-          required_room_type: "lecture",
-          required_lab_type: null,
-          specific_room_client_key: null,
-          max_students_per_group: null,
-          allow_parallel_rooms: false,
-          notes: null,
-          lecturer_client_keys: [],
-          student_group_client_keys: [],
-        },
-      ],
-    });
-
-    render(<SetupStudio />);
-
-    await screen.findByDisplayValue("PS");
-    fireEvent.click(screen.getByRole("button", { name: "6. Sessions" }));
-    fireEvent.click(screen.getByRole("button", { name: "Create Starter Sessions" }));
-
-    expect(screen.getAllByDisplayValue("Chemistry Lecture")).toHaveLength(1);
-    expect(screen.getAllByDisplayValue("Mechanics Session")).toHaveLength(1);
-  });
-
-  it("creates a lecture and tutorial set only for modules without existing sessions", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue({
-      ...emptyDataset(),
-      degrees: [
-        {
-          client_key: "degree_ps",
-          code: "PS",
-          name: "Physical Science",
-          duration_years: 1,
-          intake_label: "PS Intake",
-        },
-      ],
-      rooms: [
-        {
-          client_key: "room_1",
-          name: "Room 1",
-          capacity: 120,
-          room_type: "lecture",
-          lab_type: null,
-          location: "Science Block",
-          year_restriction: null,
-        },
-      ],
-      student_groups: [
-        {
-          client_key: "group_main",
-          degree_client_key: "degree_ps",
-          path_client_key: null,
-          year: 1,
-          name: "PS Y1 General",
-          size: 80,
-        },
-      ],
-      modules: [
-        {
-          client_key: "mod_1",
-          code: "CHEM101",
-          name: "Foundations of Chemistry",
-          subject_name: "Chemistry",
-          year: 1,
-          semester: 1,
-          is_full_year: false,
-        },
-        {
-          client_key: "mod_2",
-          code: "PHYS101",
-          name: "Mechanics",
-          subject_name: "Physics",
-          year: 1,
-          semester: 1,
-          is_full_year: false,
-        },
-      ],
-      sessions: [
-        {
-          client_key: "sess_1",
-          module_client_key: "mod_1",
-          name: "Foundations of Chemistry Lecture",
-          session_type: "lecture",
-          duration_minutes: 120,
-          occurrences_per_week: 1,
-          required_room_type: "lecture",
-          required_lab_type: null,
-          specific_room_client_key: null,
-          max_students_per_group: null,
-          allow_parallel_rooms: false,
-          notes: null,
-          lecturer_client_keys: [],
-          student_group_client_keys: [],
-        },
-      ],
-    });
-
-    render(<SetupStudio />);
-
-    await screen.findByDisplayValue("PS");
-    fireEvent.click(screen.getByRole("button", { name: "6. Sessions" }));
-    fireEvent.click(screen.getByRole("button", { name: "Create Lecture + Tutorial Set" }));
-
-    expect(screen.getAllByDisplayValue("Foundations of Chemistry Lecture")).toHaveLength(1);
-    expect(screen.getAllByDisplayValue("Mechanics Lecture")).toHaveLength(1);
-    expect(screen.getAllByDisplayValue("Mechanics Tutorial")).toHaveLength(1);
-    expect(screen.getAllByLabelText("Type").map((element) => element.value)).toEqual([
-      "lecture",
-      "lecture",
-      "tutorial",
-    ]);
-  });
-
-  it("creates semester module shells only for uncovered year-semester combinations", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue({
-      ...emptyDataset(),
-      degrees: [
-        {
-          client_key: "degree_ps",
-          code: "PS",
-          name: "Physical Science",
-          duration_years: 2,
-          intake_label: "PS Intake",
-        },
-      ],
-      student_groups: [
-        {
-          client_key: "group_y1",
-          degree_client_key: "degree_ps",
-          path_client_key: null,
-          year: 1,
-          name: "PS Y1 General",
-          size: 80,
-        },
-        {
-          client_key: "group_y2",
-          degree_client_key: "degree_ps",
-          path_client_key: null,
-          year: 2,
-          name: "PS Y2 General",
-          size: 75,
-        },
-      ],
-      modules: [
-        {
-          client_key: "mod_existing",
-          code: "PS1101",
-          name: "Existing Year 1 Sem 1",
-          subject_name: "Physical Science Year 1",
-          year: 1,
-          semester: 1,
-          is_full_year: false,
-        },
-      ],
-    });
-
-    render(<SetupStudio />);
-
-    await screen.findByDisplayValue("PS");
-    fireEvent.click(screen.getByRole("button", { name: "5. Modules" }));
-    fireEvent.click(screen.getByRole("button", { name: "Create Semester 1 Module Shells" }));
-
-    expect(screen.getAllByDisplayValue("Existing Year 1 Sem 1")).toHaveLength(1);
-    expect(screen.getAllByDisplayValue("PS Year 2 Semester 1 Module")).toHaveLength(1);
-    expect(screen.queryByDisplayValue("PS Year 1 Semester 1 Module")).not.toBeInTheDocument();
-  });
-
-  it("copies lecturers and cohorts across a module's session set", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue({
-      ...emptyDataset(),
-      degrees: [
-        {
-          client_key: "degree_ps",
-          code: "PS",
-          name: "Physical Science",
-          duration_years: 1,
-          intake_label: "PS Intake",
-        },
-      ],
-      rooms: [
-        {
-          client_key: "room_1",
-          name: "Room 1",
-          capacity: 120,
-          room_type: "lecture",
-          lab_type: null,
-          location: "Science Block",
-          year_restriction: null,
-        },
-      ],
-      student_groups: [
-        {
-          client_key: "group_main",
-          degree_client_key: "degree_ps",
-          path_client_key: null,
-          year: 1,
-          name: "PS Y1 General",
-          size: 80,
-        },
-      ],
-      lecturers: [
-        {
-          client_key: "lect_1",
-          name: "Lecturer 1",
-          email: "lect1@example.com",
-        },
-      ],
-      modules: [
-        {
-          client_key: "mod_1",
-          code: "CHEM101",
-          name: "Foundations of Chemistry",
-          subject_name: "Chemistry",
-          year: 1,
-          semester: 1,
-          is_full_year: false,
-        },
-      ],
-      sessions: [
-        {
-          client_key: "sess_1",
-          module_client_key: "mod_1",
-          name: "Foundations of Chemistry Lecture",
-          session_type: "lecture",
-          duration_minutes: 120,
-          occurrences_per_week: 1,
-          required_room_type: "lecture",
-          required_lab_type: null,
-          specific_room_client_key: null,
-          max_students_per_group: null,
-          allow_parallel_rooms: false,
-          notes: null,
-          lecturer_client_keys: ["lect_1"],
-          student_group_client_keys: ["group_main"],
-        },
-        {
-          client_key: "sess_2",
-          module_client_key: "mod_1",
-          name: "Foundations of Chemistry Tutorial",
-          session_type: "tutorial",
-          duration_minutes: 60,
-          occurrences_per_week: 1,
-          required_room_type: "seminar",
-          required_lab_type: null,
-          specific_room_client_key: null,
-          max_students_per_group: null,
-          allow_parallel_rooms: false,
-          notes: null,
-          lecturer_client_keys: [],
-          student_group_client_keys: [],
-        },
-      ],
-    });
-
-    render(<SetupStudio />);
-
-    await screen.findByDisplayValue("PS");
-    fireEvent.click(screen.getByRole("button", { name: "6. Sessions" }));
-
-    const lectureCard = screen
-      .getByDisplayValue("Foundations of Chemistry Lecture")
-      .closest(".editor-card");
-    const tutorialCard = screen
-      .getByDisplayValue("Foundations of Chemistry Tutorial")
-      .closest(".editor-card");
-
-    fireEvent.click(
-      within(lectureCard).getByRole("button", { name: "Copy Lecturers + Cohorts To Module Set" })
-    );
-    // Two-step confirm: click the "Overwrite" button that appears in the confirm strip
-    fireEvent.click(
-      within(lectureCard).getByRole("button", { name: "Overwrite" })
-    );
-
-    expect(within(tutorialCard).getByRole("checkbox", { name: "Lecturer 1" })).toBeChecked();
-    expect(within(tutorialCard).getByRole("checkbox", { name: "PS Y1 General" })).toBeChecked();
-  });
-
-  it("hydrates the wizard from the saved full dataset summary", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue({
-      ...emptyDataset(),
-      degrees: [
-        {
-          client_key: "degree_ps",
-          code: "PS",
-          name: "Physical Science",
-          duration_years: 3,
-          intake_label: "PS Intake",
-        },
-      ],
-      rooms: [
-        {
-          client_key: "room_1",
-          name: "A7 301",
-          capacity: 120,
-          room_type: "lecture",
-          lab_type: null,
-          location: "A7 Building",
-          year_restriction: null,
-        },
-      ],
-    });
-
-    render(<SetupStudio />);
-
-    expect(await screen.findByDisplayValue("PS")).toBeInTheDocument();
-    const summaryCards = screen.getAllByText("1");
-    expect(summaryCards.length).toBeGreaterThan(0);
-    expect(screen.getByText("degrees")).toBeInTheDocument();
-    expect(screen.getByText("rooms")).toBeInTheDocument();
-  });
-
-  it("derives base cohorts from degree and path structure", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue(emptyDataset());
-
-    render(<SetupStudio />);
-    await screen.findByText("No degrees added yet.");
-
-    fireEvent.click(screen.getByRole("button", { name: "Add Degree" }));
-    const degreeCodeInput = within(screen.getByText("Code").closest("label")).getByRole("textbox");
-    const degreeNameInput = within(screen.getByText("Name").closest("label")).getByRole("textbox");
-    const degreeDurationInput = within(screen.getByText("Duration").closest("label")).getByRole("spinbutton");
-    const intakeLabelInput = within(screen.getByText("Intake label").closest("label")).getByRole("textbox");
-    fireEvent.change(degreeCodeInput, { target: { value: "PS" } });
-    fireEvent.change(degreeNameInput, { target: { value: "Physical Science" } });
-    fireEvent.change(degreeDurationInput, { target: { value: "1" } });
-    fireEvent.change(intakeLabelInput, { target: { value: "PS Intake" } });
-
-    fireEvent.click(screen.getByRole("button", { name: "Add Path" }));
-    const pathSection = screen.getByText("Paths").closest("section");
-    const pathDegreeLabel = within(pathSection).getByText("Degree").closest("label");
-    const degreeSelect = within(pathDegreeLabel).getByRole("combobox");
-    const degreeOption = within(pathSection).getAllByRole("option").find((option) => option.textContent === "PS");
-    fireEvent.change(degreeSelect, {
-      target: { value: degreeOption.value },
-    });
-    fireEvent.change(within(within(pathSection).getByText("Code").closest("label")).getByRole("textbox"), {
-      target: { value: "PHY-MATH-STAT" },
-    });
-    fireEvent.change(within(within(pathSection).getByText("Name").closest("label")).getByRole("textbox"), {
-      target: { value: "Physics Mathematics Statistics" },
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-
-    const baseCohortsSection = (await screen.findByText("Base Cohorts")).closest("section");
-    expect(within(baseCohortsSection).getAllByText("PS").length).toBeGreaterThan(0);
-    expect(within(baseCohortsSection).getAllByText(/Year 1/).length).toBeGreaterThan(0);
-    expect(within(baseCohortsSection).getByText("PHY-MATH-STAT")).toBeInTheDocument();
-  });
-
-  it("shows blocking review validation when required setup data is missing", async () => {
-    timetableStudioService.getFullDataset.mockResolvedValue(emptyDataset());
-
-    render(<SetupStudio />);
-    await screen.findByText("No degrees added yet.");
-
-    fireEvent.click(screen.getByRole("button", { name: "7. Review & Save" }));
-
-    expect(await screen.findByText("Readiness Review")).toBeInTheDocument();
-    expect(screen.getByText(/Add at least one degree before continuing/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save Dataset" })).toBeDisabled();
-  });
-
-  it("saves a transformed v2 dataset payload from the wizard draft", async () => {
-    timetableStudioService.getFullDataset
-      .mockResolvedValueOnce({
-        ...emptyDataset(),
-        degrees: [
+      readiness: {
+        ready: false,
+        import_needed: [],
+        repair_needed: [
           {
-            client_key: "degree_ps",
-            code: "PS",
-            name: "Physical Science",
-            duration_years: 1,
-            intake_label: "PS Intake",
+            key: "room-capacity-50",
+            title: "Specific room capacity is too small",
+            detail: "Chemistry Practical has no room that can host it in required room Tiny Lab.",
+            action: "Repair sessions",
+            form: "session",
           },
         ],
-        rooms: [
-          {
-            client_key: "room_1",
-            name: "Room 1",
-            capacity: 120,
-            room_type: "lecture",
-            lab_type: null,
-            location: "Science Block",
-            year_restriction: null,
-          },
-        ],
-        student_groups: [
-          {
-            client_key: "group_main",
-            degree_client_key: "degree_ps",
-            path_client_key: null,
-            year: 1,
-            name: "PS Y1 General",
-            size: 80,
-          },
-        ],
-        lecturers: [
-          {
-            client_key: "lect_1",
-            name: "Lecturer 1",
-            email: "lect1@example.com",
-          },
-        ],
-        modules: [
-          {
-            client_key: "mod_1",
-            code: "CHEM101",
-            name: "Foundations of Chemistry",
-            subject_name: "Chemistry",
-            year: 1,
-            semester: 1,
-            is_full_year: false,
-          },
-        ],
-        sessions: [
-          {
-            client_key: "sess_1",
-            module_client_key: "mod_1",
-            name: "Chemistry Lecture",
-            session_type: "lecture",
-            duration_minutes: 60,
-            occurrences_per_week: 1,
-            required_room_type: "lecture",
-            required_lab_type: null,
-            specific_room_client_key: null,
-            max_students_per_group: null,
-            allow_parallel_rooms: false,
-            notes: null,
-            lecturer_client_keys: ["lect_1"],
-            student_group_client_keys: ["group_main"],
-          },
-        ],
-        paths: [],
-      })
-      .mockResolvedValueOnce({
-        ...emptyDataset(),
-        degrees: [
-          {
-            client_key: "degree_saved",
-            code: "PS",
-            name: "Physical Science",
-            duration_years: 1,
-            intake_label: "PS Intake",
-          },
-        ],
-        rooms: [
-          {
-            client_key: "room_saved",
-            name: "Room 1",
-            capacity: 120,
-            room_type: "lecture",
-            lab_type: null,
-            location: "Science Block",
-            year_restriction: null,
-          },
-        ],
-        student_groups: [
-          {
-            client_key: "group_saved",
-            degree_client_key: "degree_saved",
-            path_client_key: null,
-            year: 1,
-            name: "PS Y1 General",
-            size: 80,
-          },
-        ],
-        lecturers: [
-          {
-            client_key: "lect_saved",
-            name: "Lecturer 1",
-            email: "lect1@example.com",
-          },
-        ],
-        modules: [
-          {
-            client_key: "mod_saved",
-            code: "CHEM101",
-            name: "Foundations of Chemistry",
-            subject_name: "Chemistry",
-            year: 1,
-            semester: 1,
-            is_full_year: false,
-          },
-        ],
-        sessions: [
-          {
-            client_key: "sess_saved",
-            module_client_key: "mod_saved",
-            name: "Chemistry Lecture",
-            session_type: "lecture",
-            duration_minutes: 60,
-            occurrences_per_week: 1,
-            required_room_type: "lecture",
-            required_lab_type: null,
-            specific_room_client_key: null,
-            max_students_per_group: null,
-            allow_parallel_rooms: false,
-            notes: null,
-            lecturer_client_keys: ["lect_saved"],
-            student_group_client_keys: ["group_saved"],
-          },
-        ],
-        paths: [],
-      });
-    timetableStudioService.saveDataset.mockResolvedValue({
-      summary: {
-        degrees: 1,
-        paths: 0,
-        lecturers: 1,
-        rooms: 1,
-        student_groups: 1,
-        modules: 1,
-        sessions: 1,
+        warnings: [],
       },
     });
 
-    render(<SetupStudio />);
+    renderSetupStudio();
 
-    expect(await screen.findByDisplayValue("PS")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Utilities" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Save Dataset" }));
+    expect(await screen.findByText("Chemistry Practical")).toBeInTheDocument();
+    expect(screen.getByText(/Missing room assignment\./i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Repair Session" })).toBeInTheDocument();
+  });
 
-    await waitFor(() => expect(timetableStudioService.saveDataset).toHaveBeenCalledTimes(1));
-
-    const savedPayload = timetableStudioService.saveDataset.mock.calls[0][0];
-    expect(savedPayload.degrees).toHaveLength(1);
-    expect(savedPayload.student_groups).toHaveLength(1);
-    expect(savedPayload.modules).toHaveLength(1);
-    expect(savedPayload.sessions).toHaveLength(1);
-    expect(savedPayload.sessions[0]).toMatchObject({
-      name: "Chemistry Lecture",
-      duration_minutes: 60,
-      occurrences_per_week: 1,
-      required_room_type: "lecture",
+  it("uploads a support CSV after a snapshot is opened", async () => {
+    timetableStudioService.listImportRuns.mockResolvedValue({
+      runs: [
+        {
+          import_run_id: 77,
+          source_file: "students_processed_TT_J.csv",
+          status: "materialized",
+          selected_academic_year: "2022/2023",
+        },
+      ],
     });
-    expect(savedPayload.sessions[0].lecturer_client_keys).toHaveLength(1);
-    expect(savedPayload.sessions[0].student_group_client_keys).toHaveLength(1);
-    expect(await screen.findByText(/Dataset saved\. The new setup flow is now ready for generation/i)).toBeInTheDocument();
+    timetableStudioService.getImportWorkspace.mockResolvedValueOnce({
+      ...emptyWorkspace(),
+      import_run_id: 77,
+      selected_academic_year: "2022/2023",
+    });
+    timetableStudioService.getImportWorkspace.mockResolvedValueOnce({
+      ...emptyWorkspace(),
+      import_run_id: 77,
+      selected_academic_year: "2022/2023",
+      rooms: [
+        {
+          id: 20,
+          name: "A7 Hall 1",
+          capacity: 180,
+          room_type: "lecture",
+          lab_type: null,
+          location: "A7",
+          year_restriction: null,
+          notes: null,
+        },
+      ],
+    });
+    timetableStudioService.uploadRoomsCsv.mockResolvedValue({
+      created_count: 1,
+      updated_count: 0,
+      warnings: [],
+    });
+
+    renderSetupStudio();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Utilities" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open" }));
+    expect(await screen.findByText("Snapshot available")).toBeInTheDocument();
+
+    const roomsInput = screen.getByLabelText("Rooms CSV file");
+    const roomsFile = new File(
+      ["room_code,room_name,capacity,room_type\nA7-H1,A7 Hall 1,180,lecture\n"],
+      "rooms.csv",
+      { type: "text/csv" }
+    );
+    fireEvent.change(roomsInput, { target: { files: [roomsFile] } });
+
+    await waitFor(() => {
+      expect(timetableStudioService.uploadRoomsCsv).toHaveBeenCalledWith(77, roomsFile);
+      expect(timetableStudioService.getImportWorkspace).toHaveBeenLastCalledWith(77);
+    });
+    expect(
+      await screen.findByText(/Rooms CSV imported into snapshot #77\./i)
+    ).toBeInTheDocument();
+  });
+
+  it("shows a blocking overlay while importing a support CSV", async () => {
+    timetableStudioService.listImportRuns.mockResolvedValue({
+      runs: [
+        {
+          import_run_id: 77,
+          source_file: "students_processed_TT_J.csv",
+          status: "materialized",
+          selected_academic_year: "2022/2023",
+        },
+      ],
+    });
+    timetableStudioService.getImportWorkspace.mockResolvedValue({
+      ...emptyWorkspace(),
+      import_run_id: 77,
+      selected_academic_year: "2022/2023",
+    });
+
+    let resolveUpload;
+    timetableStudioService.uploadRoomsCsv.mockReturnValue(
+      new Promise((resolve) => {
+        resolveUpload = resolve;
+      })
+    );
+
+    renderSetupStudio();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Utilities" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open" }));
+    expect(await screen.findByText("Snapshot available")).toBeInTheDocument();
+
+    const roomsInput = screen.getByLabelText("Rooms CSV file");
+    const roomsFile = new File(
+      ["room_code,room_name,capacity,room_type\nA7-H1,A7 Hall 1,180,lecture\n"],
+      "rooms.csv",
+      { type: "text/csv" }
+    );
+    fireEvent.change(roomsInput, { target: { files: [roomsFile] } });
+
+    expect(await screen.findByText("Working on your import")).toBeInTheDocument();
+    expect(screen.getByText(/Importing rooms CSV into snapshot #77/i)).toBeInTheDocument();
+
+    resolveUpload({
+      created_count: 1,
+      updated_count: 0,
+      warnings: [],
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Working on your import")).not.toBeInTheDocument();
+    });
   });
 });

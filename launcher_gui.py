@@ -8,8 +8,10 @@ import shutil
 import signal
 import socket
 import subprocess
+import tempfile
 import threading
 import time
+from urllib.parse import urlparse
 from dataclasses import dataclass
 from pathlib import Path
 import tkinter as tk
@@ -26,6 +28,8 @@ MARIADB_LOG_DIR = MARIADB_DIR / "log"
 MARIADB_CONFIG = MARIADB_DIR / "my.cnf"
 MARIADB_SOCKET = MARIADB_RUN_DIR / "mysqld.sock"
 MARIADB_PID_FILE = MARIADB_RUN_DIR / "mysqld.pid"
+MARIADB_DATA_DIR = MARIADB_DIR / "data"
+BACKEND_ENV_FILE = BACKEND_DIR / ".env"
 
 HOST = "127.0.0.1"
 
@@ -53,7 +57,17 @@ SERVICES = {
         key="backend",
         label="Backend",
         port=8000,
-        command=[str(VENV_PYTHON), "-m", "uvicorn", "app.main:app", "--host", HOST, "--port", "8000"],
+        command=[
+            str(VENV_PYTHON),
+            "-m",
+            "uvicorn",
+            "app.main:app",
+            "--host",
+            HOST,
+            "--port",
+            "8000",
+            "--reload",
+        ],
         cwd=BACKEND_DIR,
         log_key="backend",
     ),
@@ -364,6 +378,181 @@ class LauncherGUI:
             time.sleep(0.5)
         return False
 
+    def _mysql_system_tables_present(self) -> bool:
+        mysql_dir = MARIADB_DATA_DIR / "mysql"
+        if not mysql_dir.is_dir():
+            return False
+        return any(mysql_dir.glob("db.*"))
+
+    def _load_backend_env(self) -> dict[str, str]:
+        values: dict[str, str] = {}
+        if not BACKEND_ENV_FILE.exists():
+            return values
+        for raw_line in BACKEND_ENV_FILE.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            values[key.strip()] = value.strip()
+        return values
+
+    def _wait_for_mysql_ready(self, timeout: int = 30) -> bool:
+        env_values = self._load_backend_env()
+        database_url = env_values.get("DATABASE_URL", "").strip()
+        if not database_url.startswith("mysql"):
+            return True
+
+        parsed = urlparse(database_url)
+        script = (
+            "import os\n"
+            "import pymysql\n"
+            "conn = pymysql.connect("
+            "host=os.environ['DB_HOST'],"
+            "port=int(os.environ['DB_PORT']),"
+            "user=os.environ['DB_USER'],"
+            "password=os.environ['DB_PASSWORD'],"
+            "database=os.environ['DB_NAME'],"
+            "connect_timeout=1,"
+            "read_timeout=1,"
+            "write_timeout=1)\n"
+            "cur = conn.cursor()\n"
+            "cur.execute('SELECT 1')\n"
+            "conn.close()\n"
+        )
+        child_env = os.environ.copy()
+        child_env.update(
+            {
+                "DB_HOST": parsed.hostname or "127.0.0.1",
+                "DB_PORT": str(parsed.port or 3306),
+                "DB_USER": parsed.username or "",
+                "DB_PASSWORD": parsed.password or "",
+                "DB_NAME": (parsed.path or "/").lstrip("/"),
+            }
+        )
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            result = subprocess.run(
+                [str(VENV_PYTHON), "-c", script],
+                env=child_env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode == 0:
+                return True
+            time.sleep(1)
+        return False
+
+    def _ensure_mysql_app_access(self) -> None:
+        env_values = self._load_backend_env()
+        database_url = env_values.get("DATABASE_URL", "").strip()
+        if not database_url.startswith("mysql"):
+            return
+
+        parsed = urlparse(database_url)
+        script = (
+            "import os\n"
+            "import pymysql\n"
+            "conn = pymysql.connect("
+            "unix_socket=os.environ['DB_SOCKET'],"
+            "user='root',"
+            "password='',"
+            "connect_timeout=1,"
+            "read_timeout=1,"
+            "write_timeout=1,"
+            "autocommit=True)\n"
+            "cur = conn.cursor()\n"
+            "cur.execute(f\"CREATE DATABASE IF NOT EXISTS `{os.environ['DB_NAME']}`\")\n"
+            "for host in {os.environ['DB_HOST'], 'localhost'}:\n"
+            "    cur.execute(f\"CREATE USER IF NOT EXISTS '{os.environ['DB_USER']}'@'{host}' IDENTIFIED BY %s\", (os.environ['DB_PASSWORD'],))\n"
+            "    cur.execute(f\"ALTER USER '{os.environ['DB_USER']}'@'{host}' IDENTIFIED BY %s\", (os.environ['DB_PASSWORD'],))\n"
+            "    cur.execute(f\"GRANT ALL PRIVILEGES ON `{os.environ['DB_NAME']}`.* TO '{os.environ['DB_USER']}'@'{host}'\")\n"
+            "cur.execute('FLUSH PRIVILEGES')\n"
+            "conn.close()\n"
+        )
+        child_env = os.environ.copy()
+        child_env.update(
+            {
+                "DB_SOCKET": str(MARIADB_SOCKET),
+                "DB_HOST": parsed.hostname or "127.0.0.1",
+                "DB_USER": parsed.username or "",
+                "DB_PASSWORD": parsed.password or "",
+                "DB_NAME": (parsed.path or "/").lstrip("/") or "kln_timetable",
+            }
+        )
+        result = subprocess.run(
+            [str(VENV_PYTHON), "-c", script],
+            env=child_env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            output = (result.stderr or result.stdout or "").strip()
+            raise RuntimeError(f"MariaDB app user setup failed: {output or 'unknown error'}")
+
+    def _bootstrap_mysql_datadir(self) -> None:
+        env_values = self._load_backend_env()
+        database_url = env_values.get("DATABASE_URL", "").strip()
+        if not database_url.startswith("mysql"):
+            return
+
+        MARIADB_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        MARIADB_RUN_DIR.mkdir(parents=True, exist_ok=True)
+        MARIADB_LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+        if any(MARIADB_DATA_DIR.iterdir()) and not self._mysql_system_tables_present():
+            backup_dir = MARIADB_DATA_DIR.with_name(
+                f"{MARIADB_DATA_DIR.name}.incomplete.{time.strftime('%Y%m%d-%H%M%S')}"
+            )
+            MARIADB_DATA_DIR.rename(backup_dir)
+            MARIADB_DATA_DIR.mkdir(parents=True, exist_ok=True)
+            self.log("events", f"[mysql] Moved incomplete MariaDB data dir to {backup_dir.name}.")
+
+        parsed = urlparse(database_url)
+        database = (parsed.path or "/kln_timetable").lstrip("/") or "kln_timetable"
+        user = parsed.username or "kln_user"
+        password = (parsed.password or "").replace("\\", "\\\\").replace("'", "\\'")
+        host = parsed.hostname or "127.0.0.1"
+
+        extra_sql = (
+            f"CREATE DATABASE IF NOT EXISTS `{database}`;\n"
+            f"CREATE USER IF NOT EXISTS '{user}'@'{host}' IDENTIFIED BY '{password}';\n"
+            f"GRANT ALL PRIVILEGES ON `{database}`.* TO '{user}'@'{host}';\n"
+            "FLUSH PRIVILEGES;\n"
+        )
+
+        self.log("events", "[mysql] Initializing repo-local MariaDB system tables.")
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
+            handle.write(extra_sql)
+            extra_file = handle.name
+
+        try:
+            result = subprocess.run(
+                [
+                    "mariadb-install-db",
+                    "--defaults-file=my.cnf",
+                    f"--datadir={MARIADB_DATA_DIR}",
+                    "--auth-root-authentication-method=normal",
+                    "--skip-test-db",
+                    "--skip-name-resolve",
+                    f"--extra-file={extra_file}",
+                ],
+                cwd=MARIADB_DIR,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        finally:
+            Path(extra_file).unlink(missing_ok=True)
+
+        if result.returncode != 0:
+            output = (result.stdout or "").strip()
+            error = (result.stderr or "").strip()
+            detail = error or output or "unknown initialization failure"
+            raise RuntimeError(f"Failed to initialize repo-local MariaDB data dir: {detail}")
+
     def _wait_for_port_free(self, port: int, timeout: int = 15) -> bool:
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -434,12 +623,20 @@ class LauncherGUI:
                 raise RuntimeError("\n".join(conflicts))
 
             if not self._port_open(SERVICES["mysql"].port):
+                if not self._mysql_system_tables_present():
+                    self._bootstrap_mysql_datadir()
                 self.log("events", "[mysql] Starting repo-local MariaDB.")
                 self._start_process("mysql")
                 if not self._wait_for_port(SERVICES["mysql"].port, timeout=30):
                     raise RuntimeError("MariaDB did not become ready on port 3307.")
+                self._ensure_mysql_app_access()
+                if not self._wait_for_mysql_ready(timeout=30):
+                    raise RuntimeError("MariaDB opened port 3307 but did not become query-ready.")
             else:
                 self._update_service_status("mysql", "Running (external)")
+                self._ensure_mysql_app_access()
+                if not self._wait_for_mysql_ready(timeout=10):
+                    raise RuntimeError("Existing MariaDB listener is not accepting queries.")
 
             self.log("events", "[backend] Starting FastAPI backend.")
             self._start_process("backend")

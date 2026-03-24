@@ -16,6 +16,15 @@ from sqlalchemy import insert
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import engine
+from app.models.imports import ImportStudent
+from app.models.academic import Programme, ProgrammePath
+from app.models.snapshot import SnapshotLecturer, SnapshotRoom, SnapshotSharedSession
+from app.models.snapshot_generation import (
+    SnapshotGenerationRun,
+    SnapshotSolutionEntry,
+    SnapshotTimetableSolution,
+)
+from app.models.solver import AttendanceGroup, AttendanceGroupStudent
 from app.models.v2 import (
     V2Degree,
     V2GenerationRun,
@@ -29,6 +38,7 @@ from app.models.v2 import (
     V2TimetableSolution,
 )
 from app.schemas.v2 import ExportResponse, SoftConstraintOption
+from app.services.csv_import_analysis import decode_student_hashes, encode_student_hashes
 from app.services.enrollment_inference import (
     build_realistic_demo_dataset_from_enrollment_csv,
 )
@@ -129,7 +139,8 @@ class SessionTask:
     session_id: int
     session_name: str
     session_type: str
-    module_id: int
+    module_id: int | None
+    module_ids: tuple[int, ...]
     module_code: str
     module_name: str
     occurrence_index: int
@@ -140,6 +151,8 @@ class SessionTask:
     specific_room_id: int | None
     lecturer_ids: tuple[int, ...]
     student_group_ids: tuple[int, ...]
+    student_membership_keys: tuple[str, ...]
+    study_years: tuple[int, ...]
     student_count: int
     root_session_id: int
     bundle_key: tuple[int, int] | None
@@ -171,6 +184,19 @@ def _partition_lecturers(
     for index, lecturer_id in enumerate(lecturer_ids):
         assignments[index % chunk_count].append(lecturer_id)
     return [tuple(items) for items in assignments]
+
+
+def _lecturer_chunks_for_splits(
+    lecturer_ids: tuple[int, ...],
+    split_count: int,
+    *,
+    allow_parallel_rooms: bool,
+) -> list[tuple[int, ...]]:
+    if allow_parallel_rooms:
+        return _partition_lecturers(lecturer_ids, split_count)
+    if split_count > 1 and lecturer_ids and len(lecturer_ids) >= split_count:
+        return _partition_lecturers(lecturer_ids, split_count)
+    return [lecturer_ids for _ in range(split_count)]
 
 
 def list_soft_constraint_options() -> list[SoftConstraintOption]:
@@ -338,6 +364,163 @@ def _build_split_assignments(session: V2Session) -> list[SplitAssignment]:
     return assignments
 
 
+def _build_snapshot_split_assignments(
+    session: SnapshotSharedSession,
+) -> list[SplitAssignment]:
+    groups = sorted(session.attendance_groups, key=lambda item: item.id)
+    if not groups:
+        return [
+            SplitAssignment(
+                split_index=1,
+                student_group_ids=tuple(),
+                student_count=0,
+                fragments=tuple(),
+            )
+        ]
+
+    total = sum(int(group.student_count) for group in groups)
+    limit = session.max_students_per_group
+    if not limit or total <= limit:
+        return [
+            SplitAssignment(
+                split_index=1,
+                student_group_ids=tuple(int(group.id) for group in groups),
+                student_count=total,
+                fragments=tuple(
+                    (int(group.id), int(group.student_count), group.label)
+                    for group in groups
+                ),
+            )
+        ]
+
+    assignments: list[SplitAssignment] = []
+    current_ids: set[int] = set()
+    current_fragments: list[tuple[int, int, str]] = []
+    current_total = 0
+    split_index = 1
+    for group in groups:
+        remaining = int(group.student_count)
+        part_index = 1
+        while remaining > 0:
+            available = limit - current_total
+            if current_total > 0 and available == 0:
+                assignments.append(
+                    SplitAssignment(
+                        split_index=split_index,
+                        student_group_ids=tuple(sorted(current_ids)),
+                        student_count=current_total,
+                        fragments=tuple(current_fragments),
+                    )
+                )
+                split_index += 1
+                current_ids = set()
+                current_fragments = []
+                current_total = 0
+                available = limit
+
+            fragment_size = min(remaining, available)
+            fragment_label = (
+                group.label
+                if fragment_size == int(group.student_count) and part_index == 1
+                else f"{group.label} (Part {part_index})"
+            )
+            current_ids.add(int(group.id))
+            current_fragments.append((int(group.id), fragment_size, fragment_label))
+            current_total += fragment_size
+            remaining -= fragment_size
+            part_index += 1
+
+            if current_total >= limit:
+                assignments.append(
+                    SplitAssignment(
+                        split_index=split_index,
+                        student_group_ids=tuple(sorted(current_ids)),
+                        student_count=current_total,
+                        fragments=tuple(current_fragments),
+                    )
+                )
+                split_index += 1
+                current_ids = set()
+                current_fragments = []
+                current_total = 0
+
+    if current_fragments:
+        assignments.append(
+            SplitAssignment(
+                split_index=split_index,
+                student_group_ids=tuple(sorted(current_ids)),
+                student_count=current_total,
+                fragments=tuple(current_fragments),
+            )
+        )
+    return assignments
+
+
+def _snapshot_split_audience_details(
+    session: SnapshotSharedSession,
+) -> dict[int, dict[str, object]]:
+    student_count_by_group_id = {
+        int(group.id): int(group.student_count)
+        for group in session.attendance_groups
+    }
+    student_hashes_by_group_id = {
+        int(group.id): sorted(
+            item.student.student_hash
+            for item in group.students
+            if item.student is not None and item.student.student_hash
+        )
+        for group in session.attendance_groups
+    }
+    study_year_by_group_id = {
+        int(group.id): int(group.study_year)
+        for group in session.attendance_groups
+    }
+
+    split_details: dict[int, dict[str, object]] = {}
+    group_offsets: dict[int, int] = defaultdict(int)
+    for split_assignment in _build_snapshot_split_assignments(session):
+        student_hashes: list[str] = []
+        study_years: set[int] = set()
+        attendance_group_ids: list[int] = []
+        whole_group_ids: list[int] = []
+        for group_id, fragment_size, _fragment_label in split_assignment.fragments:
+            group_id = int(group_id)
+            all_hashes = student_hashes_by_group_id.get(group_id, [])
+            start_index = group_offsets.get(group_id, 0)
+            end_index = start_index + int(fragment_size)
+            student_hashes.extend(all_hashes[start_index:end_index])
+            group_offsets[group_id] = end_index
+            attendance_group_ids.append(group_id)
+            if int(fragment_size) >= int(student_count_by_group_id.get(group_id, 0)):
+                whole_group_ids.append(group_id)
+            study_year = study_year_by_group_id.get(group_id)
+            if study_year is not None:
+                study_years.add(study_year)
+        split_details[int(split_assignment.split_index)] = {
+            "attendance_group_ids": tuple(sorted(set(whole_group_ids))),
+            "audience_group_ids": tuple(sorted(set(attendance_group_ids))),
+            "student_hashes": tuple(sorted(student_hashes)),
+            "study_years": tuple(sorted(study_years)),
+        }
+    return split_details
+
+
+def _snapshot_split_lecturer_ids(
+    session: SnapshotSharedSession,
+) -> dict[int, tuple[int, ...]]:
+    split_assignments = _build_snapshot_split_assignments(session)
+    lecturer_ids = tuple(sorted(int(item.id) for item in session.lecturers))
+    lecturer_chunks = _lecturer_chunks_for_splits(
+        lecturer_ids,
+        len(split_assignments),
+        allow_parallel_rooms=session.allow_parallel_rooms,
+    )
+    return {
+        int(split.split_index): tuple(chunk)
+        for split, chunk in zip(split_assignments, lecturer_chunks, strict=True)
+    }
+
+
 def _build_tasks(db: Session) -> list[SessionTask]:
     sessions = (
         db.query(V2Session)
@@ -355,11 +538,24 @@ def _build_tasks(db: Session) -> list[SessionTask]:
     for session in sessions:
         lecturer_ids = tuple(sorted(int(item.id) for item in session.lecturers))
         split_assignments = _build_split_assignments(session)
-        lecturer_chunks = (
-            _partition_lecturers(lecturer_ids, len(split_assignments))
-            if session.allow_parallel_rooms
-            else [lecturer_ids for _ in split_assignments]
+        student_membership_keys = tuple(
+            sorted(
+                {
+                    student_hash
+                    for group in session.student_groups
+                    for student_hash in decode_student_hashes(group.student_hashes_json)
+                }
+            )
         )
+        lecturer_chunks = _lecturer_chunks_for_splits(
+            lecturer_ids,
+            len(split_assignments),
+            allow_parallel_rooms=session.allow_parallel_rooms,
+        )
+        study_year_by_group_id = {
+            int(group.id): int(group.year)
+            for group in session.student_groups
+        }
         for occurrence_index in range(1, int(session.occurrences_per_week) + 1):
             for split, assigned_lecturers in zip(
                 split_assignments, lecturer_chunks, strict=True
@@ -370,6 +566,7 @@ def _build_tasks(db: Session) -> list[SessionTask]:
                         session_name=session.name,
                         session_type=session.session_type,
                         module_id=int(session.module_id),
+                        module_ids=(int(session.module_id),),
                         module_code=session.module.code,
                         module_name=session.module.name,
                         occurrence_index=occurrence_index,
@@ -382,6 +579,16 @@ def _build_tasks(db: Session) -> list[SessionTask]:
                         else None,
                         lecturer_ids=assigned_lecturers,
                         student_group_ids=split.student_group_ids,
+                        student_membership_keys=student_membership_keys,
+                        study_years=tuple(
+                            sorted(
+                                {
+                                    study_year_by_group_id[group_id]
+                                    for group_id in split.student_group_ids
+                                    if group_id in study_year_by_group_id
+                                }
+                            )
+                        ),
                         student_count=split.student_count,
                         root_session_id=int(session.id),
                         bundle_key=(int(session.id), occurrence_index)
@@ -390,6 +597,116 @@ def _build_tasks(db: Session) -> list[SessionTask]:
                     )
                 )
     return tasks
+
+
+def _build_snapshot_tasks(
+    db: Session, import_run_id: int
+) -> tuple[
+    list[SessionTask],
+    list[SnapshotSharedSession],
+    list[SnapshotRoom],
+    dict[int, str],
+    dict[int, str],
+]:
+    sessions = (
+        db.query(SnapshotSharedSession)
+        .options(
+            joinedload(SnapshotSharedSession.curriculum_modules),
+            joinedload(SnapshotSharedSession.lecturers),
+            joinedload(SnapshotSharedSession.attendance_groups)
+            .joinedload(AttendanceGroup.students)
+            .joinedload(AttendanceGroupStudent.student),
+        )
+        .filter(SnapshotSharedSession.import_run_id == import_run_id)
+        .order_by(SnapshotSharedSession.id)
+        .all()
+    )
+    rooms = (
+        db.query(SnapshotRoom)
+        .filter(SnapshotRoom.import_run_id == import_run_id)
+        .order_by(SnapshotRoom.id)
+        .all()
+    )
+
+    lecturer_names: dict[int, str] = {}
+    group_names: dict[int, str] = {}
+    tasks: list[SessionTask] = []
+    for session in sessions:
+        lecturer_ids = tuple(sorted(int(item.id) for item in session.lecturers))
+        for lecturer in session.lecturers:
+            lecturer_names[int(lecturer.id)] = lecturer.name
+        for group in session.attendance_groups:
+            group_names[int(group.id)] = group.label
+
+        module_ids = sorted(int(module.id) for module in session.curriculum_modules)
+        module_codes = [module.code for module in session.curriculum_modules]
+        module_names = [module.name for module in session.curriculum_modules]
+        module_code = " / ".join(module_codes) if module_codes else session.name
+        module_name = " / ".join(module_names) if module_names else session.name
+
+        split_assignments = _build_snapshot_split_assignments(session)
+        split_audience_details = _snapshot_split_audience_details(session)
+        lecturer_chunks = _lecturer_chunks_for_splits(
+            lecturer_ids,
+            len(split_assignments),
+            allow_parallel_rooms=session.allow_parallel_rooms,
+        )
+        study_year_by_group_id = {
+            int(group.id): int(group.study_year)
+            for group in session.attendance_groups
+        }
+        for occurrence_index in range(1, int(session.occurrences_per_week) + 1):
+            for split, assigned_lecturers in zip(
+                split_assignments, lecturer_chunks, strict=True
+            ):
+                split_details = split_audience_details.get(int(split.split_index), {})
+                tasks.append(
+                    SessionTask(
+                        session_id=int(session.id),
+                        session_name=session.name,
+                        session_type=session.session_type,
+                        module_id=None,
+                        module_ids=tuple(module_ids),
+                        module_code=module_code,
+                        module_name=module_name,
+                        occurrence_index=occurrence_index,
+                        split_index=split.split_index,
+                        duration_minutes=int(session.duration_minutes),
+                        required_room_type=session.required_room_type,
+                        required_lab_type=session.required_lab_type,
+                        specific_room_id=int(session.specific_room_id)
+                        if session.specific_room_id
+                        else None,
+                        lecturer_ids=assigned_lecturers,
+                        student_group_ids=tuple(
+                            split_details.get("attendance_group_ids", split.student_group_ids)
+                        ),
+                        student_membership_keys=tuple(
+                            split_details.get("student_hashes", tuple())
+                        ),
+                        study_years=tuple(
+                            split_details.get(
+                                "study_years",
+                                tuple(
+                                    sorted(
+                                        {
+                                            study_year_by_group_id[group_id]
+                                            for group_id in split.student_group_ids
+                                            if group_id in study_year_by_group_id
+                                        }
+                                    )
+                                ),
+                            )
+                        ),
+                        student_count=split.student_count,
+                        root_session_id=int(session.id),
+                        bundle_key=(int(session.id), occurrence_index)
+                        if session.allow_parallel_rooms and len(split_assignments) > 1
+                        else None,
+                    )
+                )
+
+    return tasks, sessions, rooms, lecturer_names, group_names
 
 
 def _session_modules(session: V2Session) -> list[V2Module]:
@@ -424,6 +741,10 @@ def _format_session_module_name(session: V2Session) -> str:
 
 def _room_matches(room: V2Room, task: SessionTask) -> bool:
     if room.capacity < task.student_count:
+        return False
+    if room.year_restriction is not None and any(
+        int(study_year) != int(room.year_restriction) for study_year in task.study_years
+    ):
         return False
     if task.required_room_type and room.room_type != task.required_room_type:
         return False
@@ -567,6 +888,7 @@ def _estimate_candidate_sizing(
     for day in DAY_ORDER:
         for minute in range(START_MINUTE, END_MINUTE, 30):
             blockers_by_group: dict[int, int] = defaultdict(int)
+            blockers_by_student: dict[str, int] = defaultdict(int)
             for task_index, task in enumerate(tasks):
                 overlaps = 0
                 for _, candidate_day, candidate_start in candidates_by_task[task_index]:
@@ -579,7 +901,9 @@ def _estimate_candidate_sizing(
                     continue
                 for student_group_id in task.student_group_ids:
                     blockers_by_group[student_group_id] += overlaps
-            group_slot_blocker_count += sum(blockers_by_group.values())
+                for student_key in task.student_membership_keys:
+                    blockers_by_student[student_key] += overlaps
+            group_slot_blocker_count += sum(blockers_by_group.values()) + sum(blockers_by_student.values())
 
     return CandidateSizing(
         assignment_variable_count=assignment_variable_count,
@@ -591,12 +915,12 @@ def _estimate_candidate_sizing(
 
 def _precheck_diagnostics(
     tasks: list[SessionTask],
-    sessions: list[V2Session],
-    rooms: list[V2Room],
+    rooms: list[V2Room] | list[SnapshotRoom],
+    lecturer_names: dict[int, str],
+    group_names: dict[int, str],
 ) -> list[str]:
     issues: list[str] = []
     room_lookup = {int(room.id): room for room in rooms}
-    session_lookup = {int(session.id): session for session in sessions}
 
     if not rooms:
         issues.append("No rooms are available in the current dataset.")
@@ -604,19 +928,15 @@ def _precheck_diagnostics(
 
     tasks_by_bundle: dict[tuple[int, int], list[SessionTask]] = defaultdict(list)
     lecturer_minutes: dict[int, int] = defaultdict(int)
-    lecturer_names: dict[int, str] = {}
     group_minutes: dict[int, int] = defaultdict(int)
     group_session_minutes: dict[tuple[int, int, int], int] = {}
-    group_names: dict[int, str] = {}
-
-    for session in sessions:
-        for lecturer in session.lecturers:
-            lecturer_names[int(lecturer.id)] = lecturer.name
-        for group in session.student_groups:
-            group_names[int(group.id)] = group.name
 
     for task in tasks:
-        session = session_lookup.get(task.session_id)
+        if len(task.lecturer_ids) == 0:
+            issues.append(
+                f"{task.module_code} / {task.session_name} has no lecturer assigned."
+            )
+            continue
         for lecturer_id in task.lecturer_ids:
             lecturer_minutes[int(lecturer_id)] += task.duration_minutes
         for group_id in task.student_group_ids:
@@ -644,6 +964,11 @@ def _precheck_diagnostics(
                 room = room_lookup.get(task.specific_room_id)
                 room_name = room.name if room else f"room #{task.specific_room_id}"
                 issue += f" in required room {room_name}"
+            elif task.study_years:
+                issue += " for study year"
+                if len(task.study_years) > 1:
+                    issue += "s"
+                issue += " " + ", ".join(str(item) for item in task.study_years)
             elif task.required_lab_type:
                 issue += f" requiring lab type {task.required_lab_type}"
             elif task.required_room_type:
@@ -654,7 +979,7 @@ def _precheck_diagnostics(
         if task.bundle_key is not None:
             tasks_by_bundle[task.bundle_key].append(task)
 
-        if session and session.allow_parallel_rooms and len(task.lecturer_ids) == 0:
+        if task.bundle_key is not None and len(task.lecturer_ids) == 0:
             issues.append(
                 f"{task.module_code} / {task.session_name} is marked for parallel rooms but has no lecturer assigned to split {task.split_index}."
             )
@@ -832,7 +1157,17 @@ def _solve_internal_legacy(
         }
 
     precheck_started_at = time.perf_counter()
-    diagnostics = _precheck_diagnostics(tasks, sessions, rooms)
+    lecturer_names = {
+        int(lecturer.id): lecturer.name
+        for session in sessions
+        for lecturer in session.lecturers
+    }
+    group_names = {
+        int(group.id): group.name
+        for session in sessions
+        for group in session.student_groups
+    }
+    diagnostics = _precheck_diagnostics(tasks, rooms, lecturer_names, group_names)
     precheck_ms = int((time.perf_counter() - precheck_started_at) * 1000)
     if diagnostics:
         return {
@@ -1081,6 +1416,7 @@ def _solve_internal_legacy(
         for minute in range(START_MINUTE, END_MINUTE, 30):
             lecturer_blockers: dict[int, list[cp_model.IntVar]] = defaultdict(list)
             student_blockers: dict[int, list[cp_model.IntVar]] = defaultdict(list)
+            student_membership_blockers: dict[str, list[cp_model.IntVar]] = defaultdict(list)
             for task_index, task in enumerate(tasks):
                 for room_id, candidate_day, candidate_start in candidates_by_task[
                     task_index
@@ -1101,11 +1437,22 @@ def _solve_internal_legacy(
                                 student_blockers[student_group_id].append(bundle_var)
                                 continue
                         student_blockers[student_group_id].append(var)
+                    for student_key in task.student_membership_keys:
+                        if task.bundle_key is not None:
+                            bundle_var = bundle_slot_vars.get((task.bundle_key, candidate_day, candidate_start))
+                            if bundle_var is not None:
+                                student_membership_blockers[student_key].append(bundle_var)
+                                continue
+                        student_membership_blockers[student_key].append(var)
             for vars_for_lecturer in lecturer_blockers.values():
                 if vars_for_lecturer:
                     model.Add(sum(vars_for_lecturer) <= 1)
             for blockers_for_group in student_blockers.values():
                 unique_vars = list(dict.fromkeys(blockers_for_group))
+                if unique_vars:
+                    model.Add(sum(unique_vars) <= 1)
+            for blockers_for_student in student_membership_blockers.values():
+                unique_vars = list(dict.fromkeys(blockers_for_student))
                 if unique_vars:
                     model.Add(sum(unique_vars) <= 1)
 
@@ -1524,7 +1871,17 @@ def _solve_internal_decomposed(
         return result
 
     precheck_started_at = time.perf_counter()
-    diagnostics = _precheck_diagnostics(tasks, sessions, rooms)
+    lecturer_names = {
+        int(lecturer.id): lecturer.name
+        for session in sessions
+        for lecturer in session.lecturers
+    }
+    group_names = {
+        int(group.id): group.name
+        for session in sessions
+        for group in session.student_groups
+    }
+    diagnostics = _precheck_diagnostics(tasks, rooms, lecturer_names, group_names)
     precheck_ms = int((time.perf_counter() - precheck_started_at) * 1000)
     if diagnostics:
         result = _solve_internal_legacy(
@@ -1701,6 +2058,7 @@ def _solve_internal_decomposed(
             for minute in range(START_MINUTE, END_MINUTE, 30):
                 lecturer_blockers: dict[int, list[cp_model.IntVar]] = defaultdict(list)
                 student_blockers: dict[int, list[cp_model.IntVar]] = defaultdict(list)
+                student_membership_blockers: dict[str, list[cp_model.IntVar]] = defaultdict(list)
                 singleton_room_blockers: dict[int, list[cp_model.IntVar]] = defaultdict(list)
                 room_pool_blockers: dict[tuple[str, str | None], list[cp_model.IntVar]] = defaultdict(list)
                 for task_index, task in enumerate(tasks):
@@ -1714,6 +2072,8 @@ def _solve_internal_decomposed(
                             lecturer_blockers[lecturer_id].append(var)
                         for student_group_id in task.student_group_ids:
                             student_blockers[student_group_id].append(var)
+                        for student_key in task.student_membership_keys:
+                            student_membership_blockers[student_key].append(var)
                         eligible_rooms = eligible_rooms_by_task[task_index]
                         if len(eligible_rooms) == 1:
                             singleton_room_blockers[eligible_rooms[0]].append(var)
@@ -1725,6 +2085,10 @@ def _solve_internal_decomposed(
                         model.Add(sum(dict.fromkeys(vars_for_lecturer)) <= 1)
                 for blockers_for_group in student_blockers.values():
                     unique_vars = list(dict.fromkeys(blockers_for_group))
+                    if unique_vars:
+                        model.Add(sum(unique_vars) <= 1)
+                for blockers_for_student in student_membership_blockers.values():
+                    unique_vars = list(dict.fromkeys(blockers_for_student))
                     if unique_vars:
                         model.Add(sum(unique_vars) <= 1)
                 for blockers_for_room in singleton_room_blockers.values():
@@ -2073,6 +2437,635 @@ def _solve_internal(
     return result
 
 
+def _solve_snapshot_internal(
+    *,
+    tasks: list[SessionTask],
+    rooms: list[SnapshotRoom],
+    lecturer_names: dict[int, str],
+    group_names: dict[int, str],
+    selected_soft_constraints: list[str],
+    max_solutions: int,
+    time_limit_seconds: int,
+    num_search_workers: int = 1,
+    max_retry_cuts: int = 12,
+) -> dict:
+    started_at = time.perf_counter()
+    if not tasks:
+        return {
+            "status": "empty",
+            "message": "Enter session data before generating a timetable.",
+            "solutions": [],
+            "truncated": False,
+            "tasks": tasks,
+            "timing": {
+                "precheck_ms": 0,
+                "model_build_ms": 0,
+                "solve_ms": 0,
+                "fallback_search_ms": 0,
+                "total_ms": int((time.perf_counter() - started_at) * 1000),
+                "room_assignment_ms": 0,
+            },
+            "stats": {
+                "task_count": 0,
+                "assignment_variable_count": 0,
+                "candidate_option_count": 0,
+                "feasible_combo_count": 0,
+                "fallback_combo_evaluated_count": 0,
+                "fallback_combo_truncated": False,
+                "exact_enumeration_single_worker": False,
+                "machine_cpu_count": os.cpu_count() or 1,
+                "memory_limit_mb": DEFAULT_SOLVER_MEMORY_LIMIT_MB,
+                "projected_group_slot_blocker_count": 0,
+                "slot_variable_count": 0,
+                "room_assignment_retry_count": 0,
+                "room_assignment_failures": 0,
+                "room_assignment_ms": 0,
+                "solver_engine": "snapshot_decomposed_exact",
+                "domain_reduction_ratio": 0.0,
+            },
+        }
+    if not rooms:
+        return {
+            "status": "infeasible",
+            "message": "No rooms available for timetable generation.",
+            "solutions": [],
+            "truncated": False,
+            "tasks": tasks,
+            "timing": {
+                "precheck_ms": 0,
+                "model_build_ms": 0,
+                "solve_ms": 0,
+                "fallback_search_ms": 0,
+                "total_ms": int((time.perf_counter() - started_at) * 1000),
+                "room_assignment_ms": 0,
+            },
+            "stats": {
+                "task_count": len(tasks),
+                "assignment_variable_count": 0,
+                "candidate_option_count": 0,
+                "feasible_combo_count": 0,
+                "fallback_combo_evaluated_count": 0,
+                "fallback_combo_truncated": False,
+                "exact_enumeration_single_worker": False,
+                "machine_cpu_count": os.cpu_count() or 1,
+                "memory_limit_mb": DEFAULT_SOLVER_MEMORY_LIMIT_MB,
+                "projected_group_slot_blocker_count": 0,
+                "slot_variable_count": 0,
+                "room_assignment_retry_count": 0,
+                "room_assignment_failures": 0,
+                "room_assignment_ms": 0,
+                "solver_engine": "snapshot_decomposed_exact",
+                "domain_reduction_ratio": 0.0,
+            },
+        }
+
+    precheck_started_at = time.perf_counter()
+    diagnostics = _precheck_diagnostics(tasks, rooms, lecturer_names, group_names)
+    precheck_ms = int((time.perf_counter() - precheck_started_at) * 1000)
+    if diagnostics:
+        return {
+            "status": "infeasible",
+            "message": _format_diagnostic_message(
+                "No possible timetables satisfy the current hard constraints.",
+                diagnostics,
+            ),
+            "solutions": [],
+            "truncated": False,
+            "tasks": tasks,
+            "timing": {
+                "precheck_ms": precheck_ms,
+                "model_build_ms": 0,
+                "solve_ms": 0,
+                "fallback_search_ms": 0,
+                "total_ms": int((time.perf_counter() - started_at) * 1000),
+                "room_assignment_ms": 0,
+            },
+            "stats": {
+                "task_count": len(tasks),
+                "assignment_variable_count": 0,
+                "candidate_option_count": 0,
+                "feasible_combo_count": 0,
+                "fallback_combo_evaluated_count": 0,
+                "fallback_combo_truncated": False,
+                "exact_enumeration_single_worker": False,
+                "machine_cpu_count": os.cpu_count() or 1,
+                "memory_limit_mb": DEFAULT_SOLVER_MEMORY_LIMIT_MB,
+                "projected_group_slot_blocker_count": 0,
+                "slot_variable_count": 0,
+                "room_assignment_retry_count": 0,
+                "room_assignment_failures": 0,
+                "room_assignment_ms": 0,
+                "solver_engine": "snapshot_decomposed_exact",
+                "domain_reduction_ratio": 0.0,
+            },
+        }
+
+    eligible_rooms_by_task = {
+        task_index: _task_eligible_room_ids(task, rooms)
+        for task_index, task in enumerate(tasks)
+    }
+    room_pool_by_task: dict[int, tuple[str, str | None] | None] = {}
+    room_capacity_by_pool: Counter[tuple[str, str | None]] = Counter()
+    room_by_id = {int(room.id): room for room in rooms}
+    for room in rooms:
+        room_capacity_by_pool[(room.room_type, room.lab_type)] += 1
+    for task_index, eligible_rooms in eligible_rooms_by_task.items():
+        pools = {
+            (room_by_id[room_id].room_type, room_by_id[room_id].lab_type)
+            for room_id in eligible_rooms
+        }
+        room_pool_by_task[task_index] = next(iter(pools)) if len(pools) == 1 else None
+
+    slot_candidates_by_task: dict[int, list[tuple[str, int]]] = {}
+    legacy_candidate_option_count = 0
+    for task_index, task in enumerate(tasks):
+        starts = [
+            (day, start_minute)
+            for day, start_minute in _candidate_starts(task)
+            if _soft_constraint_allows_start(
+                task, day, start_minute, selected_soft_constraints
+            )
+        ]
+        slot_candidates_by_task[task_index] = starts
+        legacy_candidate_option_count += len(starts) * len(eligible_rooms_by_task[task_index])
+
+    if any(not starts for starts in slot_candidates_by_task.values()):
+        return {
+            "status": "infeasible",
+            "message": "Some sessions have no valid time options.",
+            "solutions": [],
+            "truncated": False,
+            "tasks": tasks,
+            "timing": {
+                "precheck_ms": precheck_ms,
+                "model_build_ms": 0,
+                "solve_ms": 0,
+                "fallback_search_ms": 0,
+                "total_ms": int((time.perf_counter() - started_at) * 1000),
+                "room_assignment_ms": 0,
+            },
+            "stats": {
+                "task_count": len(tasks),
+                "assignment_variable_count": 0,
+                "candidate_option_count": legacy_candidate_option_count,
+                "feasible_combo_count": 0,
+                "fallback_combo_evaluated_count": 0,
+                "fallback_combo_truncated": False,
+                "exact_enumeration_single_worker": False,
+                "machine_cpu_count": os.cpu_count() or 1,
+                "memory_limit_mb": DEFAULT_SOLVER_MEMORY_LIMIT_MB,
+                "projected_group_slot_blocker_count": 0,
+                "slot_variable_count": 0,
+                "room_assignment_retry_count": 0,
+                "room_assignment_failures": 0,
+                "room_assignment_ms": 0,
+                "solver_engine": "snapshot_decomposed_exact",
+                "domain_reduction_ratio": 0.0,
+            },
+        }
+
+    retry_cuts: list[tuple[str, tuple[tuple[int, int], ...]]] = []
+    room_assignment_failures = 0
+    room_assignment_ms = 0
+    last_room_assignment_diagnostic = ""
+
+    for retry_index in range(max_retry_cuts + 1):
+        model_build_started_at = time.perf_counter()
+        model = cp_model.CpModel()
+        slot_vars: dict[tuple[int, str, int], cp_model.IntVar] = {}
+        bundle_tasks: dict[tuple[int, int], list[int]] = defaultdict(list)
+
+        for task_index, task in enumerate(tasks):
+            if task.bundle_key is not None:
+                bundle_tasks[task.bundle_key].append(task_index)
+
+        bundle_slot_vars: dict[tuple[tuple[int, int], str, int], cp_model.IntVar] = {}
+        for bundle_key, task_indexes in bundle_tasks.items():
+            shared_slots: set[tuple[str, int]] | None = None
+            for task_index in task_indexes:
+                task_slots = set(slot_candidates_by_task[task_index])
+                shared_slots = task_slots if shared_slots is None else shared_slots & task_slots
+            if not shared_slots:
+                return {
+                    "status": "infeasible",
+                    "message": "Some parallel-room sessions have no shared time options across required rooms.",
+                    "solutions": [],
+                    "truncated": False,
+                    "tasks": tasks,
+                    "timing": {
+                        "precheck_ms": precheck_ms,
+                        "model_build_ms": int((time.perf_counter() - model_build_started_at) * 1000),
+                        "solve_ms": 0,
+                        "fallback_search_ms": 0,
+                        "total_ms": int((time.perf_counter() - started_at) * 1000),
+                        "room_assignment_ms": room_assignment_ms,
+                    },
+                    "stats": {
+                        "task_count": len(tasks),
+                        "assignment_variable_count": 0,
+                        "candidate_option_count": legacy_candidate_option_count,
+                        "feasible_combo_count": 0,
+                        "fallback_combo_evaluated_count": 0,
+                        "fallback_combo_truncated": False,
+                        "exact_enumeration_single_worker": False,
+                        "machine_cpu_count": os.cpu_count() or 1,
+                        "memory_limit_mb": DEFAULT_SOLVER_MEMORY_LIMIT_MB,
+                        "projected_group_slot_blocker_count": 0,
+                        "slot_variable_count": 0,
+                        "room_assignment_retry_count": retry_index,
+                        "room_assignment_failures": room_assignment_failures,
+                        "room_assignment_ms": room_assignment_ms,
+                        "solver_engine": "snapshot_decomposed_exact",
+                        "domain_reduction_ratio": 0.0,
+                    },
+                }
+            shared_slot_vars = []
+            for day, start_minute in sorted(shared_slots, key=lambda item: (DAY_INDEX[item[0]], item[1])):
+                bundle_var = model.NewBoolVar(
+                    f"bundle_{bundle_key[0]}_{bundle_key[1]}_{day}_{start_minute}"
+                )
+                bundle_slot_vars[(bundle_key, day, start_minute)] = bundle_var
+                shared_slot_vars.append(bundle_var)
+            model.Add(sum(shared_slot_vars) == 1)
+
+        for task_index, task in enumerate(tasks):
+            if task.bundle_key is not None:
+                for day, start_minute in slot_candidates_by_task[task_index]:
+                    bundle_var = bundle_slot_vars.get((task.bundle_key, day, start_minute))
+                    if bundle_var is not None:
+                        slot_vars[(task_index, day, start_minute)] = bundle_var
+                continue
+            vars_for_task = []
+            for day, start_minute in slot_candidates_by_task[task_index]:
+                var = model.NewBoolVar(f"task_{task_index}_{day}_{start_minute}")
+                slot_vars[(task_index, day, start_minute)] = var
+                vars_for_task.append(var)
+            model.Add(sum(vars_for_task) == 1)
+
+        slot_variable_count = len(
+            {
+                key
+                for key in slot_vars
+                if tasks[key[0]].bundle_key is None
+            }
+        )
+        domain_reduction_ratio = 1.0 - (
+            slot_variable_count / max(1, legacy_candidate_option_count)
+        )
+
+        for day, task_assignments in retry_cuts:
+            cut_vars = [
+                slot_vars[(task_index, day, start_minute)]
+                for task_index, start_minute in task_assignments
+            ]
+            model.Add(sum(cut_vars) <= len(cut_vars) - 1)
+
+        for day in DAY_ORDER:
+            for minute in range(START_MINUTE, END_MINUTE, 30):
+                lecturer_blockers: dict[int, list[cp_model.IntVar]] = defaultdict(list)
+                student_blockers: dict[int, list[cp_model.IntVar]] = defaultdict(list)
+                student_membership_blockers: dict[str, list[cp_model.IntVar]] = defaultdict(list)
+                singleton_room_blockers: dict[int, list[cp_model.IntVar]] = defaultdict(list)
+                room_pool_blockers: dict[tuple[str, str | None], list[cp_model.IntVar]] = defaultdict(list)
+                for task_index, task in enumerate(tasks):
+                    for candidate_day, candidate_start in slot_candidates_by_task[task_index]:
+                        if candidate_day != day or not _overlap(
+                            candidate_start, task.duration_minutes, minute, 30
+                        ):
+                            continue
+                        var = slot_vars[(task_index, candidate_day, candidate_start)]
+                        for lecturer_id in task.lecturer_ids:
+                            lecturer_blockers[lecturer_id].append(var)
+                        for student_group_id in task.student_group_ids:
+                            student_blockers[student_group_id].append(var)
+                        for student_key in task.student_membership_keys:
+                            student_membership_blockers[student_key].append(var)
+                        eligible_rooms = eligible_rooms_by_task[task_index]
+                        if len(eligible_rooms) == 1:
+                            singleton_room_blockers[eligible_rooms[0]].append(var)
+                        room_pool = room_pool_by_task[task_index]
+                        if room_pool is not None:
+                            room_pool_blockers[room_pool].append(var)
+                for vars_for_lecturer in lecturer_blockers.values():
+                    if vars_for_lecturer:
+                        model.Add(sum(dict.fromkeys(vars_for_lecturer)) <= 1)
+                for blockers_for_group in student_blockers.values():
+                    unique_vars = list(dict.fromkeys(blockers_for_group))
+                    if unique_vars:
+                        model.Add(sum(unique_vars) <= 1)
+                for blockers_for_student in student_membership_blockers.values():
+                    unique_vars = list(dict.fromkeys(blockers_for_student))
+                    if unique_vars:
+                        model.Add(sum(unique_vars) <= 1)
+                for blockers_for_room in singleton_room_blockers.values():
+                    unique_vars = list(dict.fromkeys(blockers_for_room))
+                    if unique_vars:
+                        model.Add(sum(unique_vars) <= 1)
+                for room_pool, blockers_for_pool in room_pool_blockers.items():
+                    unique_vars = list(dict.fromkeys(blockers_for_pool))
+                    if unique_vars:
+                        model.Add(sum(unique_vars) <= room_capacity_by_pool[room_pool])
+
+        decision_vars: list[cp_model.IntVar] = []
+        for task_index, task in sorted(
+            enumerate(tasks),
+            key=lambda item: (
+                len(eligible_rooms_by_task[item[0]]),
+                len(slot_candidates_by_task[item[0]]),
+                -item[1].duration_minutes,
+                item[0],
+            ),
+        ):
+            seen_vars: set[int] = set()
+            for day, start_minute in slot_candidates_by_task[task_index]:
+                var = slot_vars[(task_index, day, start_minute)]
+                if id(var) in seen_vars:
+                    continue
+                seen_vars.add(id(var))
+                decision_vars.append(var)
+        if decision_vars:
+            model.AddDecisionStrategy(
+                decision_vars,
+                cp_model.CHOOSE_FIRST,
+                cp_model.SELECT_MAX_VALUE,
+            )
+
+        occurrence_day_vars: dict[tuple[int, int], dict[str, list[cp_model.IntVar]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
+        for task_index, task in enumerate(tasks):
+            for day, start_minute in slot_candidates_by_task[task_index]:
+                occurrence_day_vars[(task.root_session_id, task.occurrence_index)][day].append(
+                    slot_vars[(task_index, day, start_minute)]
+                )
+
+        occurrence_day_flags: dict[tuple[int, int], dict[str, cp_model.IntVar]] = defaultdict(dict)
+        grouped_by_root: dict[int, dict[int, dict[str, list[cp_model.IntVar]]]] = defaultdict(dict)
+        for (root_session_id, occurrence_index), by_day in occurrence_day_vars.items():
+            grouped_by_root[root_session_id][occurrence_index] = by_day
+            for day, vars_for_day in by_day.items():
+                unique_vars = list(dict.fromkeys(vars_for_day))
+                day_flag = model.NewBoolVar(
+                    f"occ_{root_session_id}_{occurrence_index}_{day}"
+                )
+                model.AddMaxEquality(day_flag, unique_vars)
+                occurrence_day_flags[(root_session_id, occurrence_index)][day] = day_flag
+
+        if "spread_sessions_across_days" in selected_soft_constraints:
+            for root_session_id, occurrences in grouped_by_root.items():
+                occurrence_count = max(occurrences.keys(), default=1)
+                if occurrence_count <= 1:
+                    continue
+                for day in DAY_ORDER:
+                    day_flags = [
+                        occurrence_day_flags[(root_session_id, occurrence_index)].get(day)
+                        for occurrence_index in occurrences
+                        if occurrence_day_flags[(root_session_id, occurrence_index)].get(day) is not None
+                    ]
+                    if day_flags:
+                        model.Add(sum(day_flags) <= 1)
+
+        if (
+            "balance_teaching_load_across_week" in selected_soft_constraints
+            or "avoid_monday_overload" in selected_soft_constraints
+        ):
+            daily_load_vars: dict[str, cp_model.IntVar] = {}
+            all_occurrences = sorted(occurrence_day_flags.keys())
+            for day in DAY_ORDER:
+                day_flags = [
+                    occurrence_day_flags[occurrence].get(day)
+                    for occurrence in all_occurrences
+                    if occurrence_day_flags[occurrence].get(day) is not None
+                ]
+                if day_flags:
+                    load_var = model.NewIntVar(0, len(all_occurrences), f"daily_load_{day}")
+                    model.Add(load_var == sum(day_flags))
+                else:
+                    load_var = model.NewIntVar(0, 0, f"daily_load_{day}")
+                daily_load_vars[day] = load_var
+
+            if "balance_teaching_load_across_week" in selected_soft_constraints:
+                max_load = model.NewIntVar(0, len(all_occurrences), "max_daily_load")
+                min_load = model.NewIntVar(0, len(all_occurrences), "min_daily_load")
+                model.AddMaxEquality(max_load, list(daily_load_vars.values()))
+                model.AddMinEquality(min_load, list(daily_load_vars.values()))
+                model.Add(max_load - min_load <= 2)
+
+            if "avoid_monday_overload" in selected_soft_constraints:
+                monday_load = daily_load_vars["Monday"]
+                for day in DAY_ORDER[1:]:
+                    model.Add(monday_load <= daily_load_vars[day] + 1)
+
+        model_build_ms = int((time.perf_counter() - model_build_started_at) * 1000)
+        solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = float(time_limit_seconds)
+        solver.parameters.enumerate_all_solutions = False
+        solver.parameters.num_search_workers = max(1, int(num_search_workers))
+        solver.parameters.max_memory_in_mb = int(DEFAULT_SOLVER_MEMORY_LIMIT_MB)
+        solver.parameters.search_branching = cp_model.FIXED_SEARCH
+
+        solve_started_at = time.perf_counter()
+        status = solver.Solve(model)
+        solve_ms = int((time.perf_counter() - solve_started_at) * 1000)
+
+        if status == cp_model.UNKNOWN:
+            return _resource_limited_result(
+                started_at,
+                tasks,
+                message=(
+                    "Generation stopped without a solution before the bounded solve budget completed. "
+                    "The snapshot generator reduced the search space, but this run still exhausted the current local time or memory budget."
+                ),
+                precheck_ms=precheck_ms,
+                model_build_ms=model_build_ms,
+                solve_ms=solve_ms,
+                assignment_variable_count=slot_variable_count,
+                candidate_option_count=legacy_candidate_option_count,
+                group_slot_blocker_count=0,
+                enumerate_all_solutions=False,
+            ) | {
+                "timing": {
+                    "precheck_ms": precheck_ms,
+                    "model_build_ms": model_build_ms,
+                    "solve_ms": solve_ms,
+                    "fallback_search_ms": 0,
+                    "total_ms": int((time.perf_counter() - started_at) * 1000),
+                    "room_assignment_ms": room_assignment_ms,
+                },
+                "stats": {
+                    "task_count": len(tasks),
+                    "assignment_variable_count": slot_variable_count,
+                    "candidate_option_count": legacy_candidate_option_count,
+                    "feasible_combo_count": 0,
+                    "fallback_combo_evaluated_count": 0,
+                    "fallback_combo_truncated": False,
+                    "exact_enumeration_single_worker": False,
+                    "machine_cpu_count": os.cpu_count() or 1,
+                    "memory_limit_mb": DEFAULT_SOLVER_MEMORY_LIMIT_MB,
+                    "projected_group_slot_blocker_count": 0,
+                    "slot_variable_count": slot_variable_count,
+                    "room_assignment_retry_count": retry_index,
+                    "room_assignment_failures": room_assignment_failures,
+                    "room_assignment_ms": room_assignment_ms,
+                    "solver_engine": "snapshot_decomposed_exact",
+                    "domain_reduction_ratio": domain_reduction_ratio,
+                },
+            }
+
+        if status not in {cp_model.OPTIMAL, cp_model.FEASIBLE}:
+            return {
+                "status": "infeasible",
+                "message": _format_diagnostic_message(
+                    "No possible timetables satisfy the selected constraints.",
+                    [
+                        "Check whether high-frequency sessions are competing for the same lecturers, rooms, or cohorts.",
+                        "Check whether split limits or specific-room requirements are too restrictive for the available rooms.",
+                        "If you selected nice-to-have constraints, try generating once without them to confirm hard-constraint feasibility.",
+                    ],
+                ),
+                "solutions": [],
+                "truncated": False,
+                "tasks": tasks,
+                "timing": {
+                    "precheck_ms": precheck_ms,
+                    "model_build_ms": model_build_ms,
+                    "solve_ms": solve_ms,
+                    "fallback_search_ms": 0,
+                    "total_ms": int((time.perf_counter() - started_at) * 1000),
+                    "room_assignment_ms": room_assignment_ms,
+                },
+                "stats": {
+                    "task_count": len(tasks),
+                    "assignment_variable_count": slot_variable_count,
+                    "candidate_option_count": legacy_candidate_option_count,
+                    "feasible_combo_count": 0,
+                    "fallback_combo_evaluated_count": 0,
+                    "fallback_combo_truncated": False,
+                    "exact_enumeration_single_worker": False,
+                    "machine_cpu_count": os.cpu_count() or 1,
+                    "memory_limit_mb": DEFAULT_SOLVER_MEMORY_LIMIT_MB,
+                    "projected_group_slot_blocker_count": 0,
+                    "slot_variable_count": slot_variable_count,
+                    "room_assignment_retry_count": retry_index,
+                    "room_assignment_failures": room_assignment_failures,
+                    "room_assignment_ms": room_assignment_ms,
+                    "solver_engine": "snapshot_decomposed_exact",
+                    "domain_reduction_ratio": domain_reduction_ratio,
+                },
+            }
+
+        assigned_by_day: dict[str, list[tuple[int, int]]] = defaultdict(list)
+        for task_index in range(len(tasks)):
+            for day, start_minute in slot_candidates_by_task[task_index]:
+                if solver.Value(slot_vars[(task_index, day, start_minute)]):
+                    assigned_by_day[day].append((task_index, start_minute))
+                    break
+
+        room_matching_started_at = time.perf_counter()
+        final_solution: list[tuple[int, int, str, int]] = []
+        failed_cut: tuple[str, tuple[tuple[int, int], ...]] | None = None
+        for day, entries in sorted(
+            assigned_by_day.items(),
+            key=lambda item: DAY_INDEX[item[0]],
+        ):
+            matching = _build_day_room_matching(entries, tasks, eligible_rooms_by_task)
+            if matching is None:
+                failed_cut = (day, tuple(sorted(entries)))
+                room_assignment_failures += 1
+                last_room_assignment_diagnostic = _diagnose_day_room_infeasibility(
+                    entries,
+                    tasks,
+                    eligible_rooms_by_task,
+                    rooms,
+                )
+                break
+            start_by_task = {task_index: start for task_index, start in entries}
+            for task_index, room_id in matching.items():
+                final_solution.append((task_index, room_id, day, start_by_task[task_index]))
+        room_assignment_ms += int((time.perf_counter() - room_matching_started_at) * 1000)
+
+        if failed_cut is None:
+            return {
+                "status": "optimal" if status == cp_model.OPTIMAL else "feasible",
+                "message": "Generated timetable solutions.",
+                "solutions": [sorted(final_solution)],
+                "truncated": False,
+                "tasks": tasks,
+                "timing": {
+                    "precheck_ms": precheck_ms,
+                    "model_build_ms": model_build_ms,
+                    "solve_ms": solve_ms,
+                    "fallback_search_ms": 0,
+                    "total_ms": int((time.perf_counter() - started_at) * 1000),
+                    "room_assignment_ms": room_assignment_ms,
+                },
+                "stats": {
+                    "task_count": len(tasks),
+                    "assignment_variable_count": slot_variable_count,
+                    "candidate_option_count": legacy_candidate_option_count,
+                    "feasible_combo_count": 0,
+                    "fallback_combo_evaluated_count": 0,
+                    "fallback_combo_truncated": False,
+                    "exact_enumeration_single_worker": False,
+                    "machine_cpu_count": os.cpu_count() or 1,
+                    "memory_limit_mb": DEFAULT_SOLVER_MEMORY_LIMIT_MB,
+                    "projected_group_slot_blocker_count": 0,
+                    "slot_variable_count": slot_variable_count,
+                    "room_assignment_retry_count": retry_index,
+                    "room_assignment_failures": room_assignment_failures,
+                    "room_assignment_ms": room_assignment_ms,
+                    "solver_engine": "snapshot_decomposed_exact",
+                    "domain_reduction_ratio": domain_reduction_ratio,
+                },
+            }
+
+        retry_cuts.append(failed_cut)
+
+    return _resource_limited_result(
+        started_at,
+        tasks,
+        message=(
+            "Generation was stopped because exact room assignment could not be completed within the local retry budget. "
+            "The time assignment stage found candidate schedules, but concrete room matching kept failing. "
+            f"{last_room_assignment_diagnostic}".strip()
+        ),
+        precheck_ms=precheck_ms,
+        solve_ms=0,
+        model_build_ms=0,
+        assignment_variable_count=0,
+        candidate_option_count=legacy_candidate_option_count,
+        group_slot_blocker_count=0,
+        enumerate_all_solutions=False,
+    ) | {
+        "timing": {
+            "precheck_ms": precheck_ms,
+            "model_build_ms": 0,
+            "solve_ms": 0,
+            "fallback_search_ms": 0,
+            "total_ms": int((time.perf_counter() - started_at) * 1000),
+            "room_assignment_ms": room_assignment_ms,
+        },
+        "stats": {
+            "task_count": len(tasks),
+            "assignment_variable_count": 0,
+            "candidate_option_count": legacy_candidate_option_count,
+            "feasible_combo_count": 0,
+            "fallback_combo_evaluated_count": 0,
+            "fallback_combo_truncated": False,
+            "exact_enumeration_single_worker": False,
+            "machine_cpu_count": os.cpu_count() or 1,
+            "memory_limit_mb": DEFAULT_SOLVER_MEMORY_LIMIT_MB,
+            "projected_group_slot_blocker_count": 0,
+            "slot_variable_count": 0,
+            "room_assignment_retry_count": max_retry_cuts,
+            "room_assignment_failures": room_assignment_failures,
+            "room_assignment_ms": room_assignment_ms,
+            "solver_engine": "snapshot_decomposed_exact",
+            "domain_reduction_ratio": 0.0,
+        },
+    }
+
+
 def generate_timetables(
     db: Session,
     selected_soft_constraints: Iterable[str],
@@ -2209,6 +3202,89 @@ def generate_timetables(
     result["stats"]["feasible_combo_count"] = len(possible_combinations)
     result["stats"]["fallback_combo_evaluated_count"] = fallback_combo_evaluated_count
     result["stats"]["fallback_combo_truncated"] = fallback_combo_truncated
+    run._performance_preset = solve_profile.performance_preset
+    run._timing = result["timing"]
+    run._stats = result["stats"]
+    return run
+
+
+def generate_snapshot_timetables(
+    db: Session,
+    import_run_id: int,
+    selected_soft_constraints: Iterable[str],
+    max_solutions: int,
+    preview_limit: int,
+    time_limit_seconds: int,
+    performance_preset: str = "balanced",
+) -> SnapshotGenerationRun:
+    selected_soft_constraints = list(selected_soft_constraints)
+    solve_profile = _resolve_solve_profile(performance_preset)
+    tasks, _sessions, rooms, lecturer_names, group_names = _build_snapshot_tasks(
+        db, import_run_id
+    )
+    result = _solve_snapshot_internal(
+        tasks=tasks,
+        rooms=rooms,
+        lecturer_names=lecturer_names,
+        group_names=group_names,
+        selected_soft_constraints=selected_soft_constraints,
+        max_solutions=max_solutions,
+        time_limit_seconds=time_limit_seconds,
+        num_search_workers=solve_profile.probe_num_workers,
+    )
+
+    run = SnapshotGenerationRun(
+        import_run_id=import_run_id,
+        status=result["status"],
+        selected_soft_constraints=",".join(selected_soft_constraints),
+        total_solutions_found=len(result["solutions"]),
+        truncated=result["truncated"],
+        max_solutions=max_solutions,
+        time_limit_seconds=time_limit_seconds,
+        message=result["message"],
+    )
+    db.add(run)
+    db.flush()
+
+    room_lookup = {int(room.id): room for room in rooms}
+    tasks_list: list[SessionTask] = result["tasks"]
+    solution_entry_rows: list[dict] = []
+    for ordinal, solution in enumerate(result["solutions"][:preview_limit], start=1):
+        solution_row = SnapshotTimetableSolution(
+            generation_run_id=int(run.id),
+            ordinal=ordinal,
+            is_default=ordinal == 1 and len(result["solutions"]) == 1,
+            is_representative=ordinal == 1
+            and (result["truncated"] or len(result["solutions"]) > 100),
+        )
+        db.add(solution_row)
+        db.flush()
+        for task_index, room_id, day, start_minute in solution:
+            task = tasks_list[task_index]
+            entry = _entry_from_assignment(
+                task, room_lookup[room_id], day, start_minute
+            )
+            solution_entry_rows.append(
+                {
+                    "solution_id": int(solution_row.id),
+                    "shared_session_id": entry["session_id"],
+                    "occurrence_index": entry["occurrence_index"],
+                    "split_index": entry["split_index"],
+                    "room_id": entry["room_id"],
+                    "day": entry["day"],
+                    "start_minute": entry["start_minute"],
+                    "duration_minutes": entry["duration_minutes"],
+                }
+            )
+
+    db.commit()
+
+    if solution_entry_rows:
+        with engine.begin() as connection:
+            for row in solution_entry_rows:
+                connection.execute(insert(SnapshotSolutionEntry).values(**row))
+
+    db.refresh(run)
     run._performance_preset = solve_profile.performance_preset
     run._timing = result["timing"]
     run._stats = result["stats"]
@@ -2385,6 +3461,160 @@ def serialize_generation_run(run: V2GenerationRun) -> dict:
     }
 
 
+def _snapshot_solution_entry_payload(solution: SnapshotTimetableSolution) -> list[dict]:
+    payload = []
+    for entry in sorted(
+        solution.entries,
+        key=lambda item: (
+            DAY_INDEX.get(item.day, 99),
+            item.start_minute,
+            item.room.name,
+        ),
+    ):
+        session = entry.shared_session
+        split_lecturer_ids = set(
+            _snapshot_split_lecturer_ids(session).get(int(entry.split_index), tuple())
+        )
+        split_map = {
+            item.split_index: item for item in _build_snapshot_split_assignments(session)
+        }
+        split_assignment = split_map.get(
+            int(entry.split_index),
+            SplitAssignment(
+                split_index=int(entry.split_index),
+                student_group_ids=tuple(),
+                student_count=0,
+                fragments=tuple(),
+            ),
+        )
+        group_labels = []
+        degree_path_labels = []
+        fragment_count_by_group = defaultdict(int)
+        fragment_labels_by_group: dict[int, list[str]] = defaultdict(list)
+        for group_id, _fragment_size, fragment_label in split_assignment.fragments:
+            fragment_count_by_group[group_id] += 1
+            fragment_labels_by_group[group_id].append(fragment_label)
+        allowed_group_ids = set(split_assignment.student_group_ids)
+        for group in session.attendance_groups:
+            if split_assignment.student_group_ids and int(group.id) not in allowed_group_ids:
+                continue
+            degree_path_labels.append(group.label)
+            group_id = int(group.id)
+            if fragment_count_by_group.get(group_id, 0) <= 1:
+                label = (
+                    fragment_labels_by_group[group_id][0]
+                    if fragment_labels_by_group.get(group_id)
+                    else group.label
+                )
+                group_labels.append(label)
+            else:
+                group_labels.extend(fragment_labels_by_group[group_id])
+
+        modules = sorted(session.curriculum_modules, key=lambda item: int(item.id))
+        payload.append(
+            {
+                "session_id": int(entry.shared_session_id),
+                "session_name": session.name,
+                "module_code": " / ".join(module.code for module in modules) or session.name,
+                "module_name": " / ".join(module.name for module in modules) or session.name,
+                "room_name": entry.room.name,
+                "room_location": entry.room.location,
+                "day": entry.day,
+                "start_minute": int(entry.start_minute),
+                "duration_minutes": int(entry.duration_minutes),
+                "occurrence_index": int(entry.occurrence_index),
+                "split_index": int(entry.split_index),
+                "lecturer_names": [
+                    lecturer.name
+                    for lecturer in session.lecturers
+                    if int(lecturer.id) in split_lecturer_ids
+                ],
+                "student_group_names": group_labels,
+                "degree_path_labels": sorted(set(degree_path_labels)),
+                "total_students": int(split_assignment.student_count),
+            }
+        )
+    return payload
+
+
+def serialize_snapshot_solution(solution: SnapshotTimetableSolution) -> dict:
+    return {
+        "solution_id": int(solution.id),
+        "ordinal": int(solution.ordinal),
+        "is_default": bool(solution.is_default),
+        "is_representative": bool(solution.is_representative),
+        "entries": _snapshot_solution_entry_payload(solution),
+    }
+
+
+def serialize_snapshot_generation_run(run: SnapshotGenerationRun) -> dict:
+    raw_combos = json.loads(run.possible_soft_constraint_combinations or "[]")
+    combos = []
+    for item in raw_combos:
+        if isinstance(item, list):
+            combos.append(
+                {
+                    "constraints": item,
+                    "solution_count": 0,
+                    "solution_count_capped": False,
+                }
+            )
+        else:
+            combos.append(item)
+    selected = [item for item in run.selected_soft_constraints.split(",") if item]
+    timing = getattr(
+        run,
+        "_timing",
+        {
+            "precheck_ms": 0,
+            "model_build_ms": 0,
+            "solve_ms": 0,
+            "fallback_search_ms": 0,
+            "room_assignment_ms": 0,
+            "total_ms": 0,
+        },
+    )
+    stats = getattr(
+        run,
+        "_stats",
+        {
+            "task_count": 0,
+            "assignment_variable_count": 0,
+            "candidate_option_count": 0,
+            "feasible_combo_count": 0,
+            "fallback_combo_evaluated_count": 0,
+            "fallback_combo_truncated": False,
+            "exact_enumeration_single_worker": False,
+            "machine_cpu_count": os.cpu_count() or 1,
+            "memory_limit_mb": DEFAULT_SOLVER_MEMORY_LIMIT_MB,
+            "projected_group_slot_blocker_count": 0,
+            "slot_variable_count": 0,
+            "room_assignment_retry_count": 0,
+            "room_assignment_failures": 0,
+            "room_assignment_ms": 0,
+            "solver_engine": "snapshot_decomposed_exact",
+            "domain_reduction_ratio": 0.0,
+        },
+    )
+    return {
+        "generation_run_id": int(run.id),
+        "status": run.status,
+        "message": run.message or "Generated timetable solutions.",
+        "counts": {
+            "total_solutions_found": int(run.total_solutions_found),
+            "preview_solution_count": len(run.solutions),
+            "truncated": bool(run.truncated),
+        },
+        "performance_preset": getattr(run, "_performance_preset", "balanced"),
+        "timing": timing,
+        "stats": stats,
+        "selected_soft_constraints": selected,
+        "available_soft_constraints": list_soft_constraint_options(),
+        "possible_soft_constraint_combinations": combos,
+        "solutions": [serialize_snapshot_solution(solution) for solution in run.solutions],
+    }
+
+
 def get_latest_run(db: Session) -> V2GenerationRun | None:
     return (
         db.query(V2GenerationRun)
@@ -2420,6 +3650,40 @@ def get_latest_run(db: Session) -> V2GenerationRun | None:
     )
 
 
+def get_latest_snapshot_run(
+    db: Session, import_run_id: int
+) -> SnapshotGenerationRun | None:
+    return (
+        db.query(SnapshotGenerationRun)
+        .options(
+            joinedload(SnapshotGenerationRun.solutions)
+            .joinedload(SnapshotTimetableSolution.entries)
+            .joinedload(SnapshotSolutionEntry.room),
+            joinedload(SnapshotGenerationRun.solutions)
+            .joinedload(SnapshotTimetableSolution.entries)
+            .joinedload(SnapshotSolutionEntry.shared_session)
+            .joinedload(SnapshotSharedSession.curriculum_modules),
+            joinedload(SnapshotGenerationRun.solutions)
+            .joinedload(SnapshotTimetableSolution.entries)
+            .joinedload(SnapshotSolutionEntry.shared_session)
+            .joinedload(SnapshotSharedSession.lecturers),
+            joinedload(SnapshotGenerationRun.solutions)
+            .joinedload(SnapshotTimetableSolution.entries)
+            .joinedload(SnapshotSolutionEntry.shared_session)
+            .joinedload(SnapshotSharedSession.attendance_groups)
+            .joinedload(AttendanceGroup.programme),
+            joinedload(SnapshotGenerationRun.solutions)
+            .joinedload(SnapshotTimetableSolution.entries)
+            .joinedload(SnapshotSolutionEntry.shared_session)
+            .joinedload(SnapshotSharedSession.attendance_groups)
+            .joinedload(AttendanceGroup.programme_path),
+        )
+        .filter(SnapshotGenerationRun.import_run_id == import_run_id)
+        .order_by(SnapshotGenerationRun.id.desc())
+        .first()
+    )
+
+
 def get_solution(db: Session, solution_id: int) -> V2TimetableSolution | None:
     return (
         db.query(V2TimetableSolution)
@@ -2448,14 +3712,393 @@ def get_solution(db: Session, solution_id: int) -> V2TimetableSolution | None:
     )
 
 
+def set_default_snapshot_solution(
+    db: Session, import_run_id: int, solution_id: int
+) -> SnapshotTimetableSolution:
+    solution = (
+        db.query(SnapshotTimetableSolution)
+        .join(SnapshotGenerationRun)
+        .filter(
+            SnapshotTimetableSolution.id == solution_id,
+            SnapshotGenerationRun.import_run_id == import_run_id,
+        )
+        .first()
+    )
+    if not solution:
+        raise ValueError("Solution not found")
+    run_id = int(solution.generation_run_id)
+    db.query(SnapshotTimetableSolution).filter(
+        SnapshotTimetableSolution.generation_run_id == run_id
+    ).update({SnapshotTimetableSolution.is_default: False}, synchronize_session=False)
+    solution.is_default = True
+    db.commit()
+    db.refresh(solution)
+    return solution
+
+
+def _snapshot_lookup_options(db: Session, import_run_id: int) -> dict:
+    lecturers = (
+        db.query(SnapshotLecturer)
+        .filter(SnapshotLecturer.import_run_id == import_run_id)
+        .order_by(SnapshotLecturer.name)
+        .all()
+    )
+    attendance_groups = (
+        db.query(AttendanceGroup)
+        .options(
+            joinedload(AttendanceGroup.programme),
+            joinedload(AttendanceGroup.programme_path),
+        )
+        .filter(AttendanceGroup.import_run_id == import_run_id)
+        .order_by(
+            AttendanceGroup.programme_id,
+            AttendanceGroup.study_year,
+            AttendanceGroup.programme_path_id,
+            AttendanceGroup.id,
+        )
+        .all()
+    )
+    degrees_by_id: dict[int, dict] = {}
+    student_paths: list[dict] = []
+    seen_paths: set[tuple[int, int, int | None]] = set()
+    for group in attendance_groups:
+        if not group.programme_id or not group.programme:
+            continue
+        degrees_by_id[int(group.programme_id)] = {
+            "id": int(group.programme.id),
+            "label": f"{group.programme.code} - {group.programme.name}",
+        }
+        if group.study_year is None:
+            continue
+        key = (int(group.programme_id), int(group.study_year), int(group.programme_path_id) if group.programme_path_id else None)
+        if key in seen_paths:
+            continue
+        seen_paths.add(key)
+        student_paths.append(
+            {
+                "id": int(group.programme_path_id) if group.programme_path_id else None,
+                "degree_id": int(group.programme_id),
+                "year": int(group.study_year),
+                "label": f"Year {int(group.study_year)} - {group.programme_path.code if group.programme_path else 'General'}",
+            }
+        )
+    student_paths.sort(key=lambda item: (item["degree_id"], item["year"], item["label"]))
+    return {
+        "lecturers": [{"id": int(item.id), "label": item.name} for item in lecturers],
+        "degrees": sorted(degrees_by_id.values(), key=lambda item: item["label"]),
+        "student_paths": student_paths,
+    }
+
+
+def _build_snapshot_view_payload(
+    db: Session,
+    *,
+    import_run_id: int,
+    mode: str,
+    lecturer_id: int | None = None,
+    degree_id: int | None = None,
+    path_id: int | None = None,
+    study_year: int | None = None,
+) -> dict:
+    run = get_latest_snapshot_run(db, import_run_id)
+    if not run or not run.solutions:
+        raise ValueError("No generated timetable available")
+
+    solution = next((item for item in run.solutions if item.is_default), run.solutions[0])
+    serialized = serialize_snapshot_solution(solution)
+    real_entries = sorted(
+        solution.entries,
+        key=lambda item: (
+            DAY_INDEX.get(item.day, 99),
+            item.start_minute,
+            item.room.name,
+        ),
+    )
+    entry_pairs = list(zip(real_entries, serialized["entries"], strict=True))
+
+    if mode == "lecturer":
+        lecturer = (
+            db.query(SnapshotLecturer)
+            .filter(
+                SnapshotLecturer.import_run_id == import_run_id,
+                SnapshotLecturer.id == lecturer_id,
+            )
+            .first()
+        )
+        if not lecturer:
+            raise ValueError("Lecturer not found")
+        entries = [
+            payload
+            for real_entry, payload in entry_pairs
+            if any(int(item.id) == int(lecturer.id) for item in real_entry.shared_session.lecturers)
+        ]
+        title = f"Lecturer Timetable - {lecturer.name}"
+        subtitle = "Sessions taught by the selected lecturer."
+    elif mode == "student":
+        if not degree_id:
+            raise ValueError("Degree not found")
+        programme = db.query(Programme).filter(Programme.id == degree_id).first()
+        if not programme:
+            raise ValueError("Degree not found")
+        if not study_year:
+            raise ValueError("Study year not found")
+        target_groups = (
+            db.query(AttendanceGroup)
+            .filter(
+                AttendanceGroup.import_run_id == import_run_id,
+                AttendanceGroup.programme_id == degree_id,
+                AttendanceGroup.study_year == study_year,
+                AttendanceGroup.programme_path_id == path_id if path_id else AttendanceGroup.programme_path_id.is_(None),
+            )
+            .all()
+        )
+        if not target_groups:
+            raise ValueError("Student path has no matching groups")
+        target_group_ids = {int(group.id) for group in target_groups}
+        target_label = (
+            f"{programme.code} - {next((group.programme_path.code for group in target_groups if group.programme_path), 'General')}"
+            if path_id
+            else f"{programme.code} - Year {study_year} General"
+        )
+        entries = [
+            payload
+            for real_entry, payload in entry_pairs
+            if any(
+                int(group.id) in target_group_ids
+                for group in real_entry.shared_session.attendance_groups
+            )
+        ]
+        subtitle = "Sessions attended by the selected degree and path."
+        title = f"Student Timetable - {target_label}"
+    else:
+        entries = [payload for _real_entry, payload in entry_pairs]
+        title = "Faculty Timetable"
+        subtitle = "Default faculty timetable with all session details."
+
+    serialized["entries"] = entries
+    return {
+        "mode": mode,
+        "title": title,
+        "subtitle": subtitle,
+        "solution": serialized,
+    }
+
+
+def build_snapshot_verification_payload(db: Session, import_run_id: int) -> dict:
+    run = get_latest_snapshot_run(db, import_run_id)
+    if not run or not run.solutions:
+        raise ValueError("No generated timetable available")
+
+    solution = next((item for item in run.solutions if item.is_default), run.solutions[0])
+    attendance_groups = (
+        db.query(AttendanceGroup)
+        .options(
+            joinedload(AttendanceGroup.programme),
+            joinedload(AttendanceGroup.programme_path),
+            joinedload(AttendanceGroup.students).joinedload(AttendanceGroupStudent.student),
+        )
+        .filter(AttendanceGroup.import_run_id == import_run_id)
+        .order_by(AttendanceGroup.id)
+        .all()
+    )
+    rooms = (
+        db.query(SnapshotRoom)
+        .filter(SnapshotRoom.import_run_id == import_run_id)
+        .order_by(SnapshotRoom.id)
+        .all()
+    )
+    lecturers = (
+        db.query(SnapshotLecturer)
+        .filter(SnapshotLecturer.import_run_id == import_run_id)
+        .order_by(SnapshotLecturer.id)
+        .all()
+    )
+    student_hashes_by_group_id = {
+        int(group.id): sorted(
+            item.student.student_hash
+            for item in group.students
+            if item.student is not None and item.student.student_hash
+        )
+        for group in attendance_groups
+    }
+    study_year_by_group_id = {
+        int(group.id): int(group.study_year)
+        for group in attendance_groups
+    }
+
+    def split_audience_details(session: SnapshotSharedSession) -> dict[int, dict]:
+        split_details: dict[int, dict] = {}
+        group_offsets: dict[int, int] = defaultdict(int)
+        for split_assignment in _build_snapshot_split_assignments(session):
+            student_hashes: list[str] = []
+            study_years: set[int] = set()
+            attendance_group_ids: list[int] = []
+            for group_id, fragment_size, _fragment_label in split_assignment.fragments:
+                group_id = int(group_id)
+                all_hashes = student_hashes_by_group_id.get(group_id, [])
+                start_index = group_offsets.get(group_id, 0)
+                end_index = start_index + int(fragment_size)
+                student_hashes.extend(all_hashes[start_index:end_index])
+                group_offsets[group_id] = end_index
+                attendance_group_ids.append(group_id)
+                study_year = study_year_by_group_id.get(group_id)
+                if study_year is not None:
+                    study_years.add(study_year)
+            split_details[int(split_assignment.split_index)] = {
+                "attendance_group_ids": sorted(set(attendance_group_ids)),
+                "student_hashes": student_hashes,
+                "study_years": sorted(study_years),
+            }
+        return split_details
+
+    entries = []
+    for entry in sorted(
+        solution.entries,
+        key=lambda item: (
+            DAY_INDEX.get(item.day, 99),
+            item.start_minute,
+            int(item.shared_session_id),
+        ),
+    ):
+        session = entry.shared_session
+        split_details = split_audience_details(session).get(int(entry.split_index), {})
+        split_lecturer_ids = _snapshot_split_lecturer_ids(session)
+        entries.append(
+            {
+                "shared_session_id": int(entry.shared_session_id),
+                "solution_entry_id": int(entry.id),
+                "day": entry.day,
+                "start_minute": int(entry.start_minute),
+                "duration_minutes": int(entry.duration_minutes),
+                "occurrence_index": int(entry.occurrence_index),
+                "split_index": int(entry.split_index),
+                "room": {
+                    "id": int(entry.room.id),
+                    "name": entry.room.name,
+                    "capacity": int(entry.room.capacity),
+                    "room_type": entry.room.room_type,
+                    "lab_type": entry.room.lab_type,
+                    "location": entry.room.location,
+                    "year_restriction": entry.room.year_restriction,
+                },
+                "lecturer_ids": list(
+                    split_lecturer_ids.get(int(entry.split_index), tuple())
+                ),
+                "curriculum_module_ids": [int(item.id) for item in session.curriculum_modules],
+                "attendance_group_ids": split_details.get(
+                    "attendance_group_ids",
+                    [int(item.id) for item in session.attendance_groups],
+                ),
+                "student_hashes": split_details.get("student_hashes", []),
+                "study_years": split_details.get("study_years", []),
+            }
+        )
+
+    return {
+        "version": 1,
+        "import_run_id": int(import_run_id),
+        "generation_run_id": int(run.id),
+        "solution_id": int(solution.id),
+        "selected_soft_constraints": [
+            item for item in run.selected_soft_constraints.split(",") if item
+        ],
+        "hard_constraints": [
+            "lecturer_assignment",
+            "room_capacity_compatibility",
+            "room_capability_compatibility",
+            "room_year_restriction",
+            "specific_room_restrictions",
+            "no_room_overlap",
+            "no_lecturer_overlap",
+            "no_student_overlap",
+            "working_hours_only",
+            "lunch_break_protection",
+        ],
+        "rooms": [
+            {
+                "id": int(room.id),
+                "name": room.name,
+                "capacity": int(room.capacity),
+                "room_type": room.room_type,
+                "lab_type": room.lab_type,
+                "location": room.location,
+                "year_restriction": room.year_restriction,
+            }
+            for room in rooms
+        ],
+        "lecturers": [
+            {
+                "id": int(lecturer.id),
+                "name": lecturer.name,
+                "email": lecturer.email,
+            }
+            for lecturer in lecturers
+        ],
+        "attendance_groups": [
+            {
+                "id": int(group.id),
+                "label": group.label,
+                "academic_year": group.academic_year,
+                "study_year": group.study_year,
+                "programme_id": int(group.programme_id) if group.programme_id else None,
+                "programme_code": group.programme.code if group.programme else None,
+                "programme_path_id": int(group.programme_path_id) if group.programme_path_id else None,
+                "programme_path_code": group.programme_path.code if group.programme_path else None,
+                "student_count": int(group.student_count),
+                "student_hashes": [
+                    item.student.student_hash
+                    for item in group.students
+                    if item.student is not None
+                ],
+            }
+            for group in attendance_groups
+        ],
+        "shared_sessions": [
+            {
+                "id": int(session.id),
+                "name": session.name,
+                "session_type": session.session_type,
+                "duration_minutes": int(session.duration_minutes),
+                "occurrences_per_week": int(session.occurrences_per_week),
+                "required_room_type": session.required_room_type,
+                "required_lab_type": session.required_lab_type,
+                "specific_room_id": int(session.specific_room_id) if session.specific_room_id else None,
+                "max_students_per_group": int(session.max_students_per_group) if session.max_students_per_group else None,
+                "allow_parallel_rooms": bool(session.allow_parallel_rooms),
+                "lecturer_ids": [int(item.id) for item in session.lecturers],
+                "curriculum_module_ids": [int(item.id) for item in session.curriculum_modules],
+                "attendance_group_ids": [int(item.id) for item in session.attendance_groups],
+            }
+            for session in sorted(
+                {entry.shared_session for entry in solution.entries},
+                key=lambda item: int(item.id),
+            )
+        ],
+        "timetable_entries": entries,
+    }
+
+
 def build_view_payload(
     db: Session,
     mode: str,
+    import_run_id: int | None = None,
     lecturer_id: int | None = None,
     student_group_id: int | None = None,
     degree_id: int | None = None,
     path_id: int | None = None,
+    study_year: int | None = None,
 ) -> dict:
+    if import_run_id:
+        return _build_snapshot_view_payload(
+            db,
+            import_run_id=import_run_id,
+            mode=mode,
+            lecturer_id=lecturer_id,
+            degree_id=degree_id,
+            path_id=path_id,
+            study_year=study_year,
+        )
+
     run = get_latest_run(db)
     if not run or not run.solutions:
         raise ValueError("No generated timetable available")
@@ -2501,18 +4144,21 @@ def build_view_payload(
             target_label = f"{degree.code} - {path.code}"
             subtitle = "Sessions attended by the selected degree and path."
         else:
+            if not study_year:
+                raise ValueError("Study year not found")
             groups = (
                 db.query(V2StudentGroup)
                 .filter(
                     V2StudentGroup.degree_id == degree_id,
                     V2StudentGroup.path_id.is_(None),
+                    V2StudentGroup.year == study_year,
                 )
                 .all()
             )
             if not groups:
                 raise ValueError("General student group not found for the selected degree")
             target_group_names = {group.name for group in groups}
-            target_label = f"{degree.code} - General"
+            target_label = f"{degree.code} - Year {study_year} General"
             subtitle = "Sessions attended by the selected degree cohort."
         entries = [
             entry
@@ -2708,6 +4354,7 @@ def read_dataset(db: Session) -> dict:
                 "year": int(item.year),
                 "name": item.name,
                 "size": int(item.size),
+                "student_hashes": decode_student_hashes(item.student_hashes_json),
             }
             for item in student_groups
         ],
@@ -2758,7 +4405,9 @@ def read_dataset(db: Session) -> dict:
     }
 
 
-def lookup_options(db: Session) -> dict:
+def lookup_options(db: Session, import_run_id: int | None = None) -> dict:
+    if import_run_id:
+        return _snapshot_lookup_options(db, import_run_id)
     lecturers = db.query(V2Lecturer).order_by(V2Lecturer.name).all()
     degrees = db.query(V2Degree).order_by(V2Degree.code).all()
     paths = db.query(V2Path).order_by(V2Path.degree_id, V2Path.year, V2Path.code).all()
@@ -2855,6 +4504,7 @@ def replace_dataset(db: Session, payload) -> dict:
             year=item.year,
             name=item.name,
             size=item.size,
+            student_hashes_json=encode_student_hashes(item.student_hashes),
         )
         db.add(row)
         db.flush()

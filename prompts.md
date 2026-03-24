@@ -85,7 +85,7 @@ so we should not assume that one scheduled session always maps to exactly one mo
 
 instead we should support one scheduled teaching session being linked to one or more modules while still keeping the actual attending student groups, lecturers, room requirements and conflict logic attached to the shared session itself.
 
-student overlap and clash detection should be based on the actual student groups attending the session, not only on a single module code.
+student overlap and clash detection should be based on the actual attending students and the derived attendance groups built from them, not only on a single module code or a degree+path label.
 
 the data collection flow should therefore allow the user to define a shared teaching session once and then associate that session with one or more module identities where needed.
 
@@ -151,7 +151,7 @@ no big deal
 
 basically if there is a overlap between two sessions then there cant be any student who is doing both those sessions. simple as that 
 
-instead of student we can simplfy that as degree+year+path combination. 
+for some planning and display tasks we can still group students by degree+year+path style labels, but the atomic clash unit has to be the student because electives and shared teaching can cut across those labels.
 
 even though there are year long modules their times can be different for different semesters. so we do not have to worry about that. 
 
@@ -221,15 +221,11 @@ all of these views should be exportable to pdf , csv , xls, png etc.
 
 all the years and all the degrees and all the subject combinations and all the modules and all the sessions and all the classrooms and all the teachers and all the students should be displayed in the faculty timetable.
 
-for things like how many students are enrolled in each degree and how many students are enrolled in each subject combination will have to be taken as input from the user. 
+for things like how many students are enrolled in each degree and how many students are enrolled in each subject combination we should primarily derive them from the enrollment csv import when that data is available.
 
-for now those are manually entered but in the future we can think about data import feature 
+the import csv path is now part of the intended setup flow, not a future extension. the setup flow should start from csv import and review, and then a manual wizard should collect the remaining solver metadata and any controlled corrections that the csv alone cannot provide.
 
-but for that we have to know the structure the university is going to give us the data in.
-
-if we know exact colomns and data format then we can create a csv import feature that can read the data and populate the system with that data.
-
-but for now we will just have a manual data entry form for that.
+the manual wizard is therefore still required, but it is no longer the primary source of truth for student attendance.
 
 and also a seeder script to populate the system with some dummy data for testing and development purposes.
 
@@ -237,4 +233,6 @@ but this seeder script should be able to generate data that that matches the sys
 
 even though year + degree + path combination is good at identifying a group of students it is not sufficient because of elective modules. 
 
-therefore when importing data we will have to use that year + degree + path combination as a base but when storing the data we will have to think about better data storing structure that can handle elective modules as well. 
+therefore when importing data we can use year + degree + path combination as one useful planning layer, but when storing the canonical data we need a structure that can preserve actual student membership and can handle electives and shared teaching correctly.
+
+after a timetable is generated and a default timetable is selected, the system should run a separate verification phase. that verification phase should use 3 totally separate external modules written in different languages and implementation styles to check that the selected timetable satisfies all hard constraints. those same verifiers should also report which nice to have constraints the selected timetable satisfies.

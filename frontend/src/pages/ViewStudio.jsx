@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { timetableStudioService } from "../services/timetableStudioService";
 
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
@@ -11,6 +11,7 @@ const densityModes = {
   comfortable: { label: "Comfortable", minuteHeight: 1.0 },
   expanded: { label: "Expanded", minuteHeight: 1.35 },
 };
+const activeImportRunStorageKey = "kln_active_import_run_id";
 
 // ─── Pure helpers ──────────────────────────────────────────────────────────────
 
@@ -25,6 +26,11 @@ function formatDuration(minutes) {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
+function studentPathValue(item) {
+  if (!item) return "";
+  return item.id ? `path-${item.id}` : `general-${item.year}`;
 }
 
 function compactSessionName(moduleCode, sessionName) {
@@ -373,7 +379,7 @@ async function exportPng(view, entryMap, selectedDay) {
 
 // ─── Session Detail Modal ──────────────────────────────────────────────────────
 
-function SessionModal({ entry, onClose }) {
+function SessionModalInner({ entry, onClose }) {
   const overlayRef = useRef(null);
 
   useEffect(() => {
@@ -381,6 +387,15 @@ function SessionModal({ entry, onClose }) {
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
   }, [onClose]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || typeof window === "undefined") return;
+    const startedAt = window.__viewStudioSessionClickStartedAt;
+    if (!startedAt) return;
+    const elapsed = performance.now() - startedAt;
+    console.debug(`[ViewStudio] Session modal visible in ${elapsed.toFixed(1)}ms`);
+    window.__viewStudioSessionClickStartedAt = 0;
+  }, []);
 
   const handleOverlayClick = (e) => {
     if (e.target === overlayRef.current) onClose();
@@ -462,9 +477,11 @@ function SessionModal({ entry, onClose }) {
   );
 }
 
+const SessionModal = memo(SessionModalInner);
+
 // ─── Slot Popover ──────────────────────────────────────────────────────────────
 
-function SlotPopover({ entries, anchorStyle, onSelectEntry, onClose }) {
+function SlotPopoverInner({ entries, anchorStyle, onSelectEntry, onClose }) {
   const popoverRef = useRef(null);
 
   useEffect(() => {
@@ -516,9 +533,11 @@ function SlotPopover({ entries, anchorStyle, onSelectEntry, onClose }) {
   );
 }
 
+const SlotPopover = memo(SlotPopoverInner);
+
 // ─── Admin Day Calendar (multi-lane, horizontally scrollable) ─────────────────
 
-function AdminDayCalendar({ entries, selectedDay, minuteHeight, onEntryClick }) {
+function AdminDayCalendarInner({ entries, selectedDay, minuteHeight, onEntryClick }) {
   const hourCount = (calendarEndMinute - calendarStartMinute) / 60;
   const totalHeight = (calendarEndMinute - calendarStartMinute) * minuteHeight;
   const timeColWidth = 52;
@@ -666,9 +685,11 @@ function AdminDayCalendar({ entries, selectedDay, minuteHeight, onEntryClick }) 
   );
 }
 
+const AdminDayCalendar = memo(AdminDayCalendarInner);
+
 // ─── Day Picker ────────────────────────────────────────────────────────────────
 
-function DayPicker({ selectedDay, onSelectDay, dayLoad }) {
+function DayPickerInner({ selectedDay, onSelectDay, dayLoad }) {
   return (
     <div className="day-picker" role="tablist" aria-label="Select day">
       {days.map((day) => {
@@ -694,9 +715,11 @@ function DayPicker({ selectedDay, onSelectDay, dayLoad }) {
   );
 }
 
+const DayPicker = memo(DayPickerInner);
+
 // ─── Day Calendar Component ────────────────────────────────────────────────────
 
-function DayCalendar({ entries, selectedDay, minuteHeight, onEntryClick }) {
+function DayCalendarInner({ entries, selectedDay, minuteHeight, onEntryClick }) {
   const hourCount = (calendarEndMinute - calendarStartMinute) / 60;
   const totalHeight = (calendarEndMinute - calendarStartMinute) * minuteHeight;
   const timeColWidth = 52;
@@ -861,9 +884,11 @@ function DayCalendar({ entries, selectedDay, minuteHeight, onEntryClick }) {
   );
 }
 
+const DayCalendar = memo(DayCalendarInner);
+
 // ─── Agenda Component ──────────────────────────────────────────────────────────
 
-function AgendaView({ agendaDays, onEntryClick }) {
+function AgendaViewInner({ agendaDays, onEntryClick }) {
   return (
     <div className="agenda-view">
       {agendaDays.map(({ day, entries }) => (
@@ -928,10 +953,20 @@ function AgendaView({ agendaDays, onEntryClick }) {
   );
 }
 
+const AgendaView = memo(AgendaViewInner);
+
 // ─── Main Page Component ───────────────────────────────────────────────────────
 
 function ViewStudio() {
   const [mode, setMode] = useState("admin");
+  const [activeImportRunId] = useState(() => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    const raw = window.localStorage.getItem(activeImportRunStorageKey);
+    const parsed = Number(raw);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  });
   const [view, setView] = useState(null);
   const [lookups, setLookups] = useState({ lecturers: [], degrees: [], student_paths: [] });
   const [selectedLecturerId, setSelectedLecturerId] = useState("");
@@ -950,6 +985,13 @@ function ViewStudio() {
     () => lookups.student_paths.filter((p) => String(p.degree_id) === String(selectedDegreeId || "")),
     [lookups.student_paths, selectedDegreeId]
   );
+  const selectedStudentPath = useMemo(
+    () =>
+      availableStudentPaths.find(
+        (item) => studentPathValue(item) === String(selectedPathId || "")
+      ) || null,
+    [availableStudentPaths, selectedPathId]
+  );
 
   const loadView = useCallback(
     async (nextMode = mode) => {
@@ -958,9 +1000,14 @@ function ViewStudio() {
       try {
         const response = await timetableStudioService.view({
           mode: nextMode,
+          importRunId: activeImportRunId,
           lecturerId: nextMode === "lecturer" ? selectedLecturerId : undefined,
           degreeId: nextMode === "student" ? selectedDegreeId : undefined,
-          pathId: nextMode === "student" && selectedPathId !== "general" ? selectedPathId : undefined,
+          studyYear: nextMode === "student" ? selectedStudentPath?.year : undefined,
+          pathId:
+            nextMode === "student" && selectedStudentPath?.id
+              ? selectedStudentPath.id
+              : undefined,
         });
         setView(response);
       } catch (err) {
@@ -978,14 +1025,14 @@ function ViewStudio() {
         setLoading(false);
       }
     },
-    [mode, selectedLecturerId, selectedDegreeId, selectedPathId]
+    [activeImportRunId, mode, selectedLecturerId, selectedDegreeId, selectedPathId, selectedStudentPath]
   );
 
   useEffect(() => {
-    timetableStudioService.getLookups().then(setLookups).catch(() => {});
+    timetableStudioService.getLookups(activeImportRunId).then(setLookups).catch(() => {});
     loadView();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeImportRunId]);
 
   const entryMap = useMemo(() => {
     const map = new Map();
@@ -1023,10 +1070,16 @@ function ViewStudio() {
     (mode === "lecturer" && !selectedLecturerId) ||
     (mode === "student" && (!selectedDegreeId || !selectedPathId));
 
-  const handleApplyFilters = async () => {
-    if (needsSelection) return;
-    await loadView(mode);
-  };
+  useEffect(() => {
+    if (mode === "admin") {
+      return;
+    }
+    if (needsSelection) {
+      setView(null);
+      return;
+    }
+    loadView(mode);
+  }, [mode, needsSelection, selectedLecturerId, selectedDegreeId, selectedPathId, loadView]);
 
   const handleExport = async (format) => {
     try {
@@ -1037,9 +1090,14 @@ function ViewStudio() {
       const response = await timetableStudioService.exportView({
         mode,
         format,
+        importRunId: activeImportRunId,
         lecturerId: mode === "lecturer" ? selectedLecturerId : undefined,
         degreeId: mode === "student" ? selectedDegreeId : undefined,
-        pathId: mode === "student" && selectedPathId !== "general" ? selectedPathId : undefined,
+        studyYear: mode === "student" ? selectedStudentPath?.year : undefined,
+        pathId:
+          mode === "student" && selectedStudentPath?.id
+            ? selectedStudentPath.id
+            : undefined,
       });
       downloadBase64(response.filename, response.content_type, response.content);
     } catch (err) {
@@ -1048,6 +1106,10 @@ function ViewStudio() {
   };
 
   const handleEntryClick = useCallback((entry) => {
+    if (import.meta.env.DEV && typeof window !== "undefined") {
+      window.__viewStudioSessionClickStartedAt = performance.now();
+      console.debug(`[ViewStudio] Session click received for ${entry.module_code} ${entry.session_name}`);
+    }
     setModalEntry(entry);
   }, []);
 
@@ -1064,8 +1126,13 @@ function ViewStudio() {
           <div className="vs-title-block">
             <h1 className="section-title">Timetable Views</h1>
             <p className="section-subtitle">
-              Review the current timetable in admin, lecturer, or student mode.
+              Start with the default timetable. Switch to lecturer or student mode only when you need a filtered view.
             </p>
+            {activeImportRunId && (
+              <p className="helper-copy">
+                Using import snapshot #{activeImportRunId} for lookups and timetable views.
+              </p>
+            )}
           </div>
           <div className="vs-filter-controls">
             <div className="vs-mode-group">
@@ -1114,23 +1181,13 @@ function ViewStudio() {
                   {availableStudentPaths.map((item) => (
                     <option
                       key={`${item.degree_id}-${item.year}-${item.id ?? "general"}`}
-                      value={item.id ?? "general"}
+                      value={studentPathValue(item)}
                     >
                       {item.label}
                     </option>
                   ))}
                 </select>
               </>
-            )}
-            {mode !== "admin" && (
-              <button
-                type="button"
-                className="primary-btn vs-apply-btn"
-                onClick={handleApplyFilters}
-                disabled={needsSelection}
-              >
-                Apply
-              </button>
             )}
           </div>
         </div>
@@ -1190,13 +1247,13 @@ function ViewStudio() {
         {!loading && mode === "lecturer" && !view && !error && !selectedLecturerId && (
           <section className="studio-card vs-empty-state">
             <h2>Select a lecturer</h2>
-            <p>Choose a lecturer above, then click Apply to load their timetable.</p>
+            <p>Choose a lecturer above to load their timetable automatically.</p>
           </section>
         )}
         {!loading && mode === "student" && !view && !error && (
           <section className="studio-card vs-empty-state">
             <h2>Select a degree and path</h2>
-            <p>Choose the degree and path above, then click Apply to load the student timetable.</p>
+            <p>Choose the degree and path above to load the student timetable automatically.</p>
           </section>
         )}
         {!loading && mode === "admin" && !view && !error && (

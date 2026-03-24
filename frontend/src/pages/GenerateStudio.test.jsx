@@ -32,7 +32,7 @@ describe("GenerateStudio", () => {
     expect(screen.getByLabelText(/Balance teaching load across the week/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Avoid Monday overload/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/Save your faculty data in Setup, then generate timetable solutions here/i)
+      screen.getByText(/Finish the setup first, then generate the timetable here/i)
     ).toBeInTheDocument();
   });
 
@@ -273,17 +273,69 @@ describe("GenerateStudio", () => {
     fireEvent.change(screen.getByLabelText(/Performance preset/i), {
       target: { value: "thorough" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Generate Timetable Solutions/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Generate Timetable/i }));
 
     await waitFor(() =>
       expect(timetableStudioService.generate).toHaveBeenCalledWith({
+        import_run_id: undefined,
         soft_constraints: ["spread_sessions_across_days"],
         performance_preset: "thorough",
         max_solutions: 1000,
         preview_limit: 5,
-        time_limit_seconds: 60,
+        time_limit_seconds: 180,
       })
     );
+  });
+
+  it("shows a blocking overlay while generation is running", async () => {
+    timetableStudioService.latestGeneration.mockRejectedValue(new Error("empty"));
+
+    let resolveGenerate;
+    timetableStudioService.generate.mockReturnValue(
+      new Promise((resolve) => {
+        resolveGenerate = resolve;
+      })
+    );
+
+    render(<GenerateStudio />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Generate Timetable/i }));
+
+    expect(await screen.findByText("Generating timetable")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Generating timetable solutions from the current snapshot/i)
+    ).toBeInTheDocument();
+
+    resolveGenerate({
+      generation_run_id: 15,
+      status: "optimal",
+      message: "Generated timetable solutions.",
+      performance_preset: "balanced",
+      timing: { precheck_ms: 10, model_build_ms: 20, solve_ms: 30, fallback_search_ms: 0, total_ms: 60 },
+      stats: {
+        task_count: 1,
+        assignment_variable_count: 4,
+        candidate_option_count: 4,
+        feasible_combo_count: 0,
+        fallback_combo_evaluated_count: 0,
+        fallback_combo_truncated: false,
+        exact_enumeration_single_worker: true,
+        machine_cpu_count: 8,
+      },
+      counts: {
+        total_solutions_found: 1,
+        preview_solution_count: 1,
+        truncated: false,
+      },
+      selected_soft_constraints: [],
+      available_soft_constraints: [],
+      possible_soft_constraint_combinations: [],
+      solutions: [],
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Generating timetable")).not.toBeInTheDocument();
+    });
   });
 
   it("clamps advanced performance values to backend limits before submit", async () => {
@@ -321,15 +373,16 @@ describe("GenerateStudio", () => {
     fireEvent.change(screen.getByLabelText(/Max solutions/i), { target: { value: "100000" } });
     fireEvent.change(screen.getByLabelText(/Preview limit/i), { target: { value: "0" } });
     fireEvent.change(screen.getByLabelText(/Time limit \(seconds\)/i), { target: { value: "600" } });
-    fireEvent.click(screen.getByRole("button", { name: /Generate Timetable Solutions/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Generate Timetable/i }));
 
     await waitFor(() =>
       expect(timetableStudioService.generate).toHaveBeenCalledWith({
+        import_run_id: undefined,
         soft_constraints: [],
         performance_preset: "balanced",
         max_solutions: 5000,
         preview_limit: 1,
-        time_limit_seconds: 300,
+        time_limit_seconds: 600,
       })
     );
   });

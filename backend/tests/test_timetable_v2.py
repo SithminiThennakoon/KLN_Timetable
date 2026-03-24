@@ -12,6 +12,11 @@ os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_FILE}"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.database import Base, SessionLocal, engine  # noqa: E402
+from app.services.csv_import_analysis import (  # noqa: E402
+    ReviewRule,
+    analyze_enrollment_csv,
+    build_reviewed_import_projection,
+)
 from app.services.timetable_v2 import (  # noqa: E402
     SessionTask,
     build_view_payload,
@@ -19,6 +24,7 @@ from app.services.timetable_v2 import (  # noqa: E402
     generate_timetables,
     get_latest_run,
     list_soft_constraint_options,
+    read_dataset,
     serialize_generation_run,
     set_default_solution,
 )
@@ -139,10 +145,38 @@ def build_mock_task() -> SessionTask:
         specific_room_id=1,
         lecturer_ids=(1,),
         student_group_ids=(1,),
+        student_membership_keys=tuple(),
+        study_years=(1,),
         student_count=40,
         root_session_id=1,
         bundle_key=None,
     )
+
+
+def write_csv_fixture(rows: list[dict[str, str]]) -> Path:
+    handle = tempfile.NamedTemporaryFile("w", newline="", encoding="utf-8", suffix=".csv", delete=False)
+    path = Path(handle.name)
+    try:
+        import csv
+
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "CoursePathNo",
+                "CourseCode",
+                "Year",
+                "AcYear",
+                "Attempt",
+                "stream",
+                "batch",
+                "student_hash",
+            ],
+        )
+        writer.writeheader()
+        writer.writerows(rows)
+    finally:
+        handle.close()
+    return path
 
 
 class TimetableV2Tests(unittest.TestCase):
@@ -158,6 +192,353 @@ class TimetableV2Tests(unittest.TestCase):
 
     def tearDown(self):
         self.db.close()
+
+    def test_csv_import_analysis_classifies_valid_and_ambiguous_rows(self):
+        csv_path = write_csv_fixture(
+            [
+                {
+                    "CoursePathNo": "1",
+                    "CourseCode": "CHEM 11512",
+                    "Year": "1",
+                    "AcYear": "2022/2023",
+                    "Attempt": "1",
+                    "stream": "BS",
+                    "batch": "2022",
+                    "student_hash": "student-1",
+                },
+                {
+                    "CoursePathNo": "",
+                    "CourseCode": "MGMT 11022",
+                    "Year": "2",
+                    "AcYear": "2022/2023",
+                    "Attempt": "1",
+                    "stream": "BS",
+                    "batch": "2021",
+                    "student_hash": "student-2",
+                },
+            ]
+        )
+        try:
+            analysis = analyze_enrollment_csv(str(csv_path))
+        finally:
+            csv_path.unlink(missing_ok=True)
+
+        self.assertEqual(analysis["summary"]["total_rows"], 2)
+        self.assertEqual(analysis["summary"]["valid_rows"], 1)
+        self.assertEqual(analysis["summary"]["ambiguous_rows"], 1)
+        self.assertEqual(analysis["anomaly_counts"]["blank_course_path"], 1)
+        self.assertEqual(analysis["anomaly_counts"]["year_code_mismatch"], 1)
+
+    def test_csv_import_analysis_preserves_semester_four_and_nominal_year_zero(self):
+        csv_path = write_csv_fixture(
+            [
+                {
+                    "CoursePathNo": "1",
+                    "CourseCode": "BSSS 01512",
+                    "Year": "1",
+                    "AcYear": "2022/2023",
+                    "Attempt": "1",
+                    "stream": "SS",
+                    "batch": "2022",
+                    "student_hash": "student-1",
+                },
+                {
+                    "CoursePathNo": "2",
+                    "CourseCode": "CHEM 14512",
+                    "Year": "2",
+                    "AcYear": "2022/2023",
+                    "Attempt": "1",
+                    "stream": "BS",
+                    "batch": "2022",
+                    "student_hash": "student-2",
+                },
+            ]
+        )
+        try:
+            analysis = analyze_enrollment_csv(str(csv_path))
+        finally:
+            csv_path.unlink(missing_ok=True)
+
+        self.assertEqual(analysis["semester_digit_counts"]["4"], 1)
+        self.assertEqual(analysis["anomaly_counts"]["nominal_year_zero"], 1)
+        self.assertEqual(analysis["anomaly_counts"]["year_code_mismatch"], 2)
+        self.assertNotIn("semester_code_unusual", analysis["anomaly_counts"])
+
+    def test_csv_import_analysis_marks_bad_structure_invalid(self):
+        csv_path = write_csv_fixture(
+            [
+                {
+                    "CoursePathNo": "1",
+                    "CourseCode": "BADCODE",
+                    "Year": "x",
+                    "AcYear": "2022-2023",
+                    "Attempt": "",
+                    "stream": "BS",
+                    "batch": "",
+                    "student_hash": "student-1",
+                }
+            ]
+        )
+        try:
+            analysis = analyze_enrollment_csv(str(csv_path))
+        finally:
+            csv_path.unlink(missing_ok=True)
+
+        self.assertEqual(analysis["summary"]["invalid_rows"], 1)
+        self.assertEqual(analysis["summary"]["excluded_rows"], 1)
+        self.assertEqual(analysis["anomaly_counts"]["malformed_academic_year"], 1)
+        self.assertEqual(analysis["anomaly_counts"]["missing_attempt"], 1)
+        self.assertEqual(analysis["anomaly_counts"]["missing_batch"], 1)
+        self.assertEqual(analysis["anomaly_counts"]["non_numeric_year"], 1)
+        self.assertEqual(analysis["anomaly_counts"]["unparseable_course_code"], 1)
+
+    def test_room_year_restriction_blocks_room_match(self):
+        task = build_mock_task()
+        allowed_room = type(
+            "Room",
+            (),
+            {
+                "id": 1,
+                "capacity": 50,
+                "room_type": "lab",
+                "lab_type": "chem_lab",
+                "year_restriction": 1,
+            },
+        )()
+        blocked_room = type(
+            "Room",
+            (),
+            {
+                "id": 2,
+                "capacity": 50,
+                "room_type": "lab",
+                "lab_type": "chem_lab",
+                "year_restriction": 2,
+            },
+        )()
+
+        self.assertTrue(timetable_v2_service._room_matches(allowed_room, task))
+        self.assertFalse(timetable_v2_service._room_matches(blocked_room, task))
+
+    def test_generation_fails_when_session_has_no_lecturer(self):
+        payload = DatasetUpsertRequest(**build_dataset(lecturer_count=0))
+        replace_dataset(self.db, payload)
+
+        run = generate_timetables(
+            self.db,
+            selected_soft_constraints=[],
+            max_solutions=5,
+            preview_limit=1,
+            time_limit_seconds=10,
+        )
+
+        self.assertEqual(run.status, "infeasible")
+        self.assertIn("has no lecturer assigned", run.message)
+
+    def test_csv_import_rules_can_accept_exception_and_treat_blank_path_as_common(self):
+        csv_path = write_csv_fixture(
+            [
+                {
+                    "CoursePathNo": "",
+                    "CourseCode": "MGMT 11022",
+                    "Year": "2",
+                    "AcYear": "2022/2023",
+                    "Attempt": "1",
+                    "stream": "BS",
+                    "batch": "2021",
+                    "student_hash": "student-1",
+                }
+            ]
+        )
+        try:
+            analysis = analyze_enrollment_csv(
+                str(csv_path),
+                rules=[
+                    ReviewRule(
+                        bucket_type="year_code_mismatch",
+                        bucket_key="year=2|nominal_year=1",
+                        action="accept_exception",
+                    ),
+                    ReviewRule(
+                        bucket_type="blank_course_path",
+                        bucket_key="stream=BS|year=2|subject=MGMT",
+                        action="treat_as_common",
+                    ),
+                ],
+            )
+        finally:
+            csv_path.unlink(missing_ok=True)
+
+        self.assertEqual(analysis["summary"]["valid_exception_rows"], 1)
+        self.assertEqual(analysis["summary"]["excluded_rows"], 0)
+
+    def test_reviewed_import_projection_builds_exact_registration_groups(self):
+        csv_path = write_csv_fixture(
+            [
+                {
+                    "CoursePathNo": "1",
+                    "CourseCode": "CHEM 11512",
+                    "Year": "1",
+                    "AcYear": "2022/2023",
+                    "Attempt": "1",
+                    "stream": "BS",
+                    "batch": "2022",
+                    "student_hash": "student-1",
+                },
+                {
+                    "CoursePathNo": "1",
+                    "CourseCode": "CHEM 11512",
+                    "Year": "1",
+                    "AcYear": "2022/2023",
+                    "Attempt": "1",
+                    "stream": "BS",
+                    "batch": "2022",
+                    "student_hash": "student-2",
+                },
+                {
+                    "CoursePathNo": "",
+                    "CourseCode": "MGMT 11022",
+                    "Year": "2",
+                    "AcYear": "2022/2023",
+                    "Attempt": "1",
+                    "stream": "BS",
+                    "batch": "2021",
+                    "student_hash": "student-1",
+                },
+            ]
+        )
+        try:
+            projection = build_reviewed_import_projection(
+                path=str(csv_path),
+                rules=[
+                    ReviewRule(
+                        bucket_type="year_code_mismatch",
+                        bucket_key="year=2|nominal_year=1",
+                        action="accept_exception",
+                    ),
+                    ReviewRule(
+                        bucket_type="blank_course_path",
+                        bucket_key="stream=BS|year=2|subject=MGMT",
+                        action="treat_as_common",
+                    ),
+                ],
+            )
+        finally:
+            csv_path.unlink(missing_ok=True)
+
+        self.assertEqual(projection["projection_summary"]["projected_rows"], 3)
+        groups = projection["dataset"]["student_groups"]
+        self.assertTrue(any(group["student_hashes"] == ["student-1", "student-2"] for group in groups))
+        self.assertTrue(any(group["path_client_key"] is None for group in groups))
+
+    def test_generation_blocks_shared_students_across_distinct_groups(self):
+        payload = DatasetUpsertRequest(
+            **{
+                "degrees": [
+                    {
+                        "client_key": "degree_bs",
+                        "code": "BS",
+                        "name": "Biological Science",
+                        "duration_years": 3,
+                        "intake_label": "BS Intake",
+                    }
+                ],
+                "paths": [
+                    {
+                        "client_key": "path_bs_y1",
+                        "degree_client_key": "degree_bs",
+                        "year": 1,
+                        "code": "BS-P1",
+                        "name": "BS Path 1",
+                    }
+                ],
+                "lecturers": [
+                    {"client_key": "lect_1", "name": "Lecturer 1", "email": "lect1@example.com"},
+                    {"client_key": "lect_2", "name": "Lecturer 2", "email": "lect2@example.com"},
+                ],
+                "rooms": [
+                    {"client_key": "room_1", "name": "Room 1", "capacity": 50, "room_type": "lecture", "lab_type": None, "location": "Block A", "year_restriction": None},
+                    {"client_key": "room_2", "name": "Room 2", "capacity": 50, "room_type": "lecture", "lab_type": None, "location": "Block A", "year_restriction": None},
+                ],
+                "student_groups": [
+                    {"client_key": "group_1", "degree_client_key": "degree_bs", "path_client_key": "path_bs_y1", "year": 1, "name": "Group 1", "size": 1, "student_hashes": ["student-shared"]},
+                    {"client_key": "group_2", "degree_client_key": "degree_bs", "path_client_key": "path_bs_y1", "year": 1, "name": "Group 2", "size": 1, "student_hashes": ["student-shared"]},
+                ],
+                "modules": [
+                    {"client_key": "module_1", "code": "CHEM101A", "name": "Module 1", "subject_name": "CHEM", "year": 1, "semester": 1, "is_full_year": False},
+                    {"client_key": "module_2", "code": "PHYS101A", "name": "Module 2", "subject_name": "PHYS", "year": 1, "semester": 1, "is_full_year": False},
+                ],
+                "sessions": [
+                    {"client_key": "session_1", "module_client_key": "module_1", "linked_module_client_keys": [], "name": "Session 1", "session_type": "lecture", "duration_minutes": 30, "occurrences_per_week": 1, "required_room_type": "lecture", "required_lab_type": None, "specific_room_client_key": None, "max_students_per_group": None, "allow_parallel_rooms": False, "notes": None, "lecturer_client_keys": ["lect_1"], "student_group_client_keys": ["group_1"]},
+                    {"client_key": "session_2", "module_client_key": "module_2", "linked_module_client_keys": [], "name": "Session 2", "session_type": "lecture", "duration_minutes": 30, "occurrences_per_week": 1, "required_room_type": "lecture", "required_lab_type": None, "specific_room_client_key": None, "max_students_per_group": None, "allow_parallel_rooms": False, "notes": None, "lecturer_client_keys": ["lect_2"], "student_group_client_keys": ["group_2"]},
+                ],
+            }
+        )
+        replace_dataset(self.db, payload)
+
+        with patch.object(timetable_v2_service, "DAY_ORDER", ["Monday"]), patch.object(
+            timetable_v2_service, "START_MINUTE", 8 * 60
+        ), patch.object(timetable_v2_service, "END_MINUTE", 8 * 60 + 30):
+            run = generate_timetables(
+                self.db,
+                selected_soft_constraints=[],
+                max_solutions=5,
+                preview_limit=1,
+                time_limit_seconds=10,
+            )
+
+        self.assertEqual(run.status, "infeasible")
+
+    def test_reviewed_projection_can_be_loaded_into_dataset_tables(self):
+        csv_path = write_csv_fixture(
+            [
+                {
+                    "CoursePathNo": "1",
+                    "CourseCode": "CHEM 11512",
+                    "Year": "1",
+                    "AcYear": "2022/2023",
+                    "Attempt": "1",
+                    "stream": "BS",
+                    "batch": "2022",
+                    "student_hash": "student-1",
+                },
+                {
+                    "CoursePathNo": "",
+                    "CourseCode": "MGMT 11022",
+                    "Year": "2",
+                    "AcYear": "2022/2023",
+                    "Attempt": "1",
+                    "stream": "BS",
+                    "batch": "2021",
+                    "student_hash": "student-2",
+                },
+            ]
+        )
+        try:
+            projection = build_reviewed_import_projection(
+                path=str(csv_path),
+                rules=[
+                    ReviewRule(
+                        bucket_type="year_code_mismatch",
+                        bucket_key="year=2|nominal_year=1",
+                        action="accept_exception",
+                    ),
+                    ReviewRule(
+                        bucket_type="blank_course_path",
+                        bucket_key="stream=BS|year=2|subject=MGMT",
+                        action="treat_as_common",
+                    ),
+                ],
+            )
+        finally:
+            csv_path.unlink(missing_ok=True)
+
+        replace_dataset(self.db, DatasetUpsertRequest(**projection["dataset"]))
+        loaded = read_dataset(self.db)
+
+        self.assertEqual(len(loaded["student_groups"]), 2)
+        self.assertTrue(any(group["student_hashes"] == ["student-1"] for group in loaded["student_groups"]))
+        self.assertTrue(any(group["path_client_key"] is None for group in loaded["student_groups"]))
 
     def test_infeasible_generation_reports_room_diagnostics(self):
         payload = DatasetUpsertRequest(**build_dataset(room_capacity=20, split_limit=None))

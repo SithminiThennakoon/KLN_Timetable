@@ -1,1032 +1,1948 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { timetableStudioService } from "../services/timetableStudioService";
-import {
-  makeId,
-  syncBaseCohorts,
-  toSummary,
-  validateDraft,
-  currentStepFeedback,
-  BLOCKED_STEP_REASONS,
-} from "./setup/setupHelpers";
-import { StructureStep } from "./setup/StructureStep";
-import { LecturersStep } from "./setup/LecturersStep";
-import { RoomsStep } from "./setup/RoomsStep";
-import { CohortsStep } from "./setup/CohortsStep";
-import { ModulesStep } from "./setup/ModulesStep";
-import { SessionsStep } from "./setup/SessionsStep";
-import { ReviewStep } from "./setup/ReviewStep";
 
-// ── Step config ────────────────────────────────────────────────────────────────
+const activeImportRunStorageKey = "kln_active_import_run_id";
+const reviewPageSize = 25;
 
-const steps = [
-  { key: "structure", label: "Structure" },
-  { key: "lecturers", label: "Lecturers" },
-  { key: "rooms", label: "Rooms" },
-  { key: "cohorts", label: "Student Cohorts" },
-  { key: "modules", label: "Modules" },
-  { key: "sessions", label: "Sessions" },
-  { key: "review", label: "Review & Save" },
-];
-
-const stepGuidance = {
-  structure:
-    "Start by defining each degree and any allowed year-specific paths. Direct-entry degrees can stay without paths and will use a general cohort.",
-  lecturers:
-    "Enter the lecturers who may be assigned to weekly sessions. These names are also used in lecturer timetable views.",
-  rooms:
-    "Add every teaching room the solver may use, including lecture halls, labs, capacities, locations, and lab types. Under-entering the real room pool can make generation fail even when sessions are correct. Year restrictions are stored, but the current solver does not enforce them.",
-  cohorts:
-    "Base cohorts are created from degree, year, and path structure. Add student counts there first, then create override groups only when attendance itself differs, such as electives or special attendance patterns.",
-  modules:
-    "Enter the semester or full-year modules that sessions belong to. Sessions are scheduled later, but every session must point to a module first.",
-  sessions:
-    "Create the actual weekly teaching activities here. Link each session to its lecturers and attending cohorts, then use advanced options only when delivery needs extra rules such as split groups, lab typing, or fixed rooms.",
-  review:
-    "Use this review step before saving. Blocking issues must be fixed first. Warnings are allowed, but they usually indicate incomplete staffing or unusual delivery choices.",
-};
-
-// ── Empty draft ────────────────────────────────────────────────────────────────
-
-const emptyDraft = {
-  degrees: [],
-  paths: [],
+const emptyWorkspace = {
+  import_run_id: null,
+  selected_academic_year: "",
+  programmes: [],
+  programme_paths: [],
+  curriculum_modules: [],
+  attendance_groups: [],
   lecturers: [],
   rooms: [],
-  cohorts: [],
-  modules: [],
-  sessions: [],
+  shared_sessions: [],
 };
 
-// ── normalizeDataset (keeps local IDs stable across load) ─────────────────────
+const emptyLecturerForm = {
+  name: "",
+  email: "",
+  notes: "",
+};
 
-function normalizeDataset(dataset) {
-  const degreeIdByKey = new Map();
-  const pathIdByKey = new Map();
-  const lecturerIdByKey = new Map();
-  const roomIdByKey = new Map();
-  const cohortIdByKey = new Map();
-  const moduleIdByKey = new Map();
+const emptyRoomForm = {
+  name: "",
+  capacity: "",
+  room_type: "lecture",
+  lab_type: "",
+  location: "",
+  year_restriction: "",
+  notes: "",
+};
 
-  const degrees = (dataset.degrees || []).map((degree) => {
-    const id = makeId("degree");
-    degreeIdByKey.set(degree.client_key, id);
-    return {
-      id,
-      code: degree.code || "",
-      name: degree.name || "",
-      duration_years: degree.duration_years || 3,
-      intake_label: degree.intake_label || "",
-    };
-  });
+const emptySessionForm = {
+  name: "",
+  session_type: "lecture",
+  duration_minutes: 60,
+  occurrences_per_week: 1,
+  required_room_type: "lecture",
+  required_lab_type: "",
+  specific_room_id: "",
+  max_students_per_group: "",
+  allow_parallel_rooms: false,
+  notes: "",
+  lecturer_ids: [],
+  curriculum_module_ids: [],
+  attendance_group_ids: [],
+};
 
-  const paths = (dataset.paths || []).map((path) => {
-    const id = makeId("path");
-    pathIdByKey.set(path.client_key, id);
-    return {
-      id,
-      degreeId: degreeIdByKey.get(path.degree_client_key) || "",
-      year: path.year || 1,
-      code: path.code || "",
-      name: path.name || "",
-    };
-  });
-
-  const lecturers = (dataset.lecturers || []).map((lecturer) => {
-    const id = makeId("lecturer");
-    lecturerIdByKey.set(lecturer.client_key, id);
-    return {
-      id,
-      name: lecturer.name || "",
-      email: lecturer.email || "",
-    };
-  });
-
-  const rooms = (dataset.rooms || []).map((room) => {
-    const id = makeId("room");
-    roomIdByKey.set(room.client_key, id);
-    return {
-      id,
-      name: room.name || "",
-      capacity: room.capacity || "",
-      room_type: room.room_type || "lecture",
-      lab_type: room.lab_type || "",
-      location: room.location || "",
-      year_restriction: room.year_restriction || "",
-    };
-  });
-
-  const groupedStudentGroups = new Map();
-  (dataset.student_groups || []).forEach((group) => {
-    const key = [
-      degreeIdByKey.get(group.degree_client_key) || "",
-      group.year || 1,
-      pathIdByKey.get(group.path_client_key) || "",
-    ].join("::");
-    const existing = groupedStudentGroups.get(key) || [];
-    existing.push(group);
-    groupedStudentGroups.set(key, existing);
-  });
-
-  const cohorts = [];
-  groupedStudentGroups.forEach((groups, compositeKey) => {
-    groups.forEach((group, index) => {
-      const id = makeId("cohort");
-      cohortIdByKey.set(group.client_key, id);
-      const [degreeId, year, pathId] = compositeKey.split("::");
-      cohorts.push({
-        id,
-        kind: index === 0 ? "base" : "override",
-        degreeId,
-        year: Number(year) || 1,
-        pathId: pathId || "",
-        name: group.name || "",
-        size: group.size || "",
-      });
-    });
-  });
-
-  const modules = (dataset.modules || []).map((module) => {
-    const id = makeId("module");
-    moduleIdByKey.set(module.client_key, id);
-    return {
-      id,
-      code: module.code || "",
-      name: module.name || "",
-      subject_name: module.subject_name || "",
-      year: module.year || 1,
-      semester: module.semester || 1,
-      is_full_year: Boolean(module.is_full_year),
-    };
-  });
-
-  const sessions = (dataset.sessions || []).map((session) => ({
-    id: makeId("session"),
-    moduleId: moduleIdByKey.get(session.module_client_key) || "",
-    linkedModuleIds: (session.linked_module_client_keys || [])
-      .map((key) => moduleIdByKey.get(key))
-      .filter(Boolean),
+function buildSessionFormFromWorkspaceSession(session) {
+  return {
     name: session.name || "",
     session_type: session.session_type || "lecture",
-    duration_minutes: session.duration_minutes || 60,
-    occurrences_per_week: session.occurrences_per_week || 1,
-    required_room_type: session.required_room_type || "",
+    duration_minutes: Number(session.duration_minutes || 60),
+    occurrences_per_week: Number(session.occurrences_per_week || 1),
+    required_room_type: session.required_room_type || "lecture",
     required_lab_type: session.required_lab_type || "",
-    specific_room_id: roomIdByKey.get(session.specific_room_client_key) || "",
-    max_students_per_group: session.max_students_per_group || "",
+    specific_room_id: session.specific_room_id ? String(session.specific_room_id) : "",
+    max_students_per_group: session.max_students_per_group
+      ? String(session.max_students_per_group)
+      : "",
     allow_parallel_rooms: Boolean(session.allow_parallel_rooms),
     notes: session.notes || "",
-    lecturerIds: (session.lecturer_client_keys || [])
-      .map((key) => lecturerIdByKey.get(key))
-      .filter(Boolean),
-    cohortIds: (session.student_group_client_keys || [])
-      .map((key) => cohortIdByKey.get(key))
-      .filter(Boolean),
-  }));
-
-  return syncBaseCohorts({ degrees, paths, lecturers, rooms, cohorts, modules, sessions });
-}
-
-// ── buildPayload ───────────────────────────────────────────────────────────────
-
-function buildPayload(draft) {
-  const degreeKeyById = new Map();
-  const pathKeyById = new Map();
-  const lecturerKeyById = new Map();
-  const roomKeyById = new Map();
-  const cohortKeyById = new Map();
-  const moduleKeyById = new Map();
-
-  const degrees = draft.degrees.map((degree) => {
-    const clientKey = `degree_${degree.id}`;
-    degreeKeyById.set(degree.id, clientKey);
-    return {
-      client_key: clientKey,
-      code: degree.code.trim(),
-      name: degree.name.trim(),
-      duration_years: Number(degree.duration_years),
-      intake_label: degree.intake_label.trim(),
-    };
-  });
-
-  const paths = draft.paths.map((path) => {
-    const clientKey = `path_${path.id}`;
-    pathKeyById.set(path.id, clientKey);
-    return {
-      client_key: clientKey,
-      degree_client_key: degreeKeyById.get(path.degreeId),
-      year: Number(path.year),
-      code: path.code.trim(),
-      name: path.name.trim(),
-    };
-  });
-
-  const lecturers = draft.lecturers.map((lecturer) => {
-    const clientKey = `lecturer_${lecturer.id}`;
-    lecturerKeyById.set(lecturer.id, clientKey);
-    return {
-      client_key: clientKey,
-      name: lecturer.name.trim(),
-      email: lecturer.email.trim() || null,
-    };
-  });
-
-  const rooms = draft.rooms.map((room) => {
-    const clientKey = `room_${room.id}`;
-    roomKeyById.set(room.id, clientKey);
-    return {
-      client_key: clientKey,
-      name: room.name.trim(),
-      capacity: Number(room.capacity),
-      room_type: room.room_type || "lecture",
-      lab_type: room.lab_type.trim() || null,
-      location: room.location.trim(),
-      year_restriction: room.year_restriction ? Number(room.year_restriction) : null,
-    };
-  });
-
-  const student_groups = draft.cohorts.map((cohort) => {
-    const clientKey = `group_${cohort.id}`;
-    cohortKeyById.set(cohort.id, clientKey);
-    return {
-      client_key: clientKey,
-      degree_client_key: degreeKeyById.get(cohort.degreeId),
-      path_client_key: cohort.pathId ? pathKeyById.get(cohort.pathId) : null,
-      year: Number(cohort.year),
-      name: cohort.name.trim(),
-      size: Number(cohort.size),
-    };
-  });
-
-  const modules = draft.modules.map((module) => {
-    const clientKey = `module_${module.id}`;
-    moduleKeyById.set(module.id, clientKey);
-    return {
-      client_key: clientKey,
-      code: module.code.trim(),
-      name: module.name.trim(),
-      subject_name: module.subject_name.trim(),
-      year: Number(module.year),
-      semester: Number(module.semester),
-      is_full_year: Boolean(module.is_full_year),
-    };
-  });
-
-  const sessions = draft.sessions.map((session) => ({
-    client_key: `session_${session.id}`,
-    module_client_key: moduleKeyById.get(session.moduleId),
-    linked_module_client_keys: (session.linkedModuleIds || [])
-      .filter((id) => id && id !== session.moduleId)
-      .map((id) => moduleKeyById.get(id))
-      .filter(Boolean),
-    name: session.name.trim(),
-    session_type: session.session_type.trim(),
-    duration_minutes: Number(session.duration_minutes),
-    occurrences_per_week: Number(session.occurrences_per_week),
-    required_room_type: session.required_room_type.trim() || null,
-    required_lab_type: session.required_lab_type.trim() || null,
-    specific_room_client_key: session.specific_room_id
-      ? roomKeyById.get(session.specific_room_id)
-      : null,
-    max_students_per_group: session.max_students_per_group
-      ? Number(session.max_students_per_group)
-      : null,
-    allow_parallel_rooms: Boolean(session.allow_parallel_rooms),
-    notes: session.notes.trim() || null,
-    lecturer_client_keys: session.lecturerIds
-      .map((id) => lecturerKeyById.get(id))
-      .filter(Boolean),
-    student_group_client_keys: session.cohortIds
-      .map((id) => cohortKeyById.get(id))
-      .filter(Boolean),
-  }));
-
-  return { degrees, paths, lecturers, rooms, student_groups, modules, sessions };
-}
-
-// ── Step nav sub-components ────────────────────────────────────────────────────
-
-function StepBadge({ active, complete, blocked, blockedReason, label, onClick }) {
-  let className = "wizard-step";
-  if (active) className += " active";
-  else if (complete) className += " complete";
-  else if (blocked) className += " blocked";
-
-  return (
-    <button
-      type="button"
-      className={className}
-      onClick={onClick}
-      aria-current={active ? "step" : undefined}
-      title={blocked ? (blockedReason || "Complete earlier steps first") : "Jump to this step"}
-    >
-      {label}
-    </button>
-  );
-}
-
-function StepIntro({ stepKey }) {
-  return (
-    <p className="helper-copy step-intro step-inline-intro">{stepGuidance[stepKey]}</p>
-  );
-}
-
-function StepChecks({ stepKey, validation }) {
-  if (stepKey === "review") return null;
-
-  const feedback = currentStepFeedback(stepKey, validation);
-  if (feedback.blocking.length === 0 && feedback.warnings.length === 0) {
-    return (
-      <section className="studio-card">
-        <div className="info-banner">No current issues detected for this step.</div>
-      </section>
-    );
-  }
-
-  return (
-    <section className="studio-card">
-      <h2>Current Step Checks</h2>
-      {feedback.blocking.length > 0 && (
-        <div className="error-banner">
-          <strong>Fix these on this step:</strong>
-          <ul>
-            {feedback.blocking.map((issue) => (
-              <li key={issue}>{issue}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {feedback.warnings.length > 0 && (
-        <div className="schema-notes">
-          <h3>Warnings for this step</h3>
-          <ul>
-            {feedback.warnings.map((warning) => (
-              <li key={warning}>{warning}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </section>
-  );
-}
-
-// ── Template batches (kept in orchestrator — not needed by step components) ───
-
-function buildRoomTemplates() {
-  return {
-    lectureHalls: [
-      { name: "A7 Hall 1", capacity: 180, room_type: "lecture", lab_type: "", location: "A7 Building", year_restriction: "" },
-      { name: "A7 Hall 2", capacity: 140, room_type: "lecture", lab_type: "", location: "A7 Building", year_restriction: "" },
-    ],
-    labs: [
-      { name: "Physics Lab 1", capacity: 40, room_type: "lab", lab_type: "physics", location: "Science Labs Block", year_restriction: "" },
-      { name: "Chemistry Lab 1", capacity: 36, room_type: "lab", lab_type: "chemistry", location: "Science Labs Block", year_restriction: "" },
-    ],
+    lecturer_ids: [...(session.lecturer_ids || [])],
+    curriculum_module_ids: [...(session.curriculum_module_ids || [])],
+    attendance_group_ids: [...(session.attendance_group_ids || [])],
   };
 }
 
-function buildLecturerTemplates() {
+function describeSessionRepairNeeds(session, readinessBlocking) {
+  const missing = [];
+  if (!session.lecturer_ids?.length) {
+    missing.push("lecturers");
+  }
+  if (!session.curriculum_module_ids?.length) {
+    missing.push("module links");
+  }
+  if (!session.attendance_group_ids?.length) {
+    missing.push("attendance groups");
+  }
+  const roomIssues = readinessBlocking.filter(
+    (item) =>
+      item.form === "session" &&
+      (item.key === `room-mismatch-${session.id}` ||
+        item.key === `lab-mismatch-${session.id}` ||
+        item.key === `room-capacity-${session.id}`)
+  );
+  if (roomIssues.length > 0) {
+    missing.push("room assignment");
+  }
+  return missing;
+}
+
+const supportCsvDefinitions = [
+  {
+    key: "rooms",
+    title: "Rooms",
+    templateName: "rooms",
+    upload: "uploadRoomsCsv",
+    detail: "Rooms, capacities, room types, lab types, locations, and restrictions.",
+    statusFromWorkspace: (workspace) =>
+      workspace.rooms.length > 0 ? `${workspace.rooms.length} imported` : "Import needed",
+  },
+  {
+    key: "lecturers",
+    title: "Lecturers",
+    templateName: "lecturers",
+    upload: "uploadLecturersCsv",
+    detail: "Lecturer identities that sessions can be linked to.",
+    statusFromWorkspace: (workspace) =>
+      workspace.lecturers.length > 0
+        ? `${workspace.lecturers.length} imported`
+        : "Import needed",
+  },
+  {
+    key: "modules",
+    title: "Modules",
+    templateName: "modules",
+    upload: "uploadModulesCsv",
+    detail: "Optional corrections and enrichment for module metadata.",
+    statusFromWorkspace: (workspace) =>
+      workspace.curriculum_modules.length > 0
+        ? `${workspace.curriculum_modules.length} available`
+        : "Import needed",
+  },
+  {
+    key: "sessions",
+    title: "Sessions",
+    templateName: "sessions",
+    upload: "uploadSessionsCsv",
+    detail: "The shared teaching sessions the solver should schedule.",
+    statusFromWorkspace: (workspace) =>
+      workspace.shared_sessions.length > 0
+        ? `${workspace.shared_sessions.length} imported`
+        : "Import needed",
+  },
+  {
+    key: "session_lecturers",
+    title: "Session Lecturers",
+    templateName: "session_lecturers",
+    upload: "uploadSessionLecturersCsv",
+    detail: "Links existing sessions to existing lecturers.",
+    statusFromWorkspace: (workspace) => {
+      const linkCount = workspace.shared_sessions.reduce(
+        (total, session) => total + (session.lecturer_ids?.length || 0),
+        0
+      );
+      return linkCount > 0 ? `${linkCount} imported` : "Import needed";
+    },
+  },
+];
+
+const localImportTemplates = {
+  student_enrollments: {
+    filename: "student_enrollments_template.csv",
+    label: "Student Enrollments",
+    columns: [
+      "CoursePathNo",
+      "CourseCode",
+      "Year",
+      "AcYear",
+      "Attempt",
+      "stream",
+      "batch",
+      "student_hash",
+    ],
+    rows: [
+      ["1", "CHEM 11612", "1", "2022/2023", "1", "PS", "2022", "stu_hash_0001"],
+      ["1", "AMAT 11113", "1", "2022/2023", "1", "PS", "2022", "stu_hash_0001"],
+    ],
+  },
+  rooms: {
+    filename: "rooms_template.csv",
+    label: "Rooms",
+    columns: [
+      "room_code",
+      "room_name",
+      "capacity",
+      "room_type",
+      "lab_type",
+      "location",
+      "year_restriction",
+    ],
+    rows: [
+      ["A7-H1", "A7 Hall 1", "180", "lecture", "", "A7 Building", ""],
+      ["CHEM-LAB-1", "Chemistry Lab 1", "30", "lab", "chemistry", "Science Block", ""],
+    ],
+  },
+  lecturers: {
+    filename: "lecturers_template.csv",
+    label: "Lecturers",
+    columns: ["lecturer_code", "name", "email"],
+    rows: [
+      ["LECT-CHEM-01", "Dr. Silva", "silva@example.edu"],
+      ["LECT-MATH-01", "Prof. Perera", "perera@example.edu"],
+    ],
+  },
+  modules: {
+    filename: "modules_template.csv",
+    label: "Modules",
+    columns: [
+      "module_code",
+      "module_name",
+      "subject_name",
+      "nominal_year",
+      "semester_bucket",
+      "is_full_year",
+    ],
+    rows: [
+      ["CHEM 11612", "Foundations of Chemistry", "Chemistry", "1", "1", "false"],
+      ["AMAT 11113", "Calculus I", "Applied Mathematics", "1", "1", "false"],
+    ],
+  },
+  sessions: {
+    filename: "sessions_template.csv",
+    label: "Sessions",
+    columns: [
+      "session_code",
+      "module_code",
+      "session_name",
+      "session_type",
+      "duration_minutes",
+      "occurrences_per_week",
+      "required_room_type",
+      "required_lab_type",
+      "specific_room_code",
+      "max_students_per_group",
+      "allow_parallel_rooms",
+      "notes",
+    ],
+    rows: [
+      [
+        "CHEM11612-LEC",
+        "CHEM 11612",
+        "Chemistry Lecture",
+        "lecture",
+        "120",
+        "2",
+        "lecture",
+        "",
+        "",
+        "",
+        "false",
+        "Main weekly lecture",
+      ],
+      [
+        "CHEM11612-LAB",
+        "CHEM 11612",
+        "Chemistry Lab",
+        "lab",
+        "180",
+        "1",
+        "lab",
+        "chemistry",
+        "CHEM-LAB-1",
+        "30",
+        "true",
+        "Split if needed by lab capacity",
+      ],
+    ],
+  },
+  session_lecturers: {
+    filename: "session_lecturers_template.csv",
+    label: "Session Lecturers",
+    columns: ["session_code", "lecturer_code"],
+    rows: [
+      ["CHEM11612-LEC", "LECT-CHEM-01"],
+      ["CHEM11612-LAB", "LECT-CHEM-01"],
+    ],
+  },
+};
+
+function downloadTextFile(filename, content, contentType = "text/csv;charset=utf-8") {
+  const blob = new Blob([content], { type: contentType });
+  downloadBlobFile(filename, blob);
+}
+
+function downloadBlobFile(filename, blob) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function readActiveImportRunId() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const raw = window.localStorage.getItem(activeImportRunStorageKey);
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function buildLocalTemplateCsv(template) {
+  if (!template?.columns?.length) {
+    return "";
+  }
+  const rows = [template.columns, ...(template.rows || [])];
+  return `${rows.map((row) => row.join(",")).join("\n")}\n`;
+}
+
+function buildWorkspaceSummary(workspace) {
   return [
-    { name: "Dr. Perera", email: "dr.perera@science.kln.ac.lk" },
-    { name: "Dr. Silva", email: "dr.silva@science.kln.ac.lk" },
-    { name: "Prof. Fernando", email: "prof.fernando@science.kln.ac.lk" },
-    { name: "Ms. Jayasinghe", email: "ms.jayasinghe@science.kln.ac.lk" },
+    { label: "Programmes", value: workspace.programmes.length },
+    { label: "Programme Paths", value: workspace.programme_paths.length },
+    { label: "Attendance Groups", value: workspace.attendance_groups.length },
+    { label: "Modules", value: workspace.curriculum_modules.length },
+    { label: "Lecturers", value: workspace.lecturers.length },
+    { label: "Rooms", value: workspace.rooms.length },
+    { label: "Shared Sessions", value: workspace.shared_sessions.length },
   ];
 }
 
-function buildScienceStructureTemplates() {
+function reviewBucketIdentifier(bucket) {
+  return `${bucket.bucket_type}::${bucket.bucket_key}`;
+}
+
+function titleCaseReviewStatus(value) {
+  if (!value) {
+    return "Needs Review";
+  }
+  return String(value)
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function buildReadiness(workspace) {
+  const blocking = [];
+  const warnings = [];
+
+  if (workspace.rooms.length === 0) {
+    blocking.push({
+      key: "rooms-empty",
+      title: "No rooms yet",
+      detail: "Add at least one room before generation.",
+      action: "Add rooms",
+      form: "room",
+    });
+  }
+
+  if (workspace.lecturers.length === 0) {
+    blocking.push({
+      key: "lecturers-empty",
+      title: "No lecturers yet",
+      detail: "Add at least one lecturer before generation.",
+      action: "Add lecturers",
+      form: "lecturer",
+    });
+  }
+
+  if (workspace.shared_sessions.length === 0) {
+    blocking.push({
+      key: "sessions-empty",
+      title: "No shared sessions yet",
+      detail: "Create the real teaching sessions that the solver should schedule.",
+      action: "Add shared sessions",
+      form: "session",
+    });
+  }
+
+  const sessionsMissingLecturers = workspace.shared_sessions.filter(
+    (session) => !session.lecturer_ids?.length
+  );
+  if (sessionsMissingLecturers.length > 0) {
+    blocking.push({
+      key: "sessions-missing-lecturers",
+      title: "Sessions missing lecturers",
+      detail: `${sessionsMissingLecturers.length} session${
+        sessionsMissingLecturers.length === 1 ? "" : "s"
+      } still need lecturer assignments.`,
+      action: "Add lecturers",
+      form: "lecturer",
+    });
+  }
+
+  const sessionsMissingModules = workspace.shared_sessions.filter(
+    (session) => !session.curriculum_module_ids?.length
+  );
+  if (sessionsMissingModules.length > 0) {
+    blocking.push({
+      key: "sessions-missing-modules",
+      title: "Sessions missing module links",
+      detail: `${sessionsMissingModules.length} session${
+        sessionsMissingModules.length === 1 ? "" : "s"
+      } are not linked to any curriculum module.`,
+      action: "Add shared sessions",
+      form: "session",
+    });
+  }
+
+  const sessionsMissingAttendance = workspace.shared_sessions.filter(
+    (session) => !session.attendance_group_ids?.length
+  );
+  if (sessionsMissingAttendance.length > 0) {
+    blocking.push({
+      key: "sessions-missing-attendance",
+      title: "Sessions missing attendance groups",
+      detail: `${sessionsMissingAttendance.length} session${
+        sessionsMissingAttendance.length === 1 ? "" : "s"
+      } have no attendance mapping yet.`,
+      action: "Add shared sessions",
+      form: "session",
+    });
+  }
+
+  const labSessionsWithInvalidDuration = workspace.shared_sessions.filter((session) => {
+    const type = String(session.session_type || "").toLowerCase();
+    return (type === "lab" || type === "practical") && Number(session.duration_minutes) !== 180;
+  });
+  if (labSessionsWithInvalidDuration.length > 0) {
+    blocking.push({
+      key: "lab-duration",
+      title: "Lab-like sessions need 180 minutes",
+      detail: `${labSessionsWithInvalidDuration.length} lab or practical session${
+        labSessionsWithInvalidDuration.length === 1 ? "" : "s"
+      } do not use the required 180-minute duration.`,
+      action: "Add shared sessions",
+      form: "session",
+    });
+  }
+
+  const splitWarnings = workspace.shared_sessions.filter((session) => {
+    const splitLimit = Number(session.max_students_per_group || 0);
+    return splitLimit > 0 && !session.allow_parallel_rooms;
+  });
+  if (splitWarnings.length > 0) {
+    warnings.push({
+      key: "split-warning",
+      title: "Split sessions may need parallel-room review",
+      detail: `${splitWarnings.length} session${
+        splitWarnings.length === 1 ? "" : "s"
+      } use max students per group without parallel rooms enabled.`,
+    });
+  }
+
   return {
-    degrees: [
-      { code: "PS", name: "Physical Science", duration_years: 3, intake_label: "PS Intake" },
-      { code: "BS", name: "Biological Science", duration_years: 3, intake_label: "BS Intake" },
-      { code: "ENCM", name: "Environmental Conservation and Management", duration_years: 4, intake_label: "ENCM Intake" },
-      { code: "AC", name: "Applied Chemistry", duration_years: 4, intake_label: "AC Intake" },
-      { code: "ECS", name: "Electronics and Computer Science", duration_years: 4, intake_label: "ECS Intake" },
-      { code: "PE", name: "Physical Education", duration_years: 4, intake_label: "PE Intake" },
-    ],
-    paths: [
-      { degreeCode: "PS", year: 1, code: "PHY-CHEM-MATH", name: "Physics Chemistry Mathematics" },
-      { degreeCode: "PS", year: 2, code: "PHY-MATH-STAT", name: "Physics Mathematics Statistics" },
-      { degreeCode: "BS", year: 1, code: "BOT-ZOO-CHEM", name: "Botany Zoology Chemistry" },
-      { degreeCode: "BS", year: 2, code: "MICRO-BCH-GEN", name: "Microbiology Biochemistry Genetics" },
-      { degreeCode: "ECS", year: 1, code: "ECS-GENERAL", name: "Electronics and Computer Science General" },
-      { degreeCode: "AC", year: 1, code: "AC-GENERAL", name: "Applied Chemistry General" },
-    ],
+    blocking,
+    warnings,
+    ready: blocking.length === 0 && workspace.shared_sessions.length > 0,
   };
 }
 
-// ── Main component ─────────────────────────────────────────────────────────────
+function ToggleList({ title, items, selectedIds, onToggle, renderLabel, emptyMessage }) {
+  return (
+    <div className="schema-notes compact">
+      <h3>{title}</h3>
+      {items.length === 0 ? (
+        <p className="helper-copy">{emptyMessage}</p>
+      ) : (
+        <div className="constraint-list">
+          {items.map((item) => {
+            const label = renderLabel(item);
+            return (
+              <label key={item.id} className="constraint-row">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(item.id)}
+                  onChange={() => onToggle(item.id)}
+                />
+                <div>
+                  <strong>{label.title}</strong>
+                  <span>{label.detail}</span>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function SetupStudio() {
-  const [draft, setDraft] = useState(emptyDraft);
-  const [summary, setSummary] = useState(toSummary(emptyDraft));
-  const [activeStep, setActiveStep] = useState(0);
-  const [status, setStatus] = useState("");
+  const navigate = useNavigate();
+  const [activeImportRunId, setActiveImportRunId] = useState(null);
+  const [workspace, setWorkspace] = useState(emptyWorkspace);
+  const [loadingWorkspace, setLoadingWorkspace] = useState(false);
+  const [working, setWorking] = useState(false);
+  const [blockingMessage, setBlockingMessage] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  // touched: Set of "collection.id.field" keys
-  const [touched, setTouched] = useState(new Set());
-  // nextBlocked flash: show a banner when Next is clicked but the target step is blocked
-  const [nextBlockedMsg, setNextBlockedMsg] = useState("");
+  const [status, setStatus] = useState("");
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [analysis, setAnalysis] = useState(null);
+  const [projection, setProjection] = useState(null);
+  const [defaultBucketAction, setDefaultBucketAction] = useState("accept_exception");
+  const [bucketOverrides, setBucketOverrides] = useState({});
+  const [bucketSearch, setBucketSearch] = useState("");
+  const [bucketTypeFilter, setBucketTypeFilter] = useState("all");
+  const [bucketStatusFilter, setBucketStatusFilter] = useState("all");
+  const [bucketPage, setBucketPage] = useState(1);
+  const [openForm, setOpenForm] = useState("");
+  const [showUtilities, setShowUtilities] = useState(false);
+  const [editingSharedSessionId, setEditingSharedSessionId] = useState(null);
+  const [importTemplates, setImportTemplates] = useState([]);
+  const [importFixtures, setImportFixtures] = useState([]);
+  const [recentRuns, setRecentRuns] = useState([]);
+  const [lecturerForm, setLecturerForm] = useState(emptyLecturerForm);
+  const [roomForm, setRoomForm] = useState(emptyRoomForm);
+  const [sessionForm, setSessionForm] = useState(emptySessionForm);
 
-  const validation = useMemo(() => validateDraft(draft), [draft]);
-
-  const blockedSteps = useMemo(() => {
-    const hasStructure = draft.degrees.length > 0;
-    const hasCohorts = draft.cohorts.some((c) => c.kind === "base");
-    const hasModules = draft.modules.length > 0;
-    const hasRooms = draft.rooms.length > 0;
-    return {
-      structure: false,
-      lecturers: !hasStructure,
-      rooms: !hasStructure,
-      cohorts: !hasStructure,
-      modules: !hasCohorts,
-      sessions: !hasModules || !hasRooms,
-      review: false,
-    };
-  }, [draft]);
-
-  // ── Load ────────────────────────────────────────────────────────────────────
-
-  const loadDataset = async (nextStatus = "") => {
-    setLoading(true);
-    setError("");
-    try {
-      const dataset = await timetableStudioService.getFullDataset();
-      const normalized = normalizeDataset(dataset);
-      setDraft(normalized);
-      setSummary(toSummary(normalized));
-      setStatus(nextStatus);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { loadDataset(); }, []);
-
-  // ── Draft mutations ──────────────────────────────────────────────────────────
-
-  const updateDraft = useCallback((updater) => {
-    setDraft((current) => {
-      const next = typeof updater === "function" ? updater(current) : updater;
-      const synced = syncBaseCohorts(next);
-      setSummary(toSummary(synced));
-      return synced;
-    });
-  }, []);
-
-  // ── Touched state helpers ────────────────────────────────────────────────────
-
-  const touchField = useCallback((key) => {
-    setTouched((prev) => new Set([...prev, key]));
-  }, []);
-
-  const touchAll = useCallback((stepKey) => {
-    // Touch all fields for all records in the collections owned by this step
-    const collections = {
-      structure: ["degrees", "paths"],
-      lecturers: ["lecturers"],
-      rooms: ["rooms"],
-      cohorts: ["cohorts"],
-      modules: ["modules"],
-      sessions: ["sessions"],
-    }[stepKey] || [];
-
-    setTouched((prev) => {
-      const next = new Set(prev);
-      const fieldsByCollection = {
-        degrees: ["code", "name", "duration_years", "intake_label"],
-        paths: ["degreeId", "code", "name"],
-        lecturers: ["name", "email"],
-        rooms: ["name", "location", "capacity"],
-        cohorts: ["name", "size", "degreeId"],
-        modules: ["code", "name", "subject_name"],
-        sessions: ["moduleId", "name", "session_type", "duration_minutes", "occurrences_per_week", "cohortIds"],
-      };
-      collections.forEach((col) => {
-        const fields = fieldsByCollection[col] || [];
-        draft[col].forEach((record) => {
-          fields.forEach((field) => {
-            next.add(`${col}.${record.id}.${field}`);
-          });
-        });
+  const hasChosenImportSource = Boolean(selectedFile);
+  const summaryCards = useMemo(() => buildWorkspaceSummary(workspace), [workspace]);
+  const readiness = useMemo(
+    () => workspace.readiness || buildReadiness(workspace),
+    [workspace]
+  );
+  const readinessBlocking = useMemo(
+    () =>
+      readiness.blocking || [
+        ...(readiness.import_needed || readiness.importNeeded || []),
+        ...(readiness.repair_needed || readiness.repairNeeded || []),
+      ],
+    [readiness]
+  );
+  const sessionsNeedingRepair = useMemo(
+    () =>
+      workspace.shared_sessions.filter(
+        (session) =>
+          !session.lecturer_ids?.length ||
+          !session.curriculum_module_ids?.length ||
+          !session.attendance_group_ids?.length ||
+          readinessBlocking.some((item) =>
+            item.form === "session" &&
+            (item.key === `room-mismatch-${session.id}` ||
+              item.key === `lab-mismatch-${session.id}` ||
+              item.key === `room-capacity-${session.id}`)
+          )
+      ),
+    [workspace, readinessBlocking]
+  );
+  const analysisBuckets = analysis?.buckets || [];
+  const filteredReviewBuckets = useMemo(() => {
+    const search = bucketSearch.trim().toLowerCase();
+    return [...analysisBuckets]
+      .filter((bucket) => {
+        if (bucketTypeFilter !== "all" && bucket.bucket_type !== bucketTypeFilter) {
+          return false;
+        }
+        if (bucketStatusFilter !== "all" && bucket.status !== bucketStatusFilter) {
+          return false;
+        }
+        if (!search) {
+          return true;
+        }
+        return (
+          bucket.description?.toLowerCase().includes(search) ||
+          bucket.bucket_type?.toLowerCase().includes(search) ||
+          bucket.bucket_key?.toLowerCase().includes(search)
+        );
+      })
+      .sort((left, right) => {
+        const rowDelta = (right.row_count || 0) - (left.row_count || 0);
+        if (rowDelta !== 0) {
+          return rowDelta;
+        }
+        return reviewBucketIdentifier(left).localeCompare(reviewBucketIdentifier(right));
       });
-      return next;
-    });
-  }, [draft]);
+  }, [analysisBuckets, bucketSearch, bucketStatusFilter, bucketTypeFilter]);
+  const bucketTypeOptions = useMemo(
+    () => [...new Set(analysisBuckets.map((bucket) => bucket.bucket_type))].sort(),
+    [analysisBuckets]
+  );
+  const paginatedReviewBuckets = useMemo(() => {
+    const start = (bucketPage - 1) * reviewPageSize;
+    return filteredReviewBuckets.slice(start, start + reviewPageSize);
+  }, [bucketPage, filteredReviewBuckets]);
+  const bucketPageCount = Math.max(1, Math.ceil(filteredReviewBuckets.length / reviewPageSize));
+  const overriddenBucketCount = useMemo(() => Object.keys(bucketOverrides).length, [bucketOverrides]);
 
-  // ── Navigation ───────────────────────────────────────────────────────────────
+  async function refreshRecentRuns() {
+    try {
+      const response = await timetableStudioService.listImportRuns(20);
+      setRecentRuns(response?.runs || []);
+    } catch {
+      setRecentRuns([]);
+    }
+  }
 
-  const goToStep = (index) => {
-    if (blockedSteps[steps[index].key]) return;
-    setNextBlockedMsg("");
-    setActiveStep(index);
-  };
-
-  const nextStep = () => {
-    // Touch all fields on the current step so validation shows
-    touchAll(steps[activeStep].key);
-    const nextIndex = Math.min(activeStep + 1, steps.length - 1);
-    if (blockedSteps[steps[nextIndex].key]) {
-      setNextBlockedMsg(BLOCKED_STEP_REASONS[steps[nextIndex].key] || "Complete this step first.");
+  async function loadWorkspace(importRunId, nextStatus = "") {
+    if (!importRunId) {
+      setWorkspace(emptyWorkspace);
       return;
     }
-    setNextBlockedMsg("");
-    setActiveStep(nextIndex);
-  };
-
-  const prevStep = () => {
-    setNextBlockedMsg("");
-    setActiveStep((current) => Math.max(current - 1, 0));
-  };
-
-  // ── Demo / save ──────────────────────────────────────────────────────────────
-
-  const handleLoadDemo = async (profile) => {
-    setSaving(true);
+    setLoadingWorkspace(true);
     setError("");
     try {
-      await timetableStudioService.loadDemoDataset(profile);
-      await loadDataset(
-        profile === "tuned"
-          ? "Tuned demo dataset loaded into the guided setup wizard."
-          : "Realistic demo dataset loaded from the real enrollment baseline into the guided setup wizard."
-      );
-      setActiveStep(steps.length - 1);
+      const response = await timetableStudioService.getImportWorkspace(importRunId);
+      setWorkspace(response || emptyWorkspace);
+      setActiveImportRunId(importRunId);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(activeImportRunStorageKey, String(importRunId));
+      }
+      if (nextStatus) {
+        setStatus(nextStatus);
+      }
     } catch (err) {
-      setError(err.message);
+      if (
+        err?.message?.toLowerCase().includes("not found") &&
+        typeof window !== "undefined"
+      ) {
+        window.localStorage.removeItem(activeImportRunStorageKey);
+        setActiveImportRunId(null);
+        setWorkspace(emptyWorkspace);
+      }
+      setError(err.message || "Failed to load the import workspace.");
     } finally {
-      setSaving(false);
+      setLoadingWorkspace(false);
     }
-  };
+  }
 
-  const handleSave = async () => {
-    setSaving(true);
+  function applyWorkspaceSnapshot(importRunId, nextWorkspace, nextStatus = "") {
+    setWorkspace(nextWorkspace || emptyWorkspace);
+    setActiveImportRunId(importRunId);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(activeImportRunStorageKey, String(importRunId));
+    }
+    if (nextStatus) {
+      setStatus(nextStatus);
+    }
+  }
+
+  useEffect(() => {
+    timetableStudioService
+      .listImportTemplates()
+      .then((response) => setImportTemplates(response.templates || []))
+      .catch(() => {});
+    timetableStudioService
+      .listImportFixtures()
+      .then((response) => setImportFixtures(response.packs || []))
+      .catch(() => setImportFixtures([]));
+    refreshRecentRuns();
+  }, []);
+
+  useEffect(() => {
+    setBucketPage(1);
+  }, [bucketSearch, bucketStatusFilter, bucketTypeFilter]);
+
+  function buildReviewRules() {
+    return (analysis?.buckets || []).map((bucket) => ({
+      bucket_type: bucket.bucket_type,
+      bucket_key: bucket.bucket_key,
+      action: bucketOverrides[reviewBucketIdentifier(bucket)] || defaultBucketAction,
+      label: "Applied from Setup Studio review.",
+    }));
+  }
+
+  function handleBucketDecisionChange(bucket, action) {
+    const identifier = reviewBucketIdentifier(bucket);
+    setBucketOverrides((current) => {
+      if (action === defaultBucketAction) {
+        const next = { ...current };
+        delete next[identifier];
+        return next;
+      }
+      return {
+        ...current,
+        [identifier]: action,
+      };
+    });
+  }
+
+  async function handleAnalyze() {
+    if (!hasChosenImportSource) {
+      return;
+    }
+    setWorking(true);
+    setBlockingMessage("Analyzing the enrollment CSV...");
     setError("");
     setStatus("");
     try {
-      const payload = buildPayload(draft);
-      const response = await timetableStudioService.saveDataset(payload);
-      await loadDataset("Dataset saved. The new setup flow is now ready for generation.");
-      setSummary(response.summary);
+      const response = await timetableStudioService.analyzeEnrollmentImport(selectedFile);
+      setAnalysis(response);
+      setProjection(null);
+      setDefaultBucketAction("accept_exception");
+      setBucketOverrides({});
+      setBucketSearch("");
+      setBucketTypeFilter("all");
+      setBucketStatusFilter("all");
+      setBucketPage(1);
+      setStatus(`Analyzed ${response.source_file || "the selected CSV"}.`);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Failed to analyze the enrollment CSV.");
     } finally {
-      setSaving(false);
+      setBlockingMessage("");
+      setWorking(false);
     }
-  };
+  }
 
-  // ── Record CRUD helpers ───────────────────────────────────────────────────────
+  async function handleReviewImport() {
+    if (!analysis) {
+      return;
+    }
+    setWorking(true);
+    setBlockingMessage("Reviewing the enrollment CSV decisions and building the projection...");
+    setError("");
+    setStatus("");
+    try {
+      const response = await timetableStudioService.previewEnrollmentImport(
+        { rules: buildReviewRules() },
+        selectedFile
+      );
+      setProjection(response);
+      setStatus(
+        "Review result is ready. If it looks correct, materialize this import into a working snapshot."
+      );
+    } catch (err) {
+      setError(err.message || "Failed to review the analyzed import.");
+    } finally {
+      setBlockingMessage("");
+      setWorking(false);
+    }
+  }
 
-  const addRecord = useCallback((collection, record) => {
-    updateDraft((current) => ({
-      ...current,
-      [collection]: [...current[collection], record],
-    }));
-  }, [updateDraft]);
-
-  const duplicateRecord = useCallback((collection, id) => {
-    updateDraft((current) => {
-      const source = current[collection].find((r) => r.id === id);
-      if (!source) return current;
-      return {
-        ...current,
-        [collection]: [
-          ...current[collection],
-          { ...source, id: makeId(collection.slice(0, -1) || "item") },
-        ],
-      };
-    });
-  }, [updateDraft]);
-
-  const updateRecord = useCallback((collection, id, field, value) => {
-    updateDraft((current) => ({
-      ...current,
-      [collection]: current[collection].map((r) =>
-        r.id === id ? { ...r, [field]: value } : r
-      ),
-    }));
-  }, [updateDraft]);
-
-  const removeRecord = useCallback((collection, id) => {
-    updateDraft((current) => {
-      const next = { ...current, [collection]: current[collection].filter((r) => r.id !== id) };
-      if (collection === "degrees") {
-        next.paths = next.paths.filter((p) => p.degreeId !== id);
-        next.cohorts = next.cohorts.filter((c) => c.degreeId !== id);
-      }
-      if (collection === "paths") {
-        next.cohorts = next.cohorts.filter((c) => c.pathId !== id);
-      }
-      if (collection === "modules") {
-        next.sessions = next.sessions.filter((s) => s.moduleId !== id);
-      }
-      if (collection === "lecturers") {
-        next.sessions = next.sessions.map((s) => ({
-          ...s,
-          lecturerIds: s.lecturerIds.filter((lid) => lid !== id),
-        }));
-      }
-      if (collection === "rooms") {
-        next.sessions = next.sessions.map((s) => ({
-          ...s,
-          specific_room_id: s.specific_room_id === id ? "" : s.specific_room_id,
-        }));
-      }
-      if (collection === "cohorts") {
-        next.sessions = next.sessions.map((s) => ({
-          ...s,
-          cohortIds: s.cohortIds.filter((cid) => cid !== id),
-        }));
-      }
-      return next;
-    });
-  }, [updateDraft]);
-
-  const toggleSessionLink = useCallback((sessionId, field, value) => {
-    updateDraft((current) => ({
-      ...current,
-      sessions: current.sessions.map((s) => {
-        if (s.id !== sessionId) return s;
-        const items = s[field];
-        const next = items.includes(value)
-          ? items.filter((item) => item !== value)
-          : [...items, value];
-        return { ...s, [field]: next };
-      }),
-    }));
-  }, [updateDraft]);
-
-  const copySessionAudienceToModuleSet = useCallback((sessionId) => {
-    updateDraft((current) => {
-      const source = current.sessions.find((s) => s.id === sessionId);
-      if (!source || !source.moduleId) return current;
-      return {
-        ...current,
-        sessions: current.sessions.map((s) => {
-          if (s.id === sessionId || s.moduleId !== source.moduleId) return s;
-          return { ...s, lecturerIds: [...source.lecturerIds], cohortIds: [...source.cohortIds] };
-        }),
-      };
-    });
-  }, [updateDraft]);
-
-  // ── Bulk generators ──────────────────────────────────────────────────────────
-
-  const addStarterSessionsFromModules = useCallback(() => {
-    updateDraft((current) => {
-      const moduleIdsWithSessions = new Set(current.sessions.map((s) => s.moduleId));
-      const starterSessions = current.modules
-        .filter((m) => m.id && !moduleIdsWithSessions.has(m.id))
-        .map((m) => ({
-          id: makeId("session"),
-          moduleId: m.id,
-          linkedModuleIds: [],
-          name: `${m.name || m.code || "Module"} Session`,
-          session_type: "lecture",
-          duration_minutes: 60,
-          occurrences_per_week: 1,
-          required_room_type: "lecture",
-          required_lab_type: "",
-          specific_room_id: "",
-          max_students_per_group: "",
-          allow_parallel_rooms: false,
-          notes: "",
-          lecturerIds: [],
-          cohortIds: [],
-        }));
-      if (starterSessions.length === 0) return current;
-      return { ...current, sessions: [...current.sessions, ...starterSessions] };
-    });
-  }, [updateDraft]);
-
-  const addSessionPatternFromModules = useCallback((patternKey) => {
-    const patterns = {
-      lectureTutorial: [
-        { suffix: "Lecture", session_type: "lecture", duration_minutes: 120, occurrences_per_week: 1, required_room_type: "lecture" },
-        { suffix: "Tutorial", session_type: "tutorial", duration_minutes: 60, occurrences_per_week: 1, required_room_type: "seminar" },
-      ],
-      scienceSet: [
-        { suffix: "Lecture", session_type: "lecture", duration_minutes: 120, occurrences_per_week: 1, required_room_type: "lecture" },
-        { suffix: "Tutorial", session_type: "tutorial", duration_minutes: 60, occurrences_per_week: 1, required_room_type: "seminar" },
-        { suffix: "Lab", session_type: "lab", duration_minutes: 180, occurrences_per_week: 1, required_room_type: "lab" },
-      ],
-    };
-    const selectedPattern = patterns[patternKey] || [];
-    if (selectedPattern.length === 0) return;
-
-    updateDraft((current) => {
-      const moduleIdsWithSessions = new Set(current.sessions.map((s) => s.moduleId));
-      const generated = current.modules
-        .filter((m) => m.id && !moduleIdsWithSessions.has(m.id))
-        .flatMap((m) =>
-          selectedPattern.map((tpl) => ({
-            id: makeId("session"),
-            moduleId: m.id,
-            linkedModuleIds: [],
-            name: `${m.name || m.code || "Module"} ${tpl.suffix}`,
-            session_type: tpl.session_type,
-            duration_minutes: tpl.duration_minutes,
-            occurrences_per_week: tpl.occurrences_per_week,
-            required_room_type: tpl.required_room_type,
-            required_lab_type: "",
-            specific_room_id: "",
-            max_students_per_group: "",
-            allow_parallel_rooms: false,
-            notes: "",
-            lecturerIds: [],
-            cohortIds: [],
-          }))
+  async function handleUseImport() {
+    if (!analysis) {
+      return;
+    }
+    setWorking(true);
+    setBlockingMessage("Materializing the enrollment import into a working snapshot...");
+    setError("");
+    setStatus("");
+    try {
+      const response = await timetableStudioService.materializeEnrollmentImport(
+        { rules: buildReviewRules() },
+        selectedFile
+      );
+      setAnalysis(null);
+      setProjection(null);
+      setSelectedFile(null);
+      setBucketOverrides({});
+      if (response.workspace) {
+        applyWorkspaceSnapshot(
+          response.import_run_id,
+          response.workspace,
+          `The CSV import has been materialized into snapshot #${response.import_run_id}.`
         );
-      if (generated.length === 0) return current;
-      return { ...current, sessions: [...current.sessions, ...generated] };
-    });
-  }, [updateDraft]);
+      } else {
+        await loadWorkspace(
+          response.import_run_id,
+          `The CSV import has been materialized into snapshot #${response.import_run_id}.`
+        );
+      }
+      await refreshRecentRuns();
+    } catch (err) {
+      setError(err.message || "Failed to materialize the import into a working snapshot.");
+    } finally {
+      setBlockingMessage("");
+      setWorking(false);
+    }
+  }
 
-  const addModuleShellsForSemester = useCallback((semester) => {
-    updateDraft((current) => {
-      const yearCombos = Array.from(
-        new Map(
-          current.cohorts
-            .filter((c) => c.kind === "base" && c.degreeId && Number(c.year) > 0)
-            .map((c) => [`${c.degreeId}::${c.year}`, { degreeId: c.degreeId, year: Number(c.year) }])
-        ).values()
+  async function handleDownloadTemplate(templateName) {
+    setError("");
+    try {
+      const localTemplate =
+        importTemplates.find((item) => item.name === templateName) ||
+        localImportTemplates[templateName];
+      if (localTemplate?.columns?.length) {
+        downloadTextFile(
+          localTemplate.filename || `${templateName}_template.csv`,
+          buildLocalTemplateCsv(localTemplate)
+        );
+        setStatus(`Downloaded ${localTemplate.label || templateName} template.`);
+        return;
+      }
+      const response = await timetableStudioService.downloadImportTemplate(templateName);
+      downloadTextFile(response.filename, response.content);
+      setStatus(`Downloaded ${templateName} template.`);
+    } catch (err) {
+      setError(err.message || "Failed to download the CSV template.");
+    }
+  }
+
+  async function handleSupportCsvUpload(definition, file) {
+    if (!activeImportRunId || !file) {
+      return;
+    }
+    setWorking(true);
+    setBlockingMessage(`Importing ${definition.title.toLowerCase()} CSV into snapshot #${activeImportRunId}...`);
+    setError("");
+    setStatus("");
+    try {
+      const response = await timetableStudioService[definition.upload](activeImportRunId, file);
+      const warningCount = response.warnings?.length || 0;
+      await loadWorkspace(
+        activeImportRunId,
+        `${definition.title} CSV imported into snapshot #${activeImportRunId}. Created ${response.created_count || 0}, updated ${response.updated_count || 0}${warningCount ? `, warnings ${warningCount}` : ""}.`
       );
-      const existingByYearSemester = new Set(
-        current.modules.map((m) => `${Number(m.year)}::${Number(m.semester)}`)
+      await refreshRecentRuns();
+    } catch (err) {
+      setError(err.message || `Failed to import ${definition.title.toLowerCase()} CSV.`);
+    } finally {
+      setBlockingMessage("");
+      setWorking(false);
+    }
+  }
+
+  async function handleDownloadFixturePack(packName = "production_like") {
+    setWorking(true);
+    setError("");
+    setStatus("");
+    try {
+      const response = await timetableStudioService.downloadImportFixturePack(packName);
+      downloadBlobFile(response.filename, response.blob);
+      setStatus("Downloaded the realistic import fixture pack.");
+    } catch (err) {
+      setError(err.message || "Failed to download the realistic import fixture pack.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function handleOpenSnapshot(importRunId) {
+    setAnalysis(null);
+    setProjection(null);
+    setSelectedFile(null);
+    await loadWorkspace(importRunId, `Opened snapshot #${importRunId}.`);
+  }
+
+  function handleStartFresh() {
+    setActiveImportRunId(null);
+    setWorkspace(emptyWorkspace);
+    setAnalysis(null);
+    setProjection(null);
+    setSelectedFile(null);
+    setOpenForm("");
+    setError("");
+    setStatus("Starting a fresh setup session. Import student enrolments to create a new snapshot.");
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(activeImportRunStorageKey);
+    }
+  }
+
+  async function handleAddLecturer(event) {
+    event.preventDefault();
+    setWorking(true);
+    setError("");
+    try {
+      await timetableStudioService.createSnapshotLecturersBatch(activeImportRunId, [
+        {
+          name: lecturerForm.name.trim(),
+          email: lecturerForm.email.trim() || null,
+          notes: lecturerForm.notes.trim() || null,
+        },
+      ]);
+      setLecturerForm(emptyLecturerForm);
+      setOpenForm("");
+      await loadWorkspace(activeImportRunId, "Lecturer added to the current snapshot.");
+    } catch (err) {
+      setError(err.message || "Failed to add the lecturer.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function handleAddRoom(event) {
+    event.preventDefault();
+    setWorking(true);
+    setError("");
+    try {
+      await timetableStudioService.createSnapshotRoomsBatch(activeImportRunId, [
+        {
+          name: roomForm.name.trim(),
+          capacity: Number(roomForm.capacity),
+          room_type: roomForm.room_type,
+          lab_type: roomForm.lab_type.trim() || null,
+          location: roomForm.location.trim(),
+          year_restriction: roomForm.year_restriction
+            ? Number(roomForm.year_restriction)
+            : null,
+          notes: roomForm.notes.trim() || null,
+        },
+      ]);
+      setRoomForm(emptyRoomForm);
+      setOpenForm("");
+      await loadWorkspace(activeImportRunId, "Room added to the current snapshot.");
+    } catch (err) {
+      setError(err.message || "Failed to add the room.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function handleAddSession(event) {
+    event.preventDefault();
+    setWorking(true);
+    setError("");
+    const payload = {
+      name: sessionForm.name.trim(),
+      session_type: sessionForm.session_type,
+      duration_minutes: Number(sessionForm.duration_minutes),
+      occurrences_per_week: Number(sessionForm.occurrences_per_week),
+      required_room_type: sessionForm.required_room_type || null,
+      required_lab_type: sessionForm.required_lab_type.trim() || null,
+      specific_room_id: sessionForm.specific_room_id
+        ? Number(sessionForm.specific_room_id)
+        : null,
+      max_students_per_group: sessionForm.max_students_per_group
+        ? Number(sessionForm.max_students_per_group)
+        : null,
+      allow_parallel_rooms: Boolean(sessionForm.allow_parallel_rooms),
+      notes: sessionForm.notes.trim() || null,
+      lecturer_ids: sessionForm.lecturer_ids,
+      curriculum_module_ids: sessionForm.curriculum_module_ids,
+      attendance_group_ids: sessionForm.attendance_group_ids,
+    };
+    try {
+      if (editingSharedSessionId) {
+        await timetableStudioService.updateSnapshotSharedSession(
+          activeImportRunId,
+          editingSharedSessionId,
+          payload
+        );
+      } else {
+        await timetableStudioService.createSnapshotSharedSessionsBatch(activeImportRunId, [payload]);
+      }
+      setSessionForm(emptySessionForm);
+      setEditingSharedSessionId(null);
+      setOpenForm("");
+      await loadWorkspace(
+        activeImportRunId,
+        editingSharedSessionId
+          ? "Shared session repaired in the current snapshot."
+          : "Shared session added to the current snapshot."
       );
-      const moduleShells = yearCombos
-        .filter((combo) => !existingByYearSemester.has(`${combo.year}::${semester}`))
-        .map((combo, i) => {
-          const degree = current.degrees.find((d) => d.id === combo.degreeId);
-          const degreeCode = degree?.code?.trim() || "DEG";
-          return {
-            id: makeId("module"),
-            code: `${degreeCode}${combo.year}${semester}0${i + 1}`,
-            name: `${degreeCode} Year ${combo.year} Semester ${semester} Module`,
-            subject_name: `${degreeCode} Year ${combo.year}`,
-            year: combo.year,
-            semester,
-            is_full_year: false,
-          };
-        });
-      if (moduleShells.length === 0) return current;
-      return { ...current, modules: [...current.modules, ...moduleShells] };
-    });
-  }, [updateDraft]);
+    } catch (err) {
+      setError(err.message || "Failed to save the shared session.");
+    } finally {
+      setWorking(false);
+    }
+  }
 
-  const addRoomTemplateBatch = useCallback((templateKey) => {
-    const templates = buildRoomTemplates();
-    const selected = templates[templateKey] || [];
-    if (selected.length === 0) return;
-    updateDraft((current) => {
-      const existingNames = new Set(
-        current.rooms.map((r) => r.name.trim().toLowerCase()).filter(Boolean)
-      );
-      const roomsToAdd = selected
-        .filter((r) => !existingNames.has(r.name.trim().toLowerCase()))
-        .map((r) => ({ id: makeId("room"), ...r }));
-      if (roomsToAdd.length === 0) return current;
-      return { ...current, rooms: [...current.rooms, ...roomsToAdd] };
-    });
-  }, [updateDraft]);
+  function toggleSessionValue(field, id) {
+    setSessionForm((current) => ({
+      ...current,
+      [field]: current[field].includes(id)
+        ? current[field].filter((value) => value !== id)
+        : [...current[field], id],
+    }));
+  }
 
-  const addLecturerTemplateBatch = useCallback(() => {
-    const templates = buildLecturerTemplates();
-    updateDraft((current) => {
-      const existingNames = new Set(
-        current.lecturers.map((l) => l.name.trim().toLowerCase()).filter(Boolean)
-      );
-      const toAdd = templates
-        .filter((l) => !existingNames.has(l.name.trim().toLowerCase()))
-        .map((l) => ({ id: makeId("lecturer"), ...l }));
-      if (toAdd.length === 0) return current;
-      return { ...current, lecturers: [...current.lecturers, ...toAdd] };
-    });
-  }, [updateDraft]);
+  function handleEditSharedSession(session) {
+    setEditingSharedSessionId(session.id);
+    setSessionForm(buildSessionFormFromWorkspaceSession(session));
+    setOpenForm("session");
+    setError("");
+    setStatus(`Repairing shared session: ${session.name}.`);
+  }
 
-  const addScienceStructureTemplates = useCallback(() => {
-    const { degrees: degreeTpls, paths: pathTpls } = buildScienceStructureTemplates();
-    updateDraft((current) => {
-      const existingDegreeCodes = new Set(
-        current.degrees.map((d) => d.code.trim().toUpperCase()).filter(Boolean)
-      );
-      const degreesToAdd = degreeTpls
-        .filter((d) => !existingDegreeCodes.has(d.code))
-        .map((d) => ({ id: makeId("degree"), ...d }));
-      const allDegrees = [...current.degrees, ...degreesToAdd];
-      const degreeIdByCode = new Map(allDegrees.map((d) => [d.code.trim().toUpperCase(), d.id]));
-      const existingPathKeys = new Set(
-        current.paths
-          .map((p) => {
-            const deg = allDegrees.find((d) => d.id === p.degreeId);
-            return deg ? `${deg.code.trim().toUpperCase()}::${Number(p.year)}::${p.code.trim().toUpperCase()}` : "";
-          })
-          .filter(Boolean)
-      );
-      const pathsToAdd = pathTpls
-        .filter((p) => !existingPathKeys.has(`${p.degreeCode}::${p.year}::${p.code}`))
-        .map((p) => ({
-          id: makeId("path"),
-          degreeId: degreeIdByCode.get(p.degreeCode) || "",
-          year: p.year,
-          code: p.code,
-          name: p.name,
-        }))
-        .filter((p) => p.degreeId);
-      if (degreesToAdd.length === 0 && pathsToAdd.length === 0) return current;
-      return { ...current, degrees: allDegrees, paths: [...current.paths, ...pathsToAdd] };
-    });
-  }, [updateDraft]);
-
-  const addOverrideTemplatesFromBaseCohorts = useCallback(() => {
-    updateDraft((current) => {
-      const overrideTemplates = current.cohorts
-        .filter((c) => c.kind === "base")
-        .map((c) => ({
-          id: makeId("cohort"),
-          kind: "override",
-          degreeId: c.degreeId,
-          year: c.year,
-          pathId: c.pathId,
-          name: `${c.name || "Cohort"} Override`,
-          size: "",
-        }));
-      if (overrideTemplates.length === 0) return current;
-      return { ...current, cohorts: [...current.cohorts, ...overrideTemplates] };
-    });
-  }, [updateDraft]);
-
-  // ── Shared props ──────────────────────────────────────────────────────────────
-
-  const commonProps = {
-    draft,
-    validation,
-    touched,
-    touchField,
-    updateRecord,
-    removeRecord,
-    duplicateRecord,
-    addRecord,
-  };
-
-  const currentStep = steps[activeStep].key;
-
-  // ── Render ────────────────────────────────────────────────────────────────────
+  function handleCancelSessionEdit() {
+    setEditingSharedSessionId(null);
+    setSessionForm(emptySessionForm);
+    setOpenForm("");
+  }
 
   return (
     <div className="page-shell">
+      {blockingMessage ? (
+        <div className="setup-blocking-overlay" role="status" aria-live="polite" aria-busy="true">
+          <div className="setup-blocking-dialog">
+            <div className="setup-blocking-spinner" aria-hidden="true" />
+            <strong>Working on your import</strong>
+            <p>{blockingMessage}</p>
+            <span>This can take a while for large enrollment CSVs.</span>
+          </div>
+        </div>
+      ) : null}
       <div className="panel studio-panel">
-        {/* Header */}
         <div className="studio-header">
           <div>
             <h1 className="section-title">Setup Studio</h1>
             <p className="section-subtitle">
-              Build the v2 timetable dataset through guided steps, then save one validated draft for
-              generation.
+              Start from student enrolments, then enrich the snapshot with support CSVs and repair
+              only the missing local issues.
             </p>
+            {activeImportRunId ? (
+              <p className="helper-copy setup-context-chip">
+                Active snapshot #{activeImportRunId}
+                {workspace.selected_academic_year
+                  ? ` for ${workspace.selected_academic_year}`
+                  : ""}
+              </p>
+            ) : (
+              <p className="helper-copy">
+                Start with student enrolments. Everything else should be added only when the
+                readiness list asks for it.
+              </p>
+            )}
           </div>
-          <div className="studio-actions wrap">
-            <button className="ghost-btn" onClick={() => handleLoadDemo("realistic")} disabled={saving || loading}>
-              Load Realistic Demo
-            </button>
-            <button className="ghost-btn" onClick={() => handleLoadDemo("tuned")} disabled={saving || loading}>
-              Load Tuned Demo
+          <div className="studio-actions">
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => setShowUtilities((current) => !current)}
+            >
+              {showUtilities ? "Hide Utilities" : "Utilities"}
             </button>
             <button
               className="primary-btn"
-              onClick={handleSave}
-              disabled={saving || loading || validation.blocking.length > 0}
+              type="button"
+              onClick={() => navigate("/generate")}
+              disabled={!readiness.ready}
             >
-              {saving ? "Saving..." : "Save Dataset"}
+              Continue to Generate
             </button>
           </div>
         </div>
 
         {status && <div className="info-banner valid">{status}</div>}
         {error && <div className="error-banner">{error}</div>}
-        {loading && <div className="info-banner">Loading existing v2 dataset...</div>}
+        {loadingWorkspace && <div className="info-banner">Loading the current import snapshot...</div>}
 
-        {/* Step nav */}
-        <div className="wizard-steps">
-          {steps.map((step, index) => (
-            <StepBadge
-              key={step.key}
-              label={`${index + 1}. ${step.label}`}
-              active={index === activeStep}
-              complete={!blockedSteps[step.key] && index < activeStep}
-              blocked={blockedSteps[step.key]}
-              blockedReason={BLOCKED_STEP_REASONS[step.key]}
-              onClick={() => goToStep(index)}
-            />
-          ))}
-        </div>
-
-        {/* Summary bar */}
-        <section className="studio-card">
-          <div className="summary-grid">
-            {Object.entries(summary).map(([key, value]) => (
-              <div key={key} className="summary-item">
-                <span>{key.replace(/_/g, " ")}</span>
-                <strong>{value}</strong>
+        {showUtilities && (
+          <section className="studio-card setup-utilities-card">
+            <div className="studio-header compact">
+              <div>
+                <h2>Utilities</h2>
+                <p className="helper-copy">
+                  Keep the main flow simple. Use this area only when you intentionally want older
+                  snapshots or a realistic CSV fixture pack for full import testing.
+                </p>
               </div>
-            ))}
+              <div className="studio-actions">
+                <button type="button" className="ghost-btn" onClick={handleStartFresh}>
+                  Start Fresh
+                </button>
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  onClick={() => handleDownloadFixturePack("production_like")}
+                  disabled={working}
+                >
+                  Download Fixture Pack
+                </button>
+              </div>
+            </div>
+            <div className="constraint-list">
+              {(importFixtures.length > 0
+                ? importFixtures
+                : [
+                    {
+                      name: "production_like",
+                      label: "Production-Like Fixture Pack",
+                      description: "A realistic six-CSV bundle for end-to-end import testing.",
+                      files: [],
+                      available: true,
+                    },
+                  ]).map((pack) => (
+                <div key={pack.name} className="constraint-row static">
+                  <div>
+                    <strong>{pack.label}</strong>
+                    <span>
+                      {pack.description}
+                      {pack.files?.length ? ` Includes ${pack.files.length} CSV files.` : ""}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => handleDownloadFixturePack(pack.name)}
+                    disabled={!pack.available || working}
+                  >
+                    Download
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="constraint-list">
+              {recentRuns.length === 0 ? (
+                <div className="constraint-row static">
+                  <div>
+                    <strong>No previous snapshots</strong>
+                    <span>Create one by materializing a student enrolment import.</span>
+                  </div>
+                </div>
+              ) : (
+                recentRuns.map((run) => (
+                  <div key={run.import_run_id} className="constraint-row static">
+                    <div>
+                      <strong>Snapshot #{run.import_run_id}</strong>
+                      <span>
+                        {run.source_file} · {run.status}
+                        {run.selected_academic_year ? ` · ${run.selected_academic_year}` : ""}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={() => handleOpenSnapshot(run.import_run_id)}
+                    >
+                      Open
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        )}
+
+        <section className="studio-card setup-import-section">
+          <h2>Import Files</h2>
+          <p className="helper-copy">
+            Start with student enrolments, then add whichever support CSVs the admin can export
+            from the main system. Anything still missing can be repaired locally below.
+          </p>
+          <div className="summary-grid setup-import-grid">
+            <article className="summary-item setup-import-card setup-import-card-primary">
+              <span>Student Enrolments</span>
+              <strong className="setup-card-status">
+                {activeImportRunId ? "Snapshot available" : "Creates the snapshot"}
+              </strong>
+              <p>
+                Import the registration CSV that tells the system which students take which modules.
+              </p>
+              <div className="studio-actions">
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  onClick={() => handleDownloadTemplate("student_enrollments")}
+                >
+                  Download Template
+                </button>
+                <label className="ghost-btn file-picker-btn">
+                  Import CSV
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    hidden
+                    onChange={(event) => {
+                      const nextFile = event.target.files?.[0] || null;
+                      setSelectedFile(nextFile);
+                      setAnalysis(null);
+                      setProjection(null);
+                      setStatus("");
+                      setError("");
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={handleAnalyze}
+                  disabled={!hasChosenImportSource || working}
+                >
+                  {working ? "Working..." : "Analyze Import"}
+                </button>
+              </div>
+              <p className="helper-copy setup-inline-note">
+                {selectedFile ? `Selected file: ${selectedFile.name}` : "No CSV selected yet."}
+              </p>
+
+              {analysis && (
+                <div className="schema-notes compact">
+                  <h3>Needs Review</h3>
+                  <div className="summary-grid">
+                    <div className="summary-item">
+                      <span>Total rows</span>
+                      <strong>{analysis.summary?.total_rows ?? 0}</strong>
+                    </div>
+                    <div className="summary-item">
+                      <span>Unique students</span>
+                      <strong>{analysis.summary?.unique_students ?? 0}</strong>
+                    </div>
+                    <div className="summary-item">
+                      <span>Review buckets</span>
+                      <strong>{analysis.buckets?.length ?? 0}</strong>
+                    </div>
+                    <div className="summary-item">
+                      <span>Using default</span>
+                      <strong>{Math.max(analysisBuckets.length - overriddenBucketCount, 0)}</strong>
+                    </div>
+                    <div className="summary-item">
+                      <span>Overridden</span>
+                      <strong>{overriddenBucketCount}</strong>
+                    </div>
+                  </div>
+
+                  {(analysis.buckets || []).length > 0 ? (
+                    <>
+                      <label className="setup-review-default">
+                        <span>Default action for unresolved buckets</span>
+                        <select
+                          aria-label="Default review action"
+                          value={defaultBucketAction}
+                          onChange={(event) => setDefaultBucketAction(event.target.value)}
+                        >
+                          <option value="accept_exception">Accept As Exception</option>
+                          <option value="exclude">Exclude From Timetable Demand</option>
+                          <option value="treat_as_common">Treat As Common Teaching</option>
+                        </select>
+                      </label>
+                      <div className="setup-review-toolbar">
+                        <label>
+                          <span>Search buckets</span>
+                          <input
+                            aria-label="Search review buckets"
+                            value={bucketSearch}
+                            onChange={(event) => setBucketSearch(event.target.value)}
+                            placeholder="Search by description or bucket type"
+                          />
+                        </label>
+                        <label>
+                          <span>Bucket type</span>
+                          <select
+                            aria-label="Filter review buckets by type"
+                            value={bucketTypeFilter}
+                            onChange={(event) => setBucketTypeFilter(event.target.value)}
+                          >
+                            <option value="all">All types</option>
+                            {bucketTypeOptions.map((bucketType) => (
+                              <option key={bucketType} value={bucketType}>
+                                {bucketType}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          <span>Status</span>
+                          <select
+                            aria-label="Filter review buckets by status"
+                            value={bucketStatusFilter}
+                            onChange={(event) => setBucketStatusFilter(event.target.value)}
+                          >
+                            <option value="all">All statuses</option>
+                            <option value="ambiguous">Ambiguous</option>
+                            <option value="invalid">Invalid</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div className="setup-review-table-wrap">
+                        <table className="setup-review-table">
+                          <thead>
+                            <tr>
+                              <th>Description</th>
+                              <th>Type</th>
+                              <th>Status</th>
+                              <th>Rows</th>
+                              <th>Decision</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {paginatedReviewBuckets.length > 0 ? (
+                              paginatedReviewBuckets.map((bucket) => {
+                                const identifier = reviewBucketIdentifier(bucket);
+                                const resolvedAction =
+                                  bucketOverrides[identifier] || defaultBucketAction;
+                                const isOverridden = Boolean(bucketOverrides[identifier]);
+                                return (
+                                  <tr key={identifier}>
+                                    <td>
+                                      <div className="setup-review-description">
+                                        <strong>{bucket.description}</strong>
+                                        <span>{bucket.bucket_key}</span>
+                                      </div>
+                                    </td>
+                                    <td>{bucket.bucket_type}</td>
+                                    <td>
+                                      <span className={`setup-review-status ${bucket.status || "ambiguous"}`}>
+                                        {titleCaseReviewStatus(bucket.status)}
+                                      </span>
+                                    </td>
+                                    <td>{bucket.row_count}</td>
+                                    <td>
+                                      <div className="setup-review-decision">
+                                        <select
+                                          aria-label={`Decision for ${bucket.description}`}
+                                          value={resolvedAction}
+                                          onChange={(event) =>
+                                            handleBucketDecisionChange(bucket, event.target.value)
+                                          }
+                                        >
+                                          <option value="accept_exception">Accept As Exception</option>
+                                          <option value="exclude">Exclude From Timetable Demand</option>
+                                          <option value="treat_as_common">Treat As Common Teaching</option>
+                                        </select>
+                                        <span>{isOverridden ? "Override" : "Default"}</span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            ) : (
+                              <tr>
+                                <td colSpan="5" className="setup-review-empty">
+                                  No buckets match the current filters.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="setup-review-pagination">
+                        <span>
+                          Showing {filteredReviewBuckets.length === 0 ? 0 : (bucketPage - 1) * reviewPageSize + 1}
+                          {" "}to{" "}
+                          {Math.min(bucketPage * reviewPageSize, filteredReviewBuckets.length)} of{" "}
+                          {filteredReviewBuckets.length}
+                        </span>
+                        <div className="studio-actions">
+                          <button
+                            type="button"
+                            className="ghost-btn"
+                            onClick={() => setBucketPage((current) => Math.max(1, current - 1))}
+                            disabled={bucketPage === 1}
+                          >
+                            Previous
+                          </button>
+                          <span>
+                            Page {bucketPage} of {bucketPageCount}
+                          </span>
+                          <button
+                            type="button"
+                            className="ghost-btn"
+                            onClick={() =>
+                              setBucketPage((current) => Math.min(bucketPageCount, current + 1))
+                            }
+                            disabled={bucketPage === bucketPageCount}
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="helper-copy">No review buckets were created for this import.</p>
+                  )}
+
+                  <div className="studio-actions">
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={handleReviewImport}
+                      disabled={working}
+                    >
+                      Review Import
+                    </button>
+                    <button
+                      type="button"
+                      className="primary-btn"
+                      onClick={handleUseImport}
+                      disabled={working}
+                    >
+                      {blockingMessage ? "Materializing..." : "Use This Import"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {projection && (
+                <div className="info-banner setup-inline-banner">
+                  Review result: {projection.projection_summary?.projected_rows ?? 0} projected
+                  rows are ready to materialize into a working snapshot.
+                </div>
+              )}
+            </article>
+          </div>
+
+          <div className="setup-support-imports">
+            <div className="setup-support-imports-head">
+              <h3>Support CSVs</h3>
+              <p className="helper-copy">
+                Import these after the enrollment snapshot exists. Keep templates for format, use
+                the fixture pack for realistic full-flow testing.
+              </p>
+            </div>
+            <div className="constraint-list">
+              {supportCsvDefinitions.map((definition) => {
+                const template = importTemplates.find((item) => item.name === definition.templateName);
+                return (
+                  <div key={definition.key} className="constraint-row static setup-support-row">
+                    <div>
+                      <strong>{definition.title}</strong>
+                      <span>{template?.description || definition.detail}</span>
+                      <span className="setup-support-status">
+                        {activeImportRunId
+                          ? definition.statusFromWorkspace(workspace)
+                          : "Waiting for student enrolments"}
+                      </span>
+                      {!activeImportRunId && (
+                        <span className="setup-support-note">
+                          Import becomes available after you review and use the student enrolment
+                          CSV.
+                        </span>
+                      )}
+                    </div>
+                    <div className="studio-actions">
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        onClick={() => handleDownloadTemplate(definition.templateName)}
+                      >
+                        Download Template
+                      </button>
+                      <label
+                        className={`ghost-btn file-picker-btn${!activeImportRunId ? " disabled" : ""}`}
+                        htmlFor={`support-upload-${definition.key}`}
+                        aria-disabled={!activeImportRunId}
+                      >
+                        Import CSV
+                      </label>
+                      <input
+                        id={`support-upload-${definition.key}`}
+                        aria-label={`${definition.title} CSV file`}
+                        type="file"
+                        accept=".csv,text/csv"
+                        hidden
+                        disabled={!activeImportRunId}
+                        onChange={(event) => {
+                          const nextFile = event.target.files?.[0] || null;
+                          handleSupportCsvUpload(definition, nextFile);
+                          event.target.value = "";
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </section>
 
-        <StepChecks stepKey={currentStep} validation={validation} />
-
-        {/* ── Step panes ── */}
-        {currentStep === "structure" && (
-          <div className="studio-grid">
-            <StepIntro stepKey="structure" />
-            <StructureStep
-              {...commonProps}
-              addScienceStructureTemplates={addScienceStructureTemplates}
-            />
+        <section className="studio-card setup-summary-section">
+          <h2>What The System Understood</h2>
+          <p className="helper-copy">
+            This section confirms the interpreted structure. It is intentionally summary-first
+            rather than a giant editor.
+          </p>
+          <div className="summary-grid">
+            {summaryCards.map((item) => (
+              <div key={item.label} className="summary-item">
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+              </div>
+            ))}
           </div>
-        )}
+          {!activeImportRunId && (
+            <p className="empty-state">
+              Materialize an enrollment import first to create a working snapshot.
+            </p>
+          )}
+        </section>
 
-        {currentStep === "lecturers" && (
-          <>
-            <StepIntro stepKey="lecturers" />
-            <LecturersStep
-              {...commonProps}
-              addLecturerTemplateBatch={addLecturerTemplateBatch}
-            />
-          </>
-        )}
-
-        {currentStep === "rooms" && (
-          <>
-            <StepIntro stepKey="rooms" />
-            <RoomsStep
-              {...commonProps}
-              addRoomTemplateBatch={addRoomTemplateBatch}
-            />
-          </>
-        )}
-
-        {currentStep === "cohorts" && (
-          <div className="studio-grid">
-            <StepIntro stepKey="cohorts" />
-            <CohortsStep
-              {...commonProps}
-              addOverrideTemplatesFromBaseCohorts={addOverrideTemplatesFromBaseCohorts}
-            />
+        <section className="studio-card setup-readiness-section">
+          <div className="studio-header compact">
+            <div>
+              <h2>Missing For Generation</h2>
+              <p className="helper-copy">
+                Separate missing imports from local repairs. Generation should block only on real
+                solver requirements.
+              </p>
+            </div>
           </div>
-        )}
 
-        {currentStep === "modules" && (
-          <>
-            <StepIntro stepKey="modules" />
-            <ModulesStep
-              {...commonProps}
-              addModuleShellsForSemester={addModuleShellsForSemester}
-            />
-          </>
-        )}
+          {readiness.ready ? (
+            <div className="info-banner valid">This snapshot is currently generation-ready.</div>
+          ) : (
+            <div className="summary-grid">
+              <div className="summary-item">
+                <span>Import needed</span>
+                <strong>
+                  {
+                    readinessBlocking.filter((item) =>
+                      ["rooms-empty", "lecturers-empty", "sessions-empty"].includes(item.key)
+                    ).length
+                  }
+                </strong>
+              </div>
+              <div className="summary-item">
+                <span>Repair needed</span>
+                <strong>
+                  {
+                    readinessBlocking.filter(
+                      (item) =>
+                        !["rooms-empty", "lecturers-empty", "sessions-empty"].includes(item.key)
+                    ).length
+                  }
+                </strong>
+              </div>
+              <div className="summary-item">
+                <span>Warnings</span>
+                <strong>{readiness.warnings.length}</strong>
+              </div>
+            </div>
+          )}
 
-        {currentStep === "sessions" && (
-          <>
-            <StepIntro stepKey="sessions" />
-            <SessionsStep
-              {...commonProps}
-              toggleSessionLink={toggleSessionLink}
-              copySessionAudienceToModuleSet={copySessionAudienceToModuleSet}
-              addStarterSessionsFromModules={addStarterSessionsFromModules}
-              addSessionPatternFromModules={addSessionPatternFromModules}
-            />
-          </>
-        )}
+          {readinessBlocking.length > 0 && (
+            <div className="constraint-list">
+              {readinessBlocking.map((item) => (
+                <div key={item.key} className="constraint-row static">
+                  <div>
+                    <strong>{item.title}</strong>
+                    <span>{item.detail}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => setOpenForm(item.form)}
+                  >
+                    {item.action}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
-        {currentStep === "review" && (
-          <ReviewStep validation={validation} summary={summary} />
-        )}
+          {sessionsNeedingRepair.length > 0 && (
+            <div className="schema-notes compact setup-repair-queue">
+              <h3>Repair Queue</h3>
+              <div className="constraint-list">
+                {sessionsNeedingRepair.map((session) => {
+                  const missing = describeSessionRepairNeeds(session, readinessBlocking);
+                  return (
+                    <div key={session.id} className="constraint-row static">
+                      <div>
+                        <strong>{session.name}</strong>
+                        <span>Missing {missing.join(", ")}.</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        onClick={() => handleEditSharedSession(session)}
+                      >
+                        Repair Session
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
-        {/* Blocked-next flash */}
-        {nextBlockedMsg && (
-          <div className="error-banner" style={{ marginTop: 8 }}>
-            {nextBlockedMsg}
+          {readiness.warnings.length > 0 && (
+            <div className="schema-notes compact">
+              <h3>Warnings</h3>
+              <div className="constraint-list">
+                {readiness.warnings.map((item) => (
+                  <div key={item.key} className="constraint-row static">
+                    <div>
+                      <strong>{item.title}</strong>
+                      <span>{item.detail}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="studio-card setup-continue-section">
+          <h2>Continue</h2>
+          <p className="helper-copy">
+            Move to generation only when the blocking list is empty. Warnings can remain if you are
+            comfortable with them.
+          </p>
+          <div className="studio-actions">
+            <button
+              type="button"
+              className="primary-btn"
+              onClick={() => navigate("/generate")}
+              disabled={!readiness.ready}
+            >
+              Open Generate
+            </button>
           </div>
-        )}
+        </section>
 
-        {/* Footer nav */}
-        <div className="wizard-footer">
-          <button className="ghost-btn" onClick={prevStep} disabled={activeStep === 0}>
-            Back
-          </button>
-          <button
-            className="primary-btn"
-            onClick={nextStep}
-            disabled={activeStep === steps.length - 1}
-          >
-            Next
-          </button>
-        </div>
+        {activeImportRunId && (
+          <section className="studio-card">
+            <div className="studio-header compact">
+              <div>
+                <h2>Repair Missing Data</h2>
+                <p className="helper-copy">
+                  Use these forms only for small local fixes. Bulk source-data problems should still
+                  be corrected in CSV and reimported.
+                </p>
+              </div>
+              <div className="studio-actions">
+                <button
+                  type="button"
+                  className={openForm === "lecturer" ? "primary-btn" : "ghost-btn"}
+                  onClick={() => setOpenForm(openForm === "lecturer" ? "" : "lecturer")}
+                >
+                  Add Lecturer
+                </button>
+                <button
+                  type="button"
+                  className={openForm === "room" ? "primary-btn" : "ghost-btn"}
+                  onClick={() => setOpenForm(openForm === "room" ? "" : "room")}
+                >
+                  Add Room
+                </button>
+                <button
+                  type="button"
+                  className={openForm === "session" ? "primary-btn" : "ghost-btn"}
+                  onClick={() => {
+                    if (openForm === "session") {
+                      handleCancelSessionEdit();
+                      return;
+                    }
+                    setEditingSharedSessionId(null);
+                    setSessionForm(emptySessionForm);
+                    setOpenForm("session");
+                  }}
+                >
+                  {editingSharedSessionId ? "Editing Shared Session" : "Add Shared Session"}
+                </button>
+              </div>
+            </div>
+
+            {openForm === "lecturer" && (
+              <form onSubmit={handleAddLecturer}>
+                <div className="form-grid two-column">
+                  <label>
+                    <span>Name</span>
+                    <input
+                      value={lecturerForm.name}
+                      onChange={(event) =>
+                        setLecturerForm({ ...lecturerForm, name: event.target.value })
+                      }
+                      required
+                    />
+                  </label>
+                  <label>
+                    <span>Email</span>
+                    <input
+                      value={lecturerForm.email}
+                      onChange={(event) =>
+                        setLecturerForm({ ...lecturerForm, email: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="full-span">
+                    <span>Notes</span>
+                    <textarea
+                      rows="3"
+                      value={lecturerForm.notes}
+                      onChange={(event) =>
+                        setLecturerForm({ ...lecturerForm, notes: event.target.value })
+                      }
+                    />
+                  </label>
+                </div>
+                <div className="studio-actions">
+                  <button type="submit" className="primary-btn" disabled={working}>
+                    Save Lecturer
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {openForm === "room" && (
+              <form onSubmit={handleAddRoom}>
+                <div className="form-grid two-column">
+                  <label>
+                    <span>Room name</span>
+                    <input
+                      value={roomForm.name}
+                      onChange={(event) => setRoomForm({ ...roomForm, name: event.target.value })}
+                      required
+                    />
+                  </label>
+                  <label>
+                    <span>Capacity</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={roomForm.capacity}
+                      onChange={(event) =>
+                        setRoomForm({ ...roomForm, capacity: event.target.value })
+                      }
+                      required
+                    />
+                  </label>
+                  <label>
+                    <span>Room type</span>
+                    <select
+                      value={roomForm.room_type}
+                      onChange={(event) =>
+                        setRoomForm({ ...roomForm, room_type: event.target.value })
+                      }
+                    >
+                      <option value="lecture">Lecture</option>
+                      <option value="lab">Lab</option>
+                      <option value="seminar">Seminar</option>
+                      <option value="any">Any</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Location</span>
+                    <input
+                      value={roomForm.location}
+                      onChange={(event) =>
+                        setRoomForm({ ...roomForm, location: event.target.value })
+                      }
+                      required
+                    />
+                  </label>
+                  <label>
+                    <span>Lab type</span>
+                    <input
+                      value={roomForm.lab_type}
+                      onChange={(event) =>
+                        setRoomForm({ ...roomForm, lab_type: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>Year restriction</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="6"
+                      value={roomForm.year_restriction}
+                      onChange={(event) =>
+                        setRoomForm({ ...roomForm, year_restriction: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="full-span">
+                    <span>Notes</span>
+                    <textarea
+                      rows="3"
+                      value={roomForm.notes}
+                      onChange={(event) =>
+                        setRoomForm({ ...roomForm, notes: event.target.value })
+                      }
+                    />
+                  </label>
+                </div>
+                <div className="studio-actions">
+                  <button type="submit" className="primary-btn" disabled={working}>
+                    Save Room
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {openForm === "session" && (
+              <form onSubmit={handleAddSession}>
+                {editingSharedSessionId && (
+                  <div className="info-banner">
+                    Repairing shared session #{editingSharedSessionId}. Update the missing links or
+                    fields, then save.
+                  </div>
+                )}
+                <div className="form-grid two-column">
+                  <label>
+                    <span>Session name</span>
+                    <input
+                      value={sessionForm.name}
+                      onChange={(event) =>
+                        setSessionForm({ ...sessionForm, name: event.target.value })
+                      }
+                      required
+                    />
+                  </label>
+                  <label>
+                    <span>Session type</span>
+                    <select
+                      value={sessionForm.session_type}
+                      onChange={(event) =>
+                        setSessionForm({ ...sessionForm, session_type: event.target.value })
+                      }
+                    >
+                      <option value="lecture">Lecture</option>
+                      <option value="tutorial">Tutorial</option>
+                      <option value="lab">Lab</option>
+                      <option value="practical">Practical</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Duration (minutes)</span>
+                    <input
+                      type="number"
+                      min="30"
+                      step="30"
+                      value={sessionForm.duration_minutes}
+                      onChange={(event) =>
+                        setSessionForm({
+                          ...sessionForm,
+                          duration_minutes: Number(event.target.value),
+                        })
+                      }
+                      required
+                    />
+                  </label>
+                  <label>
+                    <span>Occurrences per week</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={sessionForm.occurrences_per_week}
+                      onChange={(event) =>
+                        setSessionForm({
+                          ...sessionForm,
+                          occurrences_per_week: Number(event.target.value),
+                        })
+                      }
+                      required
+                    />
+                  </label>
+                  <label>
+                    <span>Required room type</span>
+                    <select
+                      value={sessionForm.required_room_type}
+                      onChange={(event) =>
+                        setSessionForm({
+                          ...sessionForm,
+                          required_room_type: event.target.value,
+                        })
+                      }
+                    >
+                      <option value="lecture">Lecture</option>
+                      <option value="lab">Lab</option>
+                      <option value="seminar">Seminar</option>
+                      <option value="any">Any</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Required lab type</span>
+                    <input
+                      value={sessionForm.required_lab_type}
+                      onChange={(event) =>
+                        setSessionForm({
+                          ...sessionForm,
+                          required_lab_type: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>Specific room</span>
+                    <select
+                      value={sessionForm.specific_room_id}
+                      onChange={(event) =>
+                        setSessionForm({
+                          ...sessionForm,
+                          specific_room_id: event.target.value,
+                        })
+                      }
+                    >
+                      <option value="">Any room</option>
+                      {workspace.rooms.map((room) => (
+                        <option key={room.id} value={room.id}>
+                          {room.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Max students per group</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={sessionForm.max_students_per_group}
+                      onChange={(event) =>
+                        setSessionForm({
+                          ...sessionForm,
+                          max_students_per_group: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="checkbox-field full-span">
+                    <span>Allow same-time parallel rooms</span>
+                    <input
+                      type="checkbox"
+                      checked={sessionForm.allow_parallel_rooms}
+                      onChange={(event) =>
+                        setSessionForm({
+                          ...sessionForm,
+                          allow_parallel_rooms: event.target.checked,
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="full-span">
+                    <span>Notes</span>
+                    <textarea
+                      rows="3"
+                      value={sessionForm.notes}
+                      onChange={(event) =>
+                        setSessionForm({ ...sessionForm, notes: event.target.value })
+                      }
+                    />
+                  </label>
+                </div>
+
+                <ToggleList
+                  title="Link modules"
+                  items={workspace.curriculum_modules}
+                  selectedIds={sessionForm.curriculum_module_ids}
+                  onToggle={(id) => toggleSessionValue("curriculum_module_ids", id)}
+                  renderLabel={(item) => ({ title: item.code, detail: item.name })}
+                  emptyMessage="No modules are available in this snapshot yet."
+                />
+
+                <ToggleList
+                  title="Link attendance groups"
+                  items={workspace.attendance_groups}
+                  selectedIds={sessionForm.attendance_group_ids}
+                  onToggle={(id) => toggleSessionValue("attendance_group_ids", id)}
+                  renderLabel={(item) => ({
+                    title: item.label,
+                    detail: `${item.student_count} students`,
+                  })}
+                  emptyMessage="No attendance groups are available in this snapshot yet."
+                />
+
+                <ToggleList
+                  title="Link lecturers"
+                  items={workspace.lecturers}
+                  selectedIds={sessionForm.lecturer_ids}
+                  onToggle={(id) => toggleSessionValue("lecturer_ids", id)}
+                  renderLabel={(item) => ({
+                    title: item.name,
+                    detail: item.email || "No email",
+                  })}
+                  emptyMessage="No lecturers are available in this snapshot yet."
+                />
+
+                <div className="studio-actions">
+                  <button type="submit" className="primary-btn" disabled={working}>
+                    {editingSharedSessionId ? "Save Shared Session Repair" : "Save Shared Session"}
+                  </button>
+                  {editingSharedSessionId && (
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={handleCancelSessionEdit}
+                    >
+                      Cancel Repair
+                    </button>
+                  )}
+                </div>
+              </form>
+            )}
+          </section>
+        )}
       </div>
     </div>
   );

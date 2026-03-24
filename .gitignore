@@ -25,6 +25,10 @@ wheels/
 *.egg
 MANIFEST
 
+# Keep verifier source trees that legitimately use a lib/ directory.
+!verifiers/elixir_snapshot_verifier/lib/
+!verifiers/elixir_snapshot_verifier/lib/**
+
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as long as the script is
