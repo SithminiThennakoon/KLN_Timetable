@@ -441,6 +441,14 @@ function SetupStudio() {
         setStatus(nextStatus);
       }
     } catch (err) {
+      if (
+        err?.message?.toLowerCase().includes("not found") &&
+        typeof window !== "undefined"
+      ) {
+        window.localStorage.removeItem(activeImportRunStorageKey);
+        setActiveImportRunId(null);
+        setWorkspace(emptyWorkspace);
+      }
       setError(err.message || "Failed to load the import workspace.");
     } finally {
       setLoadingWorkspace(false);
@@ -471,7 +479,7 @@ function SetupStudio() {
     return (analysis?.buckets || []).map((bucket) => ({
       bucket_type: bucket.bucket_type,
       bucket_key: bucket.bucket_key,
-      decision: bucketDecision,
+      action: bucketDecision,
       notes: "Applied from Setup Studio review.",
     }));
   }

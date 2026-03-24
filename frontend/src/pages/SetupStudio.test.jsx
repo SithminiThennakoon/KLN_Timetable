@@ -207,6 +207,18 @@ describe("SetupStudio", () => {
     fireEvent.click(screen.getByRole("button", { name: "Use This Import" }));
 
     await waitFor(() => {
+      expect(timetableStudioService.previewEnrollmentImport).toHaveBeenCalledWith(
+        {
+          rules: [
+            expect.objectContaining({
+              bucket_type: "year_code_mismatch",
+              bucket_key: "year=2|nominal_year=1",
+              action: "accept_exception",
+            }),
+          ],
+        },
+        undefined
+      );
       expect(timetableStudioService.materializeEnrollmentImport).toHaveBeenCalledTimes(1);
       expect(timetableStudioService.getImportWorkspace).toHaveBeenCalledWith(88);
     });
