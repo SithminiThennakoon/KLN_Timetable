@@ -48,6 +48,64 @@ const emptySessionForm = {
   attendance_group_ids: [],
 };
 
+const supportCsvDefinitions = [
+  {
+    key: "rooms",
+    title: "Rooms",
+    templateName: "rooms",
+    upload: "uploadRoomsCsv",
+    statusFromWorkspace: (workspace) =>
+      workspace.rooms.length > 0 ? `${workspace.rooms.length} imported` : "Not imported",
+  },
+  {
+    key: "lecturers",
+    title: "Lecturers",
+    templateName: "lecturers",
+    upload: "uploadLecturersCsv",
+    statusFromWorkspace: (workspace) =>
+      workspace.lecturers.length > 0
+        ? `${workspace.lecturers.length} imported`
+        : "Not imported",
+  },
+  {
+    key: "modules",
+    title: "Modules",
+    templateName: "modules",
+    upload: "uploadModulesCsv",
+    statusFromWorkspace: (workspace) =>
+      workspace.curriculum_modules.length > 0
+        ? `${workspace.curriculum_modules.length} available`
+        : "Not imported",
+  },
+  {
+    key: "sessions",
+    title: "Sessions",
+    templateName: "sessions",
+    upload: "uploadSessionsCsv",
+    statusFromWorkspace: (workspace) =>
+      workspace.shared_sessions.length > 0
+        ? `${workspace.shared_sessions.length} imported`
+        : "Not imported",
+  },
+  {
+    key: "session_lecturers",
+    title: "Session Lecturers",
+    templateName: "session_lecturers",
+    upload: "uploadSessionLecturersCsv",
+    statusFromWorkspace: () => "Import after sessions + lecturers",
+  },
+];
+
+function downloadTextFile(filename, content, contentType = "text/csv;charset=utf-8") {
+  const blob = new Blob([content], { type: contentType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 function readActiveImportRunId() {
   if (typeof window === "undefined") {
     return null;
@@ -262,6 +320,8 @@ function SetupStudio() {
   const [projection, setProjection] = useState(null);
   const [bucketDecision, setBucketDecision] = useState("accept_exception");
   const [openForm, setOpenForm] = useState("");
+  const [importTemplates, setImportTemplates] = useState([]);
+  const [supportCsvFiles, setSupportCsvFiles] = useState({});
   const [lecturerForm, setLecturerForm] = useState(emptyLecturerForm);
   const [roomForm, setRoomForm] = useState(emptyRoomForm);
   const [sessionForm, setSessionForm] = useState(emptySessionForm);
@@ -305,6 +365,13 @@ function SetupStudio() {
         `Restored snapshot #${activeImportRunId}. Continue completing the missing teaching details.`
       );
     }
+  }, []);
+
+  useEffect(() => {
+    timetableStudioService
+      .listImportTemplates()
+      .then((response) => setImportTemplates(response.templates || []))
+      .catch(() => {});
   }, []);
 
   function selectedImportFile() {
@@ -386,6 +453,39 @@ function SetupStudio() {
       );
     } catch (err) {
       setError(err.message || "Failed to materialize the import into a working snapshot.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function handleDownloadTemplate(templateName) {
+    setError("");
+    try {
+      const response = await timetableStudioService.downloadImportTemplate(templateName);
+      downloadTextFile(response.filename, response.content);
+    } catch (err) {
+      setError(err.message || "Failed to download the CSV template.");
+    }
+  }
+
+  async function handleSupportCsvUpload(definition) {
+    const file = supportCsvFiles[definition.key];
+    if (!activeImportRunId || !file) {
+      return;
+    }
+    setWorking(true);
+    setError("");
+    setStatus("");
+    try {
+      const response = await timetableStudioService[definition.upload](activeImportRunId, file);
+      setSupportCsvFiles((current) => ({ ...current, [definition.key]: null }));
+      const warningCount = response.warnings?.length || 0;
+      await loadWorkspace(
+        activeImportRunId,
+        `${definition.title} CSV imported into snapshot #${activeImportRunId}. Created ${response.created_count || 0}, updated ${response.updated_count || 0}${warningCount ? `, warnings ${warningCount}` : ""}.`
+      );
+    } catch (err) {
+      setError(err.message || `Failed to import ${definition.title.toLowerCase()} CSV.`);
     } finally {
       setWorking(false);
     }
@@ -561,6 +661,68 @@ function SetupStudio() {
               </article>
             ))}
           </div>
+
+          {activeImportRunId && (
+            <div className="schema-notes compact">
+              <h3>Support CSVs For This Snapshot</h3>
+              <p>
+                Once student enrolments are materialized, import the support CSVs your admin can
+                actually export. Anything still missing can be filled manually below.
+              </p>
+              <div className="summary-grid">
+                {supportCsvDefinitions.map((definition) => {
+                  const template = importTemplates.find(
+                    (item) => item.name === definition.templateName
+                  );
+                  const selectedSupportFile = supportCsvFiles[definition.key];
+                  return (
+                    <article key={definition.key} className="summary-item">
+                      <span>{definition.title}</span>
+                      <strong>{definition.statusFromWorkspace(workspace)}</strong>
+                      <p>{template?.description || "Template available for this CSV schema."}</p>
+                      <div className="studio-actions">
+                        <button
+                          type="button"
+                          className="ghost-btn"
+                          onClick={() => handleDownloadTemplate(definition.templateName)}
+                        >
+                          Download Template
+                        </button>
+                        <label className="ghost-btn file-picker-btn">
+                          Choose CSV
+                          <input
+                            type="file"
+                            accept=".csv,text/csv"
+                            hidden
+                            onChange={(event) => {
+                              const nextFile = event.target.files?.[0] || null;
+                              setSupportCsvFiles((current) => ({
+                                ...current,
+                                [definition.key]: nextFile,
+                              }));
+                            }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          className="primary-btn"
+                          onClick={() => handleSupportCsvUpload(definition)}
+                          disabled={!selectedSupportFile || working}
+                        >
+                          Upload
+                        </button>
+                      </div>
+                      <p className="helper-copy">
+                        {selectedSupportFile
+                          ? `Selected file: ${selectedSupportFile.name}`
+                          : "No CSV selected yet."}
+                      </p>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="schema-notes">
             <h3>Student Enrolments</h3>

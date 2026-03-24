@@ -17,9 +17,16 @@ vi.mock("react-router-dom", async () => {
 vi.mock("../services/timetableStudioService", () => ({
   timetableStudioService: {
     getImportWorkspace: vi.fn(),
+    listImportTemplates: vi.fn(),
+    downloadImportTemplate: vi.fn(),
     analyzeEnrollmentImport: vi.fn(),
     previewEnrollmentImport: vi.fn(),
     materializeEnrollmentImport: vi.fn(),
+    uploadModulesCsv: vi.fn(),
+    uploadRoomsCsv: vi.fn(),
+    uploadLecturersCsv: vi.fn(),
+    uploadSessionsCsv: vi.fn(),
+    uploadSessionLecturersCsv: vi.fn(),
     seedRealisticSnapshotMissingData: vi.fn(),
     createSnapshotLecturersBatch: vi.fn(),
     createSnapshotRoomsBatch: vi.fn(),
@@ -45,6 +52,9 @@ describe("SetupStudio minimal setup UI", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     window.localStorage.clear();
+    timetableStudioService.listImportTemplates.mockResolvedValue({
+      templates: [],
+    });
     timetableStudioService.getImportWorkspace.mockResolvedValue(workspaceWithSnapshot());
   });
 

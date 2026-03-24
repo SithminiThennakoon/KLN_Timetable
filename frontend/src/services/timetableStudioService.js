@@ -1,4 +1,4 @@
-import { apiClient } from "./apiClient";
+import { apiClient, resolveApiBaseUrl } from "./apiClient";
 
 function buildImportFormData(payload = {}, file) {
   const formData = new FormData();
@@ -14,6 +14,29 @@ function buildImportFormData(payload = {}, file) {
     formData.append("target_academic_year", payload.target_academic_year);
   }
   return formData;
+}
+
+function buildSimpleCsvFormData(file) {
+  const formData = new FormData();
+  if (file) {
+    formData.append("file", file);
+  }
+  return formData;
+}
+
+async function downloadCsvTemplate(path) {
+  const response = await fetch(`${resolveApiBaseUrl()}${path}`);
+  if (!response.ok) {
+    const payload = await response.text();
+    throw new Error(payload || "Failed to download the CSV template");
+  }
+  return {
+    filename:
+      response.headers
+        .get("content-disposition")
+        ?.match(/filename=\"?([^";]+)\"?/)?.[1] || "template.csv",
+    content: await response.text(),
+  };
 }
 
 export const timetableStudioService = {
@@ -41,6 +64,22 @@ export const timetableStudioService = {
       buildImportFormData(payload, file)
     );
   },
+  listImportTemplates: () => apiClient.get("/v2/imports/templates"),
+  downloadImportTemplate: (templateName) =>
+    downloadCsvTemplate(`/v2/imports/templates/${templateName}`),
+  uploadModulesCsv: (importRunId, file) =>
+    apiClient.postForm(`/v2/imports/${importRunId}/modules-upload`, buildSimpleCsvFormData(file)),
+  uploadRoomsCsv: (importRunId, file) =>
+    apiClient.postForm(`/v2/imports/${importRunId}/rooms-upload`, buildSimpleCsvFormData(file)),
+  uploadLecturersCsv: (importRunId, file) =>
+    apiClient.postForm(`/v2/imports/${importRunId}/lecturers-upload`, buildSimpleCsvFormData(file)),
+  uploadSessionsCsv: (importRunId, file) =>
+    apiClient.postForm(`/v2/imports/${importRunId}/sessions-upload`, buildSimpleCsvFormData(file)),
+  uploadSessionLecturersCsv: (importRunId, file) =>
+    apiClient.postForm(
+      `/v2/imports/${importRunId}/session-lecturers-upload`,
+      buildSimpleCsvFormData(file)
+    ),
   getImportWorkspace: (importRunId) => apiClient.get(`/v2/imports/${importRunId}/workspace`),
   publishImportWorkspaceToLegacyDataset: (importRunId) =>
     apiClient.post(`/v2/imports/${importRunId}/publish-legacy`, {}),
