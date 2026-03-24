@@ -771,6 +771,7 @@ function SetupStudio() {
       return;
     }
     setWorking(true);
+    setBlockingMessage(`Importing ${definition.title.toLowerCase()} CSV into snapshot #${activeImportRunId}...`);
     setError("");
     setStatus("");
     try {
@@ -784,6 +785,7 @@ function SetupStudio() {
     } catch (err) {
       setError(err.message || `Failed to import ${definition.title.toLowerCase()} CSV.`);
     } finally {
+      setBlockingMessage("");
       setWorking(false);
     }
   }

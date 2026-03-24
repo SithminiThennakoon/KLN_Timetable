@@ -676,4 +676,56 @@ describe("SetupStudio", () => {
       await screen.findByText(/Rooms CSV imported into snapshot #77\./i)
     ).toBeInTheDocument();
   });
+
+  it("shows a blocking overlay while importing a support CSV", async () => {
+    timetableStudioService.listImportRuns.mockResolvedValue({
+      runs: [
+        {
+          import_run_id: 77,
+          source_file: "students_processed_TT_J.csv",
+          status: "materialized",
+          selected_academic_year: "2022/2023",
+        },
+      ],
+    });
+    timetableStudioService.getImportWorkspace.mockResolvedValue({
+      ...emptyWorkspace(),
+      import_run_id: 77,
+      selected_academic_year: "2022/2023",
+    });
+
+    let resolveUpload;
+    timetableStudioService.uploadRoomsCsv.mockReturnValue(
+      new Promise((resolve) => {
+        resolveUpload = resolve;
+      })
+    );
+
+    renderSetupStudio();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Utilities" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open" }));
+    expect(await screen.findByText("Snapshot available")).toBeInTheDocument();
+
+    const roomsInput = screen.getByLabelText("Rooms CSV file");
+    const roomsFile = new File(
+      ["room_code,room_name,capacity,room_type\nA7-H1,A7 Hall 1,180,lecture\n"],
+      "rooms.csv",
+      { type: "text/csv" }
+    );
+    fireEvent.change(roomsInput, { target: { files: [roomsFile] } });
+
+    expect(await screen.findByText("Working on your import")).toBeInTheDocument();
+    expect(screen.getByText(/Importing rooms CSV into snapshot #77/i)).toBeInTheDocument();
+
+    resolveUpload({
+      created_count: 1,
+      updated_count: 0,
+      warnings: [],
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Working on your import")).not.toBeInTheDocument();
+    });
+  });
 });
