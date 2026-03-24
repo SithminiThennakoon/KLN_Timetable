@@ -267,6 +267,10 @@ const localImportTemplates = {
 
 function downloadTextFile(filename, content, contentType = "text/csv;charset=utf-8") {
   const blob = new Blob([content], { type: contentType });
+  downloadBlobFile(filename, blob);
+}
+
+function downloadBlobFile(filename, blob) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -459,7 +463,6 @@ function SetupStudio() {
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
-  const [useSampleCsv, setUseSampleCsv] = useState(false);
   const [analysis, setAnalysis] = useState(null);
   const [projection, setProjection] = useState(null);
   const [bucketDecision, setBucketDecision] = useState("accept_exception");
@@ -467,12 +470,13 @@ function SetupStudio() {
   const [showUtilities, setShowUtilities] = useState(false);
   const [editingSharedSessionId, setEditingSharedSessionId] = useState(null);
   const [importTemplates, setImportTemplates] = useState([]);
+  const [importFixtures, setImportFixtures] = useState([]);
   const [recentRuns, setRecentRuns] = useState([]);
   const [lecturerForm, setLecturerForm] = useState(emptyLecturerForm);
   const [roomForm, setRoomForm] = useState(emptyRoomForm);
   const [sessionForm, setSessionForm] = useState(emptySessionForm);
 
-  const hasChosenImportSource = useSampleCsv || Boolean(selectedFile);
+  const hasChosenImportSource = Boolean(selectedFile);
   const summaryCards = useMemo(() => buildWorkspaceSummary(workspace), [workspace]);
   const readiness = useMemo(
     () => workspace.readiness || buildReadiness(workspace),
@@ -549,12 +553,12 @@ function SetupStudio() {
       .listImportTemplates()
       .then((response) => setImportTemplates(response.templates || []))
       .catch(() => {});
+    timetableStudioService
+      .listImportFixtures()
+      .then((response) => setImportFixtures(response.packs || []))
+      .catch(() => setImportFixtures([]));
     refreshRecentRuns();
   }, []);
-
-  function selectedImportFile() {
-    return useSampleCsv ? undefined : selectedFile;
-  }
 
   function buildReviewRules() {
     return (analysis?.buckets || []).map((bucket) => ({
@@ -573,9 +577,7 @@ function SetupStudio() {
     setError("");
     setStatus("");
     try {
-      const response = await timetableStudioService.analyzeEnrollmentImport(
-        selectedImportFile()
-      );
+      const response = await timetableStudioService.analyzeEnrollmentImport(selectedFile);
       setAnalysis(response);
       setProjection(null);
       setStatus(`Analyzed ${response.source_file || "the selected CSV"}.`);
@@ -596,7 +598,7 @@ function SetupStudio() {
     try {
       const response = await timetableStudioService.previewEnrollmentImport(
         { rules: buildReviewRules() },
-        selectedImportFile()
+        selectedFile
       );
       setProjection(response);
       setStatus(
@@ -619,12 +621,11 @@ function SetupStudio() {
     try {
       const response = await timetableStudioService.materializeEnrollmentImport(
         { rules: buildReviewRules() },
-        selectedImportFile()
+        selectedFile
       );
       setAnalysis(null);
       setProjection(null);
       setSelectedFile(null);
-      setUseSampleCsv(false);
       await loadWorkspace(
         response.import_run_id,
         `The CSV import has been materialized into snapshot #${response.import_run_id}.`
@@ -680,22 +681,16 @@ function SetupStudio() {
     }
   }
 
-  async function handleImportDemoBundle() {
-    if (!activeImportRunId) {
-      return;
-    }
+  async function handleDownloadFixturePack(packName = "production_like") {
     setWorking(true);
     setError("");
     setStatus("");
     try {
-      const response = await timetableStudioService.importDemoBundle(activeImportRunId);
-      await loadWorkspace(
-        activeImportRunId,
-        `Imported demo bundle into snapshot #${activeImportRunId}: ${response.lecturers_created} lecturers, ${response.rooms_created} rooms, ${response.shared_sessions_created} shared sessions.`
-      );
-      await refreshRecentRuns();
+      const response = await timetableStudioService.downloadImportFixturePack(packName);
+      downloadBlobFile(response.filename, response.blob);
+      setStatus("Downloaded the realistic import fixture pack.");
     } catch (err) {
-      setError(err.message || "Failed to import the demo bundle.");
+      setError(err.message || "Failed to download the realistic import fixture pack.");
     } finally {
       setWorking(false);
     }
@@ -705,7 +700,6 @@ function SetupStudio() {
     setAnalysis(null);
     setProjection(null);
     setSelectedFile(null);
-    setUseSampleCsv(false);
     await loadWorkspace(importRunId, `Opened snapshot #${importRunId}.`);
   }
 
@@ -715,7 +709,6 @@ function SetupStudio() {
     setAnalysis(null);
     setProjection(null);
     setSelectedFile(null);
-    setUseSampleCsv(false);
     setOpenForm("");
     setError("");
     setStatus("Starting a fresh setup session. Import student enrolments to create a new snapshot.");
@@ -899,8 +892,8 @@ function SetupStudio() {
               <div>
                 <h2>Utilities</h2>
                 <p className="helper-copy">
-                  Keep the main flow simple. Use this area only when you intentionally want an older
-                  snapshot or demo data.
+                  Keep the main flow simple. Use this area only when you intentionally want older
+                  snapshots or a realistic CSV fixture pack for full import testing.
                 </p>
               </div>
               <div className="studio-actions">
@@ -910,12 +903,43 @@ function SetupStudio() {
                 <button
                   type="button"
                   className="ghost-btn"
-                  onClick={handleImportDemoBundle}
-                  disabled={!activeImportRunId || working}
+                  onClick={() => handleDownloadFixturePack("production_like")}
+                  disabled={working}
                 >
-                  Import Demo Bundle
+                  Download Fixture Pack
                 </button>
               </div>
+            </div>
+            <div className="constraint-list">
+              {(importFixtures.length > 0
+                ? importFixtures
+                : [
+                    {
+                      name: "production_like",
+                      label: "Production-Like Fixture Pack",
+                      description: "A realistic six-CSV bundle for end-to-end import testing.",
+                      files: [],
+                      available: true,
+                    },
+                  ]).map((pack) => (
+                <div key={pack.name} className="constraint-row static">
+                  <div>
+                    <strong>{pack.label}</strong>
+                    <span>
+                      {pack.description}
+                      {pack.files?.length ? ` Includes ${pack.files.length} CSV files.` : ""}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => handleDownloadFixturePack(pack.name)}
+                    disabled={!pack.available || working}
+                  >
+                    Download
+                  </button>
+                </div>
+              ))}
             </div>
             <div className="constraint-list">
               {recentRuns.length === 0 ? (
@@ -981,7 +1005,6 @@ function SetupStudio() {
                     onChange={(event) => {
                       const nextFile = event.target.files?.[0] || null;
                       setSelectedFile(nextFile);
-                      setUseSampleCsv(false);
                       setAnalysis(null);
                       setProjection(null);
                       setStatus("");
@@ -989,20 +1012,6 @@ function SetupStudio() {
                     }}
                   />
                 </label>
-                <button
-                  type="button"
-                  className={useSampleCsv ? "primary-btn" : "ghost-btn"}
-                  onClick={() => {
-                    setUseSampleCsv(true);
-                    setSelectedFile(null);
-                    setAnalysis(null);
-                    setProjection(null);
-                    setStatus("Using the bundled sample enrollment CSV.");
-                    setError("");
-                  }}
-                >
-                  Use Sample CSV
-                </button>
                 <button
                   type="button"
                   className="primary-btn"
@@ -1013,11 +1022,7 @@ function SetupStudio() {
                 </button>
               </div>
               <p className="helper-copy setup-inline-note">
-                {selectedFile
-                  ? `Selected file: ${selectedFile.name}`
-                  : useSampleCsv
-                    ? "Using the bundled sample CSV."
-                    : "No CSV selected yet."}
+                {selectedFile ? `Selected file: ${selectedFile.name}` : "No CSV selected yet."}
               </p>
 
               {analysis && (

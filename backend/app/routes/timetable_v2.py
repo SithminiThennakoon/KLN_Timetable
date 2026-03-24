@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -50,6 +51,12 @@ from app.services.enrollment_inference import DEFAULT_ENROLLMENT_CSV
 from app.services.import_materialization import (
     materialize_import_run,
     summarize_import_run,
+)
+from app.services.import_fixtures import (
+    build_import_fixture_zip,
+    get_import_fixture_pack,
+    list_import_fixture_packs,
+    read_import_fixture_file,
 )
 from app.services.import_templates import (
     get_import_template,
@@ -207,6 +214,40 @@ def download_import_template(template_name: str):
         raise HTTPException(status_code=404, detail="Import template not found")
     filename, content = rendered
     return _csv_download_response(filename, content)
+
+
+@router.get("/import-fixtures", response_model=dict)
+def get_import_fixture_packs():
+    return {"packs": list_import_fixture_packs()}
+
+
+@router.get("/import-fixtures/{pack_name}.zip", response_model=None)
+def download_import_fixture_pack(pack_name: str):
+    rendered = build_import_fixture_zip(pack_name)
+    if rendered is None:
+        raise HTTPException(status_code=404, detail="Import fixture pack not found")
+    filename, content = rendered
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/import-fixtures/{pack_name}/{filename}", response_model=None)
+def download_import_fixture_file(pack_name: str, filename: str):
+    pack = get_import_fixture_pack(pack_name)
+    if pack is None or not pack["available"]:
+        raise HTTPException(status_code=404, detail="Import fixture pack not found")
+    rendered = read_import_fixture_file(pack_name, filename)
+    if rendered is None:
+        raise HTTPException(status_code=404, detail="Import fixture file not found")
+    resolved_name, content = rendered
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{resolved_name}"'},
+    )
 
 
 @router.get("/imports/enrollment-analysis", response_model=ImportAnalysisResponse)

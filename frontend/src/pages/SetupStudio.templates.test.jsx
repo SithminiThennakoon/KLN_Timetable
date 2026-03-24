@@ -17,9 +17,11 @@ vi.mock("react-router-dom", async () => {
 vi.mock("../services/timetableStudioService", () => ({
   timetableStudioService: {
     getImportWorkspace: vi.fn(),
+    listImportFixtures: vi.fn(),
     listImportRuns: vi.fn(),
     listImportTemplates: vi.fn(),
     downloadImportTemplate: vi.fn(),
+    downloadImportFixturePack: vi.fn(),
     analyzeEnrollmentImport: vi.fn(),
     previewEnrollmentImport: vi.fn(),
     materializeEnrollmentImport: vi.fn(),
@@ -57,6 +59,9 @@ describe("SetupStudio minimal setup UI", () => {
     timetableStudioService.listImportTemplates.mockResolvedValue({
       templates: [],
     });
+    timetableStudioService.listImportFixtures.mockResolvedValue({
+      packs: [],
+    });
     timetableStudioService.listImportRuns.mockResolvedValue({
       runs: [],
     });
@@ -76,6 +81,7 @@ describe("SetupStudio minimal setup UI", () => {
     expect(screen.getByText("Missing For Generation")).toBeInTheDocument();
     expect(screen.getByText("Continue")).toBeInTheDocument();
     expect(screen.getAllByText("Waiting for student enrolments").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Use Sample CSV")).not.toBeInTheDocument();
     expect(screen.queryByText("Edit Manually")).not.toBeInTheDocument();
     expect(screen.queryByText("CSV Uploads")).not.toBeInTheDocument();
   });
@@ -100,6 +106,7 @@ describe("SetupStudio minimal setup UI", () => {
 
     expect(await screen.findByRole("button", { name: "Utilities" })).toBeInTheDocument();
     expect(screen.queryByText(/Restored snapshot/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Download Fixture Pack" })).not.toBeInTheDocument();
     expect(screen.queryByText("Repair Missing Data")).not.toBeInTheDocument();
   });
 });

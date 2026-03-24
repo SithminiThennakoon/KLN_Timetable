@@ -19,9 +19,11 @@ vi.mock("react-router-dom", async () => {
 vi.mock("../services/timetableStudioService", () => ({
   timetableStudioService: {
     getImportWorkspace: vi.fn(),
+    listImportFixtures: vi.fn(),
     listImportRuns: vi.fn(),
     listImportTemplates: vi.fn(),
     downloadImportTemplate: vi.fn(),
+    downloadImportFixturePack: vi.fn(),
     analyzeEnrollmentImport: vi.fn(),
     previewEnrollmentImport: vi.fn(),
     materializeEnrollmentImport: vi.fn(),
@@ -68,6 +70,9 @@ describe("SetupStudio", () => {
     window.localStorage.clear();
     timetableStudioService.listImportTemplates.mockResolvedValue({
       templates: [],
+    });
+    timetableStudioService.listImportFixtures.mockResolvedValue({
+      packs: [],
     });
     timetableStudioService.listImportRuns.mockResolvedValue({
       runs: [],
@@ -208,7 +213,11 @@ describe("SetupStudio", () => {
 
     renderSetupStudio();
 
-    fireEvent.click(screen.getByRole("button", { name: "Use Sample CSV" }));
+    const fileInput = screen.getAllByLabelText("Import CSV")[0];
+    const file = new File(["CoursePathNo,CourseCode\n1,CHEM 11612\n"], "student_enrollments.csv", {
+      type: "text/csv",
+    });
+    fireEvent.change(fileInput, { target: { files: [file] } });
     fireEvent.click(screen.getByRole("button", { name: "Analyze Import" }));
 
     expect(await screen.findByText(/CSV Year 2 does not match nominal module year 1\./i)).toBeInTheDocument();
@@ -233,9 +242,22 @@ describe("SetupStudio", () => {
               }),
             ],
           },
-          undefined
+          file
         );
       expect(timetableStudioService.materializeEnrollmentImport).toHaveBeenCalledTimes(1);
+      expect(timetableStudioService.materializeEnrollmentImport).toHaveBeenCalledWith(
+        {
+          rules: [
+            expect.objectContaining({
+              bucket_type: "year_code_mismatch",
+              bucket_key: "year=2|nominal_year=1",
+              action: "accept_exception",
+            }),
+          ],
+        },
+        file
+      );
+      expect(timetableStudioService.analyzeEnrollmentImport).toHaveBeenCalledWith(file);
       expect(timetableStudioService.getImportWorkspace).toHaveBeenCalledWith(88);
     });
     expect(

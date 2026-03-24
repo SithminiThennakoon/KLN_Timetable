@@ -39,6 +39,21 @@ async function downloadCsvTemplate(path) {
   };
 }
 
+async function downloadBinaryFile(path, fallbackFilename) {
+  const response = await fetch(`${resolveApiBaseUrl()}${path}`);
+  if (!response.ok) {
+    const payload = await response.text();
+    throw new Error(payload || "Failed to download the file");
+  }
+  return {
+    filename:
+      response.headers
+        .get("content-disposition")
+        ?.match(/filename=\"?([^";]+)\"?/)?.[1] || fallbackFilename,
+    blob: await response.blob(),
+  };
+}
+
 export const timetableStudioService = {
   getLookups: (importRunId = null) => {
     if (!importRunId) {
@@ -61,6 +76,12 @@ export const timetableStudioService = {
       buildImportFormData(payload, file)
     );
   },
+  listImportFixtures: () => apiClient.get("/v2/import-fixtures"),
+  downloadImportFixturePack: (packName) =>
+    downloadBinaryFile(
+      `/v2/import-fixtures/${packName}.zip`,
+      `${packName}_import_fixture_pack.zip`
+    ),
   listImportRuns: (limit = 20) => apiClient.get(`/v2/imports/runs?limit=${limit}`),
   listImportTemplates: () => apiClient.get("/v2/imports/templates"),
   downloadImportTemplate: (templateName) =>
