@@ -191,6 +191,14 @@ describe("SetupStudio", () => {
           bucket_key: "year=2|nominal_year=1",
           description: "CSV Year 2 does not match nominal module year 1.",
           row_count: 6,
+          status: "ambiguous",
+        },
+        {
+          bucket_type: "multi_year_module_code",
+          bucket_key: "course_code=CHEM 11612",
+          description: "The same module code appears with multiple CSV Year values and needs reviewed interpretation.",
+          row_count: 4,
+          status: "ambiguous",
         },
       ],
     });
@@ -221,9 +229,28 @@ describe("SetupStudio", () => {
     fireEvent.click(screen.getByRole("button", { name: "Analyze Import" }));
 
     expect(await screen.findByText(/CSV Year 2 does not match nominal module year 1\./i)).toBeInTheDocument();
+    expect(screen.getByText("Needs Review")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole("combobox"), {
-      target: { value: "accept_exception" },
+    fireEvent.change(screen.getByRole("combobox", { name: "Default review action" }), {
+      target: { value: "exclude" },
+    });
+    fireEvent.change(
+      screen.getByRole("combobox", {
+        name: "Decision for CSV Year 2 does not match nominal module year 1.",
+      }),
+      {
+        target: { value: "accept_exception" },
+      }
+    );
+    expect(screen.getByText(/Page 1 of 1/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Search review buckets" }), {
+      target: { value: "multiple CSV Year values" },
+    });
+    expect(
+      screen.getByText(/The same module code appears with multiple CSV Year values/i)
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Search review buckets" }), {
+      target: { value: "" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Review Import" }));
 
@@ -240,6 +267,11 @@ describe("SetupStudio", () => {
                 bucket_key: "year=2|nominal_year=1",
                 action: "accept_exception",
               }),
+              expect.objectContaining({
+                bucket_type: "multi_year_module_code",
+                bucket_key: "course_code=CHEM 11612",
+                action: "exclude",
+              }),
             ],
           },
           file
@@ -252,6 +284,11 @@ describe("SetupStudio", () => {
               bucket_type: "year_code_mismatch",
               bucket_key: "year=2|nominal_year=1",
               action: "accept_exception",
+            }),
+            expect.objectContaining({
+              bucket_type: "multi_year_module_code",
+              bucket_key: "course_code=CHEM 11612",
+              action: "exclude",
             }),
           ],
         },

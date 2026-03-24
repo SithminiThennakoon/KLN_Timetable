@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { timetableStudioService } from "../services/timetableStudioService";
 
 const activeImportRunStorageKey = "kln_active_import_run_id";
+const reviewPageSize = 25;
 
 const emptyWorkspace = {
   import_run_id: null,
@@ -308,6 +309,20 @@ function buildWorkspaceSummary(workspace) {
   ];
 }
 
+function reviewBucketIdentifier(bucket) {
+  return `${bucket.bucket_type}::${bucket.bucket_key}`;
+}
+
+function titleCaseReviewStatus(value) {
+  if (!value) {
+    return "Needs Review";
+  }
+  return String(value)
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function buildReadiness(workspace) {
   const blocking = [];
   const warnings = [];
@@ -465,7 +480,12 @@ function SetupStudio() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [analysis, setAnalysis] = useState(null);
   const [projection, setProjection] = useState(null);
-  const [bucketDecision, setBucketDecision] = useState("accept_exception");
+  const [defaultBucketAction, setDefaultBucketAction] = useState("accept_exception");
+  const [bucketOverrides, setBucketOverrides] = useState({});
+  const [bucketSearch, setBucketSearch] = useState("");
+  const [bucketTypeFilter, setBucketTypeFilter] = useState("all");
+  const [bucketStatusFilter, setBucketStatusFilter] = useState("all");
+  const [bucketPage, setBucketPage] = useState(1);
   const [openForm, setOpenForm] = useState("");
   const [showUtilities, setShowUtilities] = useState(false);
   const [editingSharedSessionId, setEditingSharedSessionId] = useState(null);
@@ -506,6 +526,44 @@ function SetupStudio() {
       ),
     [workspace, readinessBlocking]
   );
+  const analysisBuckets = analysis?.buckets || [];
+  const filteredReviewBuckets = useMemo(() => {
+    const search = bucketSearch.trim().toLowerCase();
+    return [...analysisBuckets]
+      .filter((bucket) => {
+        if (bucketTypeFilter !== "all" && bucket.bucket_type !== bucketTypeFilter) {
+          return false;
+        }
+        if (bucketStatusFilter !== "all" && bucket.status !== bucketStatusFilter) {
+          return false;
+        }
+        if (!search) {
+          return true;
+        }
+        return (
+          bucket.description?.toLowerCase().includes(search) ||
+          bucket.bucket_type?.toLowerCase().includes(search) ||
+          bucket.bucket_key?.toLowerCase().includes(search)
+        );
+      })
+      .sort((left, right) => {
+        const rowDelta = (right.row_count || 0) - (left.row_count || 0);
+        if (rowDelta !== 0) {
+          return rowDelta;
+        }
+        return reviewBucketIdentifier(left).localeCompare(reviewBucketIdentifier(right));
+      });
+  }, [analysisBuckets, bucketSearch, bucketStatusFilter, bucketTypeFilter]);
+  const bucketTypeOptions = useMemo(
+    () => [...new Set(analysisBuckets.map((bucket) => bucket.bucket_type))].sort(),
+    [analysisBuckets]
+  );
+  const paginatedReviewBuckets = useMemo(() => {
+    const start = (bucketPage - 1) * reviewPageSize;
+    return filteredReviewBuckets.slice(start, start + reviewPageSize);
+  }, [bucketPage, filteredReviewBuckets]);
+  const bucketPageCount = Math.max(1, Math.ceil(filteredReviewBuckets.length / reviewPageSize));
+  const overriddenBucketCount = useMemo(() => Object.keys(bucketOverrides).length, [bucketOverrides]);
 
   async function refreshRecentRuns() {
     try {
@@ -560,13 +618,32 @@ function SetupStudio() {
     refreshRecentRuns();
   }, []);
 
+  useEffect(() => {
+    setBucketPage(1);
+  }, [bucketSearch, bucketStatusFilter, bucketTypeFilter]);
+
   function buildReviewRules() {
     return (analysis?.buckets || []).map((bucket) => ({
       bucket_type: bucket.bucket_type,
       bucket_key: bucket.bucket_key,
-      action: bucketDecision,
+      action: bucketOverrides[reviewBucketIdentifier(bucket)] || defaultBucketAction,
       label: "Applied from Setup Studio review.",
     }));
+  }
+
+  function handleBucketDecisionChange(bucket, action) {
+    const identifier = reviewBucketIdentifier(bucket);
+    setBucketOverrides((current) => {
+      if (action === defaultBucketAction) {
+        const next = { ...current };
+        delete next[identifier];
+        return next;
+      }
+      return {
+        ...current,
+        [identifier]: action,
+      };
+    });
   }
 
   async function handleAnalyze() {
@@ -580,6 +657,12 @@ function SetupStudio() {
       const response = await timetableStudioService.analyzeEnrollmentImport(selectedFile);
       setAnalysis(response);
       setProjection(null);
+      setDefaultBucketAction("accept_exception");
+      setBucketOverrides({});
+      setBucketSearch("");
+      setBucketTypeFilter("all");
+      setBucketStatusFilter("all");
+      setBucketPage(1);
       setStatus(`Analyzed ${response.source_file || "the selected CSV"}.`);
     } catch (err) {
       setError(err.message || "Failed to analyze the enrollment CSV.");
@@ -626,6 +709,7 @@ function SetupStudio() {
       setAnalysis(null);
       setProjection(null);
       setSelectedFile(null);
+      setBucketOverrides({});
       await loadWorkspace(
         response.import_run_id,
         `The CSV import has been materialized into snapshot #${response.import_run_id}.`
@@ -1027,7 +1111,7 @@ function SetupStudio() {
 
               {analysis && (
                 <div className="schema-notes compact">
-                  <h3>Review</h3>
+                  <h3>Needs Review</h3>
                   <div className="summary-grid">
                     <div className="summary-item">
                       <span>Total rows</span>
@@ -1041,33 +1125,160 @@ function SetupStudio() {
                       <span>Review buckets</span>
                       <strong>{analysis.buckets?.length ?? 0}</strong>
                     </div>
+                    <div className="summary-item">
+                      <span>Using default</span>
+                      <strong>{Math.max(analysisBuckets.length - overriddenBucketCount, 0)}</strong>
+                    </div>
+                    <div className="summary-item">
+                      <span>Overridden</span>
+                      <strong>{overriddenBucketCount}</strong>
+                    </div>
                   </div>
 
                   {(analysis.buckets || []).length > 0 ? (
                     <>
-                      <label>
-                        <span>Apply this decision to all current review buckets</span>
+                      <label className="setup-review-default">
+                        <span>Default action for unresolved buckets</span>
                         <select
-                          value={bucketDecision}
-                          onChange={(event) => setBucketDecision(event.target.value)}
+                          aria-label="Default review action"
+                          value={defaultBucketAction}
+                          onChange={(event) => setDefaultBucketAction(event.target.value)}
                         >
                           <option value="accept_exception">Accept As Exception</option>
                           <option value="exclude">Exclude From Timetable Demand</option>
                           <option value="treat_as_common">Treat As Common Teaching</option>
                         </select>
                       </label>
-                      <div className="constraint-list">
-                        {analysis.buckets.slice(0, 6).map((bucket) => (
-                          <div
-                            key={`${bucket.bucket_type}-${bucket.bucket_key}`}
-                            className="constraint-row static"
+                      <div className="setup-review-toolbar">
+                        <label>
+                          <span>Search buckets</span>
+                          <input
+                            aria-label="Search review buckets"
+                            value={bucketSearch}
+                            onChange={(event) => setBucketSearch(event.target.value)}
+                            placeholder="Search by description or bucket type"
+                          />
+                        </label>
+                        <label>
+                          <span>Bucket type</span>
+                          <select
+                            aria-label="Filter review buckets by type"
+                            value={bucketTypeFilter}
+                            onChange={(event) => setBucketTypeFilter(event.target.value)}
                           >
-                            <div>
-                              <strong>{bucket.description}</strong>
-                              <span>{bucket.row_count} rows</span>
-                            </div>
-                          </div>
-                        ))}
+                            <option value="all">All types</option>
+                            {bucketTypeOptions.map((bucketType) => (
+                              <option key={bucketType} value={bucketType}>
+                                {bucketType}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          <span>Status</span>
+                          <select
+                            aria-label="Filter review buckets by status"
+                            value={bucketStatusFilter}
+                            onChange={(event) => setBucketStatusFilter(event.target.value)}
+                          >
+                            <option value="all">All statuses</option>
+                            <option value="ambiguous">Ambiguous</option>
+                            <option value="invalid">Invalid</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div className="setup-review-table-wrap">
+                        <table className="setup-review-table">
+                          <thead>
+                            <tr>
+                              <th>Description</th>
+                              <th>Type</th>
+                              <th>Status</th>
+                              <th>Rows</th>
+                              <th>Decision</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {paginatedReviewBuckets.length > 0 ? (
+                              paginatedReviewBuckets.map((bucket) => {
+                                const identifier = reviewBucketIdentifier(bucket);
+                                const resolvedAction =
+                                  bucketOverrides[identifier] || defaultBucketAction;
+                                const isOverridden = Boolean(bucketOverrides[identifier]);
+                                return (
+                                  <tr key={identifier}>
+                                    <td>
+                                      <div className="setup-review-description">
+                                        <strong>{bucket.description}</strong>
+                                        <span>{bucket.bucket_key}</span>
+                                      </div>
+                                    </td>
+                                    <td>{bucket.bucket_type}</td>
+                                    <td>
+                                      <span className={`setup-review-status ${bucket.status || "ambiguous"}`}>
+                                        {titleCaseReviewStatus(bucket.status)}
+                                      </span>
+                                    </td>
+                                    <td>{bucket.row_count}</td>
+                                    <td>
+                                      <div className="setup-review-decision">
+                                        <select
+                                          aria-label={`Decision for ${bucket.description}`}
+                                          value={resolvedAction}
+                                          onChange={(event) =>
+                                            handleBucketDecisionChange(bucket, event.target.value)
+                                          }
+                                        >
+                                          <option value="accept_exception">Accept As Exception</option>
+                                          <option value="exclude">Exclude From Timetable Demand</option>
+                                          <option value="treat_as_common">Treat As Common Teaching</option>
+                                        </select>
+                                        <span>{isOverridden ? "Override" : "Default"}</span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            ) : (
+                              <tr>
+                                <td colSpan="5" className="setup-review-empty">
+                                  No buckets match the current filters.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="setup-review-pagination">
+                        <span>
+                          Showing {filteredReviewBuckets.length === 0 ? 0 : (bucketPage - 1) * reviewPageSize + 1}
+                          {" "}to{" "}
+                          {Math.min(bucketPage * reviewPageSize, filteredReviewBuckets.length)} of{" "}
+                          {filteredReviewBuckets.length}
+                        </span>
+                        <div className="studio-actions">
+                          <button
+                            type="button"
+                            className="ghost-btn"
+                            onClick={() => setBucketPage((current) => Math.max(1, current - 1))}
+                            disabled={bucketPage === 1}
+                          >
+                            Previous
+                          </button>
+                          <span>
+                            Page {bucketPage} of {bucketPageCount}
+                          </span>
+                          <button
+                            type="button"
+                            className="ghost-btn"
+                            onClick={() =>
+                              setBucketPage((current) => Math.min(bucketPageCount, current + 1))
+                            }
+                            disabled={bucketPage === bucketPageCount}
+                          >
+                            Next
+                          </button>
+                        </div>
                       </div>
                     </>
                   ) : (

@@ -510,6 +510,112 @@ a {
   margin-top: 4px;
 }
 
+.setup-review-default {
+  display: grid;
+  gap: 8px;
+  max-width: 380px;
+}
+
+.setup-review-toolbar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.setup-review-toolbar label {
+  display: grid;
+  gap: 6px;
+}
+
+.setup-review-table-wrap {
+  margin-top: 14px;
+  overflow-x: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-dim) 72%, transparent);
+}
+
+.setup-review-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 900px;
+}
+
+.setup-review-table th,
+.setup-review-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: top;
+  text-align: left;
+}
+
+.setup-review-table th {
+  color: var(--summary-label);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.setup-review-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.setup-review-description {
+  display: grid;
+  gap: 4px;
+}
+
+.setup-review-description span {
+  font-size: 0.82rem;
+  color: var(--helper-text);
+}
+
+.setup-review-decision {
+  display: grid;
+  gap: 6px;
+}
+
+.setup-review-decision span {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--summary-label);
+}
+
+.setup-review-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.setup-review-status.ambiguous {
+  background: color-mix(in srgb, var(--btn-primary-bg) 12%, transparent);
+  color: var(--btn-primary-bg);
+}
+
+.setup-review-status.invalid {
+  background: color-mix(in srgb, #dc2626 14%, transparent);
+  color: #fca5a5;
+}
+
+.setup-review-empty {
+  color: var(--helper-text);
+}
+
+.setup-review-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 12px;
+}
+
 .setup-support-imports {
   margin-top: 18px;
   display: grid;
@@ -3073,6 +3179,11 @@ select {
 
   .setup-support-row .studio-actions {
     justify-content: flex-start;
+  }
+
+  .setup-review-pagination {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .studio-grid.two-column,
