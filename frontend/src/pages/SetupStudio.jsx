@@ -913,7 +913,6 @@ function SetupStudio() {
   const [useBundledImportSample, setUseBundledImportSample] = useState(false);
   const [importRuleActions, setImportRuleActions] = useState({});
   const [importLoading, setImportLoading] = useState(false);
-  const [showTeachingEditor, setShowTeachingEditor] = useState(false);
   const activeImportRunId = materializedImport?.import_run_id || null;
   const snapshotDerivedEditingDisabled = Boolean(activeImportRunId);
   const showSetupWizard = Boolean(activeImportRunId);
@@ -2150,11 +2149,8 @@ function SetupStudio() {
             description: `There are ${validation.blocking.length} required issue${
               validation.blocking.length === 1 ? "" : "s"
             } to review before generation.`,
-            button: "Review blockers",
-            onClick: () => {
-              setShowTeachingEditor(true);
-              setActiveStep(3);
-            },
+            button: "Go to Ready to Generate",
+            onClick: () => setActiveStep(3),
             secondary: "The final review step shows the shortest fix list.",
           }
         : {
@@ -2164,33 +2160,45 @@ function SetupStudio() {
             onClick: handleOpenGenerate,
             secondary: "You can always return here and adjust the teaching details later.",
           };
-  const importPrimaryAction = !hasChosenImportSource
-    ? null
-    : !hasAnalyzedImport
-      ? {
-          label: importAction === "analyze" ? "Analyzing..." : "Analyze Enrollment CSV",
-          onClick: handleAnalyzeEnrollmentImport,
-          disabled: importLoading || saving || loading,
-        }
-      : !hasReviewedImport
-        ? {
-            label: importAction === "review" ? "Reviewing..." : "Review Import",
-            onClick: handlePreviewEnrollmentImport,
-            disabled: importLoading,
-          }
-        : {
-            label: importAction === "materialize" ? "Using Import..." : "Use This Import",
-            onClick: handleLoadEnrollmentImport,
-            disabled: importLoading || saving,
-          };
-
   const importStageSection = (
     <section className="studio-card">
-      <div className="section-row">
-        <div>
-          <h2>{hasMaterializedImport ? "Current Snapshot" : "Start"}</h2>
-          <p>{nextGuidedAction.description}</p>
+      <div className="setup-flow-overview">
+        <div className={`flow-card ${hasMaterializedImport ? "done" : "current"}`}>
+          <span className="flow-card-step">1</span>
+          <div>
+            <strong>Import student enrolments</strong>
+            <p>
+              {!hasChosenImportSource
+                ? "Choose a CSV file to begin."
+                : hasMaterializedImport
+                  ? "Student enrolments are loaded."
+                  : "Analyze and review the selected CSV."}
+            </p>
+          </div>
         </div>
+        <div className={`flow-card ${hasMaterializedImport ? "current" : ""}`}>
+          <span className="flow-card-step">2</span>
+          <div>
+            <strong>Complete missing details</strong>
+            <p>
+              {hasMaterializedImport
+                ? "Add rooms, lecturers, and teaching sessions."
+                : "Unlocks after the import is used."}
+            </p>
+          </div>
+        </div>
+        <div className="flow-card">
+          <span className="flow-card-step">3</span>
+          <div>
+            <strong>Generate timetable</strong>
+            <p>Publish this setup and move to generation.</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="future-card">
+        <strong>{nextGuidedAction.title}</strong>
+        <span>{nextGuidedAction.description}</span>
         <div className="record-actions">
           <button
             className="primary-btn"
@@ -2201,46 +2209,26 @@ function SetupStudio() {
             {nextGuidedAction.button}
           </button>
         </div>
+        <p className="helper-copy">{nextGuidedAction.secondary}</p>
       </div>
 
-      <details className="schema-notes" open={!hasMaterializedImport}>
-        <summary>{hasMaterializedImport ? "Replace enrollments" : "Import student enrollments"}</summary>
-
-        <div className="section-row" style={{ marginTop: 12 }}>
-          <div>
-            <p>{hasMaterializedImport ? "Load a new enrollment source only if you want to replace the current snapshot." : "Choose a CSV or use the built-in sample."}</p>
-            <p className="helper-copy">
-              <a href="/api/v2/imports/templates/student_enrollments">Download enrollment template</a>
-            </p>
-          </div>
-          <div className="record-actions">
-            <label className="ghost-btn file-picker-btn">
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                className="visually-hidden"
-                onChange={(event) => {
-                  const nextFile = event.target.files?.[0] || null;
-                  setSelectedImportFile(nextFile);
-                  setUseBundledImportSample(false);
-                  setImportAnalysis(null);
-                  setImportProjection(null);
-                  setMaterializedImport(null);
-                  setImportRuleActions({});
-                  if (typeof window !== "undefined") {
-                    window.localStorage.removeItem(activeImportRunStorageKey);
-                  }
-                  setStatus(nextFile ? `${nextFile.name} selected.` : "");
-                }}
-              />
-              Choose CSV File
-            </label>
-            <button
-              className="ghost-btn"
-              type="button"
-              onClick={() => {
-                setSelectedImportFile(null);
-                setUseBundledImportSample(true);
+      <div className="section-row">
+        <div>
+          <h2>Import Student Enrolments</h2>
+          <p>
+            Use your own CSV if you want to test real enrolment data. The guided demo path above is the fastest route for a normal user.
+          </p>
+        </div>
+        <div className="record-actions">
+          <label className="ghost-btn file-picker-btn">
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              className="visually-hidden"
+              onChange={(event) => {
+                const nextFile = event.target.files?.[0] || null;
+                setSelectedImportFile(nextFile);
+                setUseBundledImportSample(false);
                 setImportAnalysis(null);
                 setImportProjection(null);
                 setMaterializedImport(null);
@@ -2248,43 +2236,97 @@ function SetupStudio() {
                 if (typeof window !== "undefined") {
                   window.localStorage.removeItem(activeImportRunStorageKey);
                 }
-                setStatus("Built-in sample CSV selected.");
+                setStatus(
+                  nextFile
+                    ? `${nextFile.name} selected. Analyze it to start the import flow.`
+                    : ""
+                );
               }}
-              disabled={importLoading || saving || loading}
-            >
-              Use Sample CSV
-            </button>
-            {importPrimaryAction && (
-              <button
-                className="primary-btn"
-                type="button"
-                onClick={importPrimaryAction.onClick}
-                disabled={importPrimaryAction.disabled}
-              >
-                {importPrimaryAction.label}
-              </button>
-            )}
-          </div>
+            />
+            Choose CSV File
+          </label>
+          <button
+            className="ghost-btn"
+            type="button"
+            onClick={() => {
+              setSelectedImportFile(null);
+              setUseBundledImportSample(true);
+              setImportAnalysis(null);
+              setImportProjection(null);
+              setMaterializedImport(null);
+              setImportRuleActions({});
+              if (typeof window !== "undefined") {
+                window.localStorage.removeItem(activeImportRunStorageKey);
+              }
+              setStatus("Built-in sample CSV selected. Analyze it to start the import flow.");
+            }}
+            disabled={importLoading || saving || loading}
+          >
+            Use Sample CSV
+          </button>
         </div>
+      </div>
 
-        <div className={`import-source-banner ${hasChosenImportSource ? "is-ready" : ""}`}>
-          {hasChosenImportSource ? (
-            <>
-              <strong>Selected source</strong>
-              <span>{importSourceLabel}</span>
-            </>
-          ) : (
-            <>
-              <strong>No CSV selected yet</strong>
-              <span>Choose a file or use the sample CSV.</span>
-            </>
-          )}
+      <div className={`import-source-banner ${hasChosenImportSource ? "is-ready" : ""}`}>
+        {hasChosenImportSource ? (
+          <>
+            <strong>Selected source</strong>
+            <span>{importSourceLabel}</span>
+          </>
+        ) : (
+          <>
+            <strong>No CSV selected yet</strong>
+            <span>Choose a file or use the guided demo action above.</span>
+          </>
+        )}
+      </div>
+
+      <div className="section-row">
+        <div>
+          <h3>Review The CSV</h3>
+          <p>Analyze the file, review unclear groups, then use the cleaned import.</p>
         </div>
+        <div className="record-actions">
+          <button
+            className={!hasAnalyzedImport && hasChosenImportSource ? "primary-btn" : "ghost-btn"}
+            type="button"
+            onClick={handleAnalyzeEnrollmentImport}
+            disabled={importLoading || saving || loading || !hasChosenImportSource}
+          >
+            {importAction === "analyze" ? "Analyzing..." : "Analyze Enrollment CSV"}
+          </button>
+          <button
+            className={!hasReviewedImport && hasAnalyzedImport ? "primary-btn" : "ghost-btn"}
+            type="button"
+            onClick={handlePreviewEnrollmentImport}
+            disabled={importLoading || !hasAnalyzedImport}
+          >
+            {importAction === "review" ? "Reviewing..." : "Review Import"}
+          </button>
+          <button
+            className="primary-btn"
+            type="button"
+            onClick={handleLoadEnrollmentImport}
+            disabled={importLoading || saving || !hasReviewedImport}
+          >
+            {importAction === "materialize" ? "Using Import..." : "Use This Import"}
+          </button>
+        </div>
+      </div>
 
       {!hasAnalyzedImport ? (
-        <p className="helper-copy">Analyze the enrollment file before continuing.</p>
+        <div className="future-card">
+          <strong>Step 1: Analyze the CSV</strong>
+          <span>
+            After choosing a source, click `Analyze Enrollment CSV`. The system will scan the file
+            and point out anything unclear.
+          </span>
+        </div>
       ) : hasMaterializedImport ? (
-        <div className="info-banner">Enrollment data loaded into snapshot #{activeImportRunId}.</div>
+        <div className="info-banner">
+          The CSV import has been materialized into snapshot #{activeImportRunId}. You can return to
+          this section later, but the next step is to complete the missing teaching details below.
+        </div>
       ) : (
         <>
           <div className="summary-grid">
@@ -2310,7 +2352,7 @@ function SetupStudio() {
 
           <details className="schema-notes">
             <summary>See import details</summary>
-            <h3>Review Buckets</h3>
+            <h3>Things That Need Review</h3>
             {importBuckets.length === 0 ? (
               <p className="empty-state">This import looks clean. No review items were generated.</p>
             ) : (
@@ -2352,7 +2394,7 @@ function SetupStudio() {
 
           {hasReviewedImport && (
             <div className="schema-notes">
-              <h3>Review Result</h3>
+              <h3>Review result</h3>
               <div className="summary-grid">
                 {Object.entries(importProjection.projection_summary || {}).map(([key, value]) => (
                   <div key={key} className="summary-item">
@@ -2364,10 +2406,30 @@ function SetupStudio() {
             </div>
           )}
 
-          <p className="helper-copy">After loading the import, add only the teaching data that is still missing.</p>
+          {materializedImport && (
+            <div className="schema-notes">
+              <h3>Import Ready</h3>
+              <div className="summary-grid">
+                {Object.entries(materializedImport.counts || {}).map(([key, value]) => (
+                  <div key={key} className="summary-item">
+                    <span>{key.replace(/_/g, " ")}</span>
+                    <strong>{value}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="schema-notes">
+            <h3>What happens next</h3>
+            <ul>
+              <li>The system keeps the student enrolments from the CSV.</li>
+              <li>Unresolved items stay excluded until you decide otherwise.</li>
+              <li>After `Use This Import`, you only complete the teaching details that the CSV cannot provide.</li>
+            </ul>
+          </div>
         </>
       )}
-      </details>
     </section>
   );
 
@@ -2379,10 +2441,28 @@ function SetupStudio() {
             <h1 className="section-title">Setup Studio</h1>
             <p className="section-subtitle">
               {activeImportRunId
-                ? `Enrollments loaded. Add teaching data if needed, then generate.`
-                : "Start a demo or import student enrollments."}
+                ? `Student enrolments are loaded. Now complete the missing teaching details.`
+                : "Start with the guided demo path or import your own student CSV."}
             </p>
           </div>
+          {showSetupWizard && (
+            <div className="studio-actions wrap">
+              <button
+                className="primary-btn"
+                onClick={handleOpenGenerate}
+                disabled={saving || loading}
+                title={
+                  validation.blocking.length > 0
+                    ? `Fix ${validation.blocking.length} blocking issue${
+                        validation.blocking.length === 1 ? "" : "s"
+                      } before generation`
+                    : "Open the generation workspace"
+                }
+              >
+                {validation.blocking.length > 0 ? "Review Before Generate" : "Open Generate"}
+              </button>
+            </div>
+          )}
         </div>
 
         {status && <div className="info-banner valid">{status}</div>}
@@ -2402,34 +2482,31 @@ function SetupStudio() {
         <section className="studio-card">
           <div className="section-row">
             <div>
-              <h2>Step 2: Add Teaching Data</h2>
-              <p>Add rooms, lecturers, and sessions only if they are still missing.</p>
+              <h2>Complete Missing Details</h2>
+              <p>
+                Add only the teaching details that do not exist in the CSV: rooms, lecturers, and teaching sessions.
+              </p>
             </div>
             {activeImportRunId && <span className="tag-chip">Snapshot #{activeImportRunId}</span>}
           </div>
           {activeImportRunId && (
-            <div className="record-actions">
-              <button
-                className="ghost-btn"
-                type="button"
-                onClick={loadSampleManualCompletionData}
-                disabled={saving || loading || importLoading}
-              >
-                Fill Demo Teaching Data
-              </button>
-              <button
-                className="ghost-btn"
-                type="button"
-                onClick={() => setShowTeachingEditor((current) => !current)}
-              >
-                {showTeachingEditor ? "Hide Manual Editor" : "Edit Manually"}
-              </button>
+            <div className="future-card">
+              <strong>Fastest next step</strong>
+              <span>Use the realistic demo teaching data if you want to reach generation quickly.</span>
+              <div className="record-actions">
+                <button
+                  className="ghost-btn"
+                  type="button"
+                  onClick={loadSampleManualCompletionData}
+                  disabled={saving || loading || importLoading}
+                >
+                  Fill Demo Teaching Data
+                </button>
+              </div>
             </div>
           )}
         </section>
 
-        {showTeachingEditor && (
-          <>
         <div className="wizard-steps">
           {visibleSteps.map((step, index) => (
             <StepBadge
@@ -3927,10 +4004,11 @@ function SetupStudio() {
           </button>
         </div>
           </>
-        )}
-          </>
         ) : (
-          <></>
+          <section className="studio-card">
+            <h2>Next step</h2>
+            <p>Use the import first. The manual completion wizard will appear after that.</p>
+          </section>
         )}
       </div>
 
