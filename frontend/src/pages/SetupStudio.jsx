@@ -115,6 +115,13 @@ function readActiveImportRunId() {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+function buildLocalTemplateCsv(template) {
+  if (!template?.columns?.length) {
+    return "";
+  }
+  return `${template.columns.join(",")}\n`;
+}
+
 function buildImportCards(activeImportRunId, workspace) {
   return [
     {
@@ -473,8 +480,18 @@ function SetupStudio() {
   async function handleDownloadTemplate(templateName) {
     setError("");
     try {
+      const localTemplate = importTemplates.find((item) => item.name === templateName);
+      if (localTemplate?.columns?.length) {
+        downloadTextFile(
+          localTemplate.filename || `${templateName}_template.csv`,
+          buildLocalTemplateCsv(localTemplate)
+        );
+        setStatus(`Downloaded ${localTemplate.label || templateName} template.`);
+        return;
+      }
       const response = await timetableStudioService.downloadImportTemplate(templateName);
       downloadTextFile(response.filename, response.content);
+      setStatus(`Downloaded ${templateName} template.`);
     } catch (err) {
       setError(err.message || "Failed to download the CSV template.");
     }
