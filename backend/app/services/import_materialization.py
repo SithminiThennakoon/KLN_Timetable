@@ -510,20 +510,27 @@ def materialize_import_run(
     )
 
     projected_row_numbers = [row.row_number for row in projected_rows]
-    projected_enrollment_id_by_row_number = {
-        int(row_number): int(enrollment_id)
-        for row_number, enrollment_id in db.query(
-            ImportRow.row_number,
-            ImportEnrollment.id,
+    projected_enrollment_id_by_row_number: dict[int, int] = {}
+    for start in range(0, len(projected_row_numbers), BULK_INSERT_CHUNK_SIZE):
+        row_number_chunk = projected_row_numbers[start : start + BULK_INSERT_CHUNK_SIZE]
+        if not row_number_chunk:
+            continue
+        projected_enrollment_id_by_row_number.update(
+            {
+                int(row_number): int(enrollment_id)
+                for row_number, enrollment_id in db.query(
+                    ImportRow.row_number,
+                    ImportEnrollment.id,
+                )
+                .join(ImportEnrollment, ImportEnrollment.import_row_id == ImportRow.id)
+                .filter(
+                    ImportRow.import_run_id == int(import_run.id),
+                    ImportEnrollment.import_run_id == int(import_run.id),
+                    ImportRow.row_number.in_(row_number_chunk),
+                )
+                .all()
+            }
         )
-        .join(ImportEnrollment, ImportEnrollment.import_row_id == ImportRow.id)
-        .filter(
-            ImportRow.import_run_id == int(import_run.id),
-            ImportEnrollment.import_run_id == int(import_run.id),
-            ImportRow.row_number.in_(projected_row_numbers),
-        )
-        .all()
-    }
 
     context_rows: dict[tuple[int, str, int, int], list[StagedEnrollmentRow]] = defaultdict(list)
     for row in projected_rows:

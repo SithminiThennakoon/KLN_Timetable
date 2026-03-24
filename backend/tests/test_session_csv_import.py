@@ -126,7 +126,53 @@ class SessionCsvImportTestCase(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             import_sessions_csv(self.db, import_run_id=self.import_run_id, csv_path=csv_path)
 
-        self.assertIn("does not resolve to accepted module data", str(context.exception))
+        self.assertIn("do not resolve to accepted module data", str(context.exception))
+
+    def test_imports_multi_module_session_from_module_codes_column(self):
+        student = self.db.query(ImportStudent).first()
+        self.assertIsNotNone(student)
+        second_module = CurriculumModule(
+            code="CHEM 22612",
+            canonical_code="CHEM 22612",
+            name="Advanced Chemistry",
+            subject_name="Chemistry",
+            subject_code="CHEM",
+            nominal_year=2,
+            semester_bucket=1,
+            is_full_year=False,
+        )
+        self.db.add(second_module)
+        self.db.flush()
+        self.db.add(
+            StudentModuleMembership(
+                import_run_id=self.import_run_id,
+                student_id=int(student.id),
+                curriculum_module_id=second_module.id,
+                student_programme_context_id=None,
+                import_enrollment_id=None,
+                membership_source="import",
+            )
+        )
+        self.db.commit()
+
+        csv_path = self._write_csv(
+            "session_code,module_code,module_codes,session_name,session_type,duration_minutes,occurrences_per_week,required_room_type,required_lab_type,specific_room_code,max_students_per_group,allow_parallel_rooms,notes\n"
+            "CHEM11612-SHARED,CHEM 11612,CHEM 22612,Shared Chemistry Lecture,lecture,120,1,lecture,,,,false,Shared\n"
+        )
+
+        result = import_sessions_csv(self.db, import_run_id=self.import_run_id, csv_path=csv_path)
+        self.db.commit()
+
+        self.assertEqual(result["created_count"], 1)
+        saved = (
+            self.db.query(SnapshotSharedSession)
+            .filter(SnapshotSharedSession.import_run_id == self.import_run_id)
+            .one()
+        )
+        self.assertEqual(
+            {module.code for module in saved.curriculum_modules},
+            {"CHEM 11612", "CHEM 22612"},
+        )
 
     def test_rejects_same_name_type_with_different_session_code(self):
         self.db.add(

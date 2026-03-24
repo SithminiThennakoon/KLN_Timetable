@@ -854,6 +854,247 @@ def build_realistic_demo_dataset_from_enrollment_csv(
                 }
             )
 
+    module_by_client_key = {str(module["client_key"]): module for module in modules}
+    room_by_client_key = {str(room["client_key"]): room for room in rooms}
+    audience_by_module_client_key = {
+        f"mod_{_slug(course_code)}": sum(
+            group_size_by_client_key[group_key] for group_key in course_group_keys[course_code]
+        )
+        for course_code in selected_courses
+    }
+
+    # Surface at least a few explicit full-year modules in the production-like fixture pack
+    # so import and solver paths exercise the year-long metadata described in prompts.md.
+    full_year_candidates = sorted(
+        (
+            module
+            for module in modules
+            if int(module["year"]) >= 2 and _stable_mod(str(module["code"]), 5) == 0
+        ),
+        key=lambda item: (int(item["year"]), str(item["code"])),
+    )[:6]
+    if not full_year_candidates:
+        full_year_candidates = sorted(
+            (module for module in modules if int(module["year"]) >= 2),
+            key=lambda item: (int(item["year"]), str(item["code"])),
+        )[:3]
+    for module in full_year_candidates:
+        module["is_full_year"] = True
+
+    # Encode the hard room-compatibility scenario where a lab can only be held in the
+    # matching year-specific facility.
+    if "room_a11205" in room_by_client_key:
+        room_by_client_key["room_a11205"]["year_restriction"] = 1
+
+    # Convert a few heavy weekly theory sessions into repeated occurrences so the
+    # fixture pack exercises spread-across-days logic without increasing total minutes.
+    repeated_lecture_candidates = sorted(
+        (
+            session
+            for session in sessions
+            if session["session_type"] == "lecture"
+            and int(session["duration_minutes"]) >= 120
+            and not session["specific_room_client_key"]
+        ),
+        key=lambda item: (
+            -audience_by_module_client_key.get(str(item["module_client_key"]), 0),
+            str(item["client_key"]),
+        ),
+    )[:4]
+    for session in repeated_lecture_candidates:
+        session["duration_minutes"] = 60
+        session["occurrences_per_week"] = 2
+        session["notes"] = (
+            f"{session['notes']} Repeated twice weekly to exercise multi-occurrence scheduling."
+        )
+
+    # Dedicate a few rooms explicitly so the fixture pack covers specific-room logic.
+    dedicated_lab_room_by_type = {
+        "biology": "room_biology_lab",
+        "chemistry": "room_chemistry_lab",
+        "computer": "room_computer_lab_1",
+        "electronics": "room_electronics_lab",
+        "physics": "room_physics_lab_1",
+        "statistics": "room_statistics_lab",
+    }
+    used_dedicated_lab_types: set[str] = set()
+    lab_sessions_by_type: dict[str, list[dict]] = defaultdict(list)
+    for session in sessions:
+        required_lab_type = session.get("required_lab_type")
+        if required_lab_type:
+            lab_sessions_by_type[str(required_lab_type)].append(session)
+    for required_lab_type, grouped_sessions in sorted(lab_sessions_by_type.items()):
+        if required_lab_type in used_dedicated_lab_types:
+            continue
+        room_key = dedicated_lab_room_by_type.get(required_lab_type)
+        room = room_by_client_key.get(str(room_key)) if room_key else None
+        if room is None:
+            continue
+        grouped_sessions = sorted(
+            grouped_sessions,
+            key=lambda item: (
+                0
+                if required_lab_type == "physics"
+                and int(module_by_client_key[str(item["module_client_key"])]["year"]) == 1
+                else 1,
+                audience_by_module_client_key.get(str(item["module_client_key"]), 0),
+                str(item["client_key"]),
+            ),
+        )
+        selected_session = next(
+            (
+                session
+                for session in grouped_sessions
+                if audience_by_module_client_key.get(str(session["module_client_key"]), 0)
+                <= int(room["capacity"])
+            ),
+            None,
+        )
+        if selected_session is None:
+            continue
+        selected_session["specific_room_client_key"] = room_key
+        used_dedicated_lab_types.add(required_lab_type)
+        selected_session["notes"] = (
+            f"{selected_session['notes']} Uses a dedicated {required_lab_type} lab room."
+        )
+
+    # Reserve the largest theory session for the auditorium to exercise fixed hall
+    # assignments without risking infeasibility.
+    lecture_candidates = sorted(
+        (session for session in sessions if session["session_type"] == "lecture"),
+        key=lambda item: (
+            -audience_by_module_client_key.get(str(item["module_client_key"]), 0),
+            str(item["client_key"]),
+        ),
+    )
+    if lecture_candidates:
+        lecture_candidates[0]["specific_room_client_key"] = "room_auditorium"
+        lecture_candidates[0]["notes"] = (
+            f"{lecture_candidates[0]['notes']} Fixed to the auditorium for the large shared cohort."
+        )
+
+    # Add one compatible year-restricted teaching room assignment so the fixture pack
+    # exercises the hard constraint without making the dataset infeasible.
+    year_restricted_room = room_by_client_key.get("room_a11205")
+    if year_restricted_room is not None:
+        year_restricted_candidate = next(
+            (
+                session
+                for session in sorted(lecture_candidates, key=lambda item: str(item["client_key"]))
+                if int(module_by_client_key[str(session["module_client_key"])]["year"]) == 1
+                and audience_by_module_client_key.get(str(session["module_client_key"]), 0)
+                <= int(year_restricted_room["capacity"])
+                and str(session.get("specific_room_client_key") or "") != "room_auditorium"
+            ),
+            None,
+        )
+        if year_restricted_candidate is not None:
+            year_restricted_candidate["specific_room_client_key"] = "room_a11205"
+            year_restricted_candidate["notes"] = (
+                f"{year_restricted_candidate['notes']} Assigned to a year-restricted teaching room."
+            )
+
+    # Add one parallel-room lecture that requires multiple lecturers at the same time.
+    parallel_candidate = None
+    for session in lecture_candidates:
+        module = module_by_client_key.get(str(session["module_client_key"]))
+        if module is None:
+            continue
+        prefix = str(module["subject_name"])
+        available_lecturers = lecturer_client_keys_by_prefix.get(prefix, [])
+        group_sizes = [
+            group_size_by_client_key[group_key]
+            for group_key in session["student_group_client_keys"]
+        ]
+        split_limit = 150
+        split_count = _split_assignment_count(group_sizes, split_limit)
+        if split_count < 2:
+            continue
+        while len(available_lecturers) < split_count:
+            extra_index = len(available_lecturers) + 1
+            extra_client_key = f"lect_{_slug(prefix)}_{extra_index}"
+            if extra_client_key in lecturer_minutes_by_client_key:
+                extra_index += 1
+                extra_client_key = f"lect_{_slug(prefix)}_{extra_index}"
+            lecturers.append(
+                {
+                    "client_key": extra_client_key,
+                    "name": f"{prefix} Lecturer {extra_index}",
+                    "email": f"{_slug(prefix)}.{extra_index}@science.kln.ac.lk",
+                }
+            )
+            lecturer_minutes_by_client_key[extra_client_key] = 0
+            lecturer_client_keys_by_prefix.setdefault(prefix, []).append(extra_client_key)
+            available_lecturers = lecturer_client_keys_by_prefix[prefix]
+        session["max_students_per_group"] = split_limit
+        session["allow_parallel_rooms"] = True
+        session["lecturer_client_keys"] = list(available_lecturers[:split_count])
+        session["specific_room_client_key"] = None
+        session["notes"] = (
+            f"{session['notes']} Large intake delivered in parallel rooms with one lecturer per room."
+        )
+        parallel_candidate = session
+        break
+
+    # Collapse two compatible lecture sessions into one shared teaching event that still
+    # belongs to multiple curriculum modules.
+    lecture_groups_by_subject_year: dict[tuple[str, int], list[dict]] = defaultdict(list)
+    for session in sessions:
+        if session["session_type"] != "lecture":
+            continue
+        module = module_by_client_key.get(str(session["module_client_key"]))
+        if module is None:
+            continue
+        lecture_groups_by_subject_year[(str(module["subject_name"]), int(module["year"]))].append(
+            session
+        )
+
+    multi_module_secondary_client_key = None
+    for (_subject_name, _year), grouped_sessions in sorted(
+        lecture_groups_by_subject_year.items(),
+        key=lambda item: (item[0][0], item[0][1]),
+    ):
+        grouped_sessions = sorted(grouped_sessions, key=lambda item: str(item["client_key"]))
+        if len(grouped_sessions) < 2:
+            continue
+        primary = grouped_sessions[0]
+        secondary = grouped_sessions[1]
+        if primary is parallel_candidate or secondary is parallel_candidate:
+            continue
+        primary["linked_module_client_keys"] = sorted(
+            {
+                str(module_key)
+                for module_key in [
+                    *primary.get("linked_module_client_keys", []),
+                    str(secondary["module_client_key"]),
+                ]
+            }
+        )
+        primary["student_group_client_keys"] = sorted(
+            {
+                *primary.get("student_group_client_keys", []),
+                *secondary.get("student_group_client_keys", []),
+            }
+        )
+        primary["lecturer_client_keys"] = sorted(
+            {
+                *primary.get("lecturer_client_keys", []),
+                *secondary.get("lecturer_client_keys", []),
+            }
+        )
+        primary["notes"] = (
+            f"{primary['notes']} Shared teaching event attached to multiple curriculum modules."
+        )
+        multi_module_secondary_client_key = str(secondary["client_key"])
+        break
+
+    if multi_module_secondary_client_key is not None:
+        sessions = [
+            session
+            for session in sessions
+            if str(session["client_key"]) != multi_module_secondary_client_key
+        ]
+
     return {
         "degrees": degrees,
         "paths": paths,

@@ -1,5 +1,12 @@
 lecturer_code,name,email
 lect_aclt_1,ACLT Lecturer 1,aclt.1@science.kln.ac.lk
+lect_aclt_2,ACLT Lecturer 2,aclt.2@science.kln.ac.lk
+lect_aclt_3,ACLT Lecturer 3,aclt.3@science.kln.ac.lk
+lect_aclt_4,ACLT Lecturer 4,aclt.4@science.kln.ac.lk
+lect_aclt_5,ACLT Lecturer 5,aclt.5@science.kln.ac.lk
+lect_aclt_6,ACLT Lecturer 6,aclt.6@science.kln.ac.lk
+lect_aclt_7,ACLT Lecturer 7,aclt.7@science.kln.ac.lk
+lect_aclt_8,ACLT Lecturer 8,aclt.8@science.kln.ac.lk
 lect_amat_1,AMAT Lecturer 1,amat.1@science.kln.ac.lk
 lect_apch_1,APCH Lecturer 1,apch.1@science.kln.ac.lk
 lect_apch_2,APCH Lecturer 2,apch.2@science.kln.ac.lk

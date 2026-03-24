@@ -167,6 +167,49 @@ class ImportCsvRoutesTestCase(unittest.TestCase):
         self.assertIsNotNone(session)
         self.assertEqual(session.name, "Chemistry Lecture")
 
+    def test_uploads_multi_module_session_csv(self):
+        import_run_id, module_id = self._seed_materialized_import_run()
+        student = self.db.query(ImportStudent).first()
+        self.assertIsNotNone(student)
+        extra_module = CurriculumModule(
+            code="CHEM 22612",
+            canonical_code="CHEM 22612",
+            name="Advanced Chemistry",
+            subject_name="Chemistry",
+            subject_code="CHEM",
+            nominal_year=2,
+            semester_bucket=1,
+            is_full_year=False,
+        )
+        self.db.add(extra_module)
+        self.db.flush()
+        self.db.add(
+            StudentModuleMembership(
+                import_run_id=import_run_id,
+                student_id=int(student.id),
+                curriculum_module_id=extra_module.id,
+                student_programme_context_id=None,
+                import_enrollment_id=None,
+                membership_source="import",
+            )
+        )
+        self.db.commit()
+
+        response = self._post_csv(
+            f"/api/v2/imports/{import_run_id}/sessions-upload",
+            "sessions.csv",
+            "session_code,module_code,module_codes,session_name,session_type,duration_minutes,occurrences_per_week,required_room_type,required_lab_type,specific_room_code,max_students_per_group,allow_parallel_rooms,notes\n"
+            "CHEM11612-SHARED,CHEM 11612,CHEM 22612,Shared Chemistry Lecture,lecture,120,1,lecture,,,,false,Shared weekly lecture\n",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["created_count"], 1)
+        self.assertEqual(
+            set(payload["shared_sessions"][0]["curriculum_module_ids"]),
+            {module_id, int(extra_module.id)},
+        )
+
     def test_uploads_session_lecturers_csv(self):
         import_run_id, _module_id = self._seed_materialized_import_run()
 

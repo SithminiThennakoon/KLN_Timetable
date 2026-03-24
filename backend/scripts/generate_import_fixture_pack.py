@@ -103,6 +103,11 @@ def build_rows() -> dict[str, list[list[str]]]:
             [
                 str(session["client_key"]),
                 module_code,
+                "|".join(
+                    str(module_code_by_client_key[str(key)])
+                    for key in session.get("linked_module_client_keys", [])
+                    if str(key) in module_code_by_client_key
+                ),
                 str(session["name"]),
                 str(session["session_type"]),
                 str(session["duration_minutes"]),
@@ -156,6 +161,7 @@ def main() -> None:
         [
             "session_code",
             "module_code",
+            "module_codes",
             "session_name",
             "session_type",
             "duration_minutes",

@@ -32,6 +32,14 @@ class ImportTemplatesTestCase(unittest.TestCase):
         self.assertIn("room_code,room_name,capacity,room_type,lab_type,location,year_restriction", content)
         self.assertIn("CHEM-LAB-1,Chemistry Lab 1,30,lab,chemistry,Science Block,", content)
 
+    def test_renders_sessions_template_with_multi_module_column(self):
+        rendered = render_import_template_csv("sessions")
+
+        self.assertIsNotNone(rendered)
+        _filename, content = rendered
+        self.assertIn("session_code,module_code,module_codes,session_name", content)
+        self.assertIn("CHEM11612-SHARED,CHEM 11612,CHEM 11612|CHEM 22612", content)
+
     def test_returns_none_for_unknown_template(self):
         self.assertIsNone(get_import_template("unknown_template"))
         self.assertIsNone(render_import_template_csv("unknown_template"))

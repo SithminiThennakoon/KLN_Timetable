@@ -25,6 +25,7 @@ REQUIRED_COLUMNS = {
     "required_room_type",
 }
 OPTIONAL_COLUMNS = {
+    "module_codes",
     "required_lab_type",
     "specific_room_code",
     "max_students_per_group",
@@ -56,6 +57,18 @@ def _parse_bool(value: str) -> bool | None:
     if normalized in FALSE_VALUES:
         return False
     return None
+
+
+def _parse_module_codes(primary_module_code: str, raw_module_codes: str) -> list[str]:
+    values: list[str] = []
+    seen: set[str] = set()
+    for candidate in [primary_module_code, *raw_module_codes.replace(";", "|").replace(",", "|").split("|")]:
+        normalized = _normalize_cell(candidate)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        values.append(normalized)
+    return values
 
 
 def import_sessions_csv(db: Session, *, import_run_id: int, csv_path: str) -> dict:
@@ -121,6 +134,10 @@ def import_sessions_csv(db: Session, *, import_run_id: int, csv_path: str) -> di
 
             session_code = row["session_code"]
             module_code = row["module_code"]
+            module_codes = _parse_module_codes(
+                module_code,
+                row.get("module_codes", ""),
+            )
             session_name = row["session_name"]
             session_type = row["session_type"].lower()
             required_room_type = row["required_room_type"].lower()
@@ -131,7 +148,7 @@ def import_sessions_csv(db: Session, *, import_run_id: int, csv_path: str) -> di
             row_errors: list[str] = []
             if not session_code:
                 row_errors.append("blank session_code")
-            if not module_code:
+            if not module_code and not module_codes:
                 row_errors.append("blank module_code")
             if not session_name:
                 row_errors.append("blank session_name")
@@ -172,9 +189,20 @@ def import_sessions_csv(db: Session, *, import_run_id: int, csv_path: str) -> di
             if allow_parallel_rooms is None:
                 row_errors.append("allow_parallel_rooms must be a boolean value")
 
-            matching_modules = modules_by_code.get(module_code, [])
-            if not matching_modules:
-                row_errors.append(f"module_code '{module_code}' does not resolve to accepted module data")
+            matching_modules: list[CurriculumModule] = []
+            unresolved_module_codes: list[str] = []
+            for candidate_code in module_codes:
+                resolved_modules = modules_by_code.get(candidate_code, [])
+                if not resolved_modules:
+                    unresolved_module_codes.append(candidate_code)
+                    continue
+                matching_modules.extend(resolved_modules)
+            if unresolved_module_codes:
+                row_errors.append(
+                    "module_code(s) "
+                    + ", ".join(f"'{code}'" for code in unresolved_module_codes)
+                    + " do not resolve to accepted module data"
+                )
 
             specific_room = None
             if specific_room_code:
@@ -211,7 +239,7 @@ def import_sessions_csv(db: Session, *, import_run_id: int, csv_path: str) -> di
                     }
                 )
 
-            curriculum_module_ids = sorted(int(module.id) for module in matching_modules)
+            curriculum_module_ids = sorted({int(module.id) for module in matching_modules})
             attendance_group_ids = sorted(
                 {
                     int(group_id)

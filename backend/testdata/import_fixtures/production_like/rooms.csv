@@ -1,6 +1,6 @@
 room_code,room_name,capacity,room_type,lab_type,location,year_restriction
 room_a11201,A11 201,150,lecture,,A11 Complex,
-room_a11205,A11 205,100,lecture,,A11 Complex,
+room_a11205,A11 205,100,lecture,,A11 Complex,1
 room_a11207,A11 207,150,lecture,,A11 Complex,
 room_a11301,A11 301,150,lecture,,A11 Complex,
 room_a11307,A11 307,150,lecture,,A11 Complex,

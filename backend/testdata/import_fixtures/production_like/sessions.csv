@@ -1,399 +1,398 @@
-session_code,module_code,session_name,session_type,duration_minutes,occurrences_per_week,required_room_type,required_lab_type,specific_room_code,max_students_per_group,allow_parallel_rooms,notes
-session_aclt_11013_lecture,ACLT 11013,ACLT 11013 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_amat_11223_lecture,AMAT 11223,AMAT 11223 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_amat_11232_lecture,AMAT 11232,AMAT 11232 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_amat_21262_lecture,AMAT 21262,AMAT 21262 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_amat_21272_lecture,AMAT 21272,AMAT 21272 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_amat_31303_lecture,AMAT 31303,AMAT 31303 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_amat_31313_lecture,AMAT 31313,AMAT 31313 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_amat_41363_lecture,AMAT 41363,AMAT 41363 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_amat_41373_lecture,AMAT 41373,AMAT 41373 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_amat_41813_lecture,AMAT 41813,AMAT 41813 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_amat_41823_lecture,AMAT 41823,AMAT 41823 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_amat_41833_lecture,AMAT 41833,AMAT 41833 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_amat_43976_lecture,AMAT 43976,AMAT 43976 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_apch_11612_lab,APCH 11612,APCH 11612 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_apch_11612_lecture,APCH 11612,APCH 11612 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_apch_21642_lab,APCH 21642,APCH 21642 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_apch_21642_lecture,APCH 21642,APCH 21642 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_apch_21652_lab,APCH 21652,APCH 21652 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_apch_21652_lecture,APCH 21652,APCH 21652 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_apch_21663_lab,APCH 21663,APCH 21663 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_apch_21663_lecture,APCH 21663,APCH 21663 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_apch_21672_lab,APCH 21672,APCH 21672 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_apch_21672_lecture,APCH 21672,APCH 21672 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_apch_21682_lab,APCH 21682,APCH 21682 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_apch_21682_lecture,APCH 21682,APCH 21682 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_apch_31742_lab,APCH 31742,APCH 31742 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_apch_31742_lecture,APCH 31742,APCH 31742 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_apch_31752_lab,APCH 31752,APCH 31752 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_apch_31752_lecture,APCH 31752,APCH 31752 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_apch_31761_lab,APCH 31761,APCH 31761 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_apch_31761_lecture,APCH 31761,APCH 31761 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_apch_31772_lab,APCH 31772,APCH 31772 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_apch_31772_lecture,APCH 31772,APCH 31772 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_apch_31782_lab,APCH 31782,APCH 31782 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_apch_31782_lecture,APCH 31782,APCH 31782 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_11212_lecture,BECS 11212,BECS 11212 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_11223_lecture,BECS 11223,BECS 11223 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_11413_lecture,BECS 11413,BECS 11413 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_11422_lecture,BECS 11422,BECS 11422 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_11431_lab,BECS 11431,BECS 11431 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_becs_11431_lecture,BECS 11431,BECS 11431 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_11613_lecture,BECS 11613,BECS 11613 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_21213_lecture,BECS 21213,BECS 21213 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_21223_lecture,BECS 21223,BECS 21223 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_21413_lecture,BECS 21413,BECS 21413 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_21422_lecture,BECS 21422,BECS 21422 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_21431_lab,BECS 21431,BECS 21431 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_becs_21431_lecture,BECS 21431,BECS 21431 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_21613_lecture,BECS 21613,BECS 21613 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_31213_lecture,BECS 31213,BECS 31213 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_31233_lecture,BECS 31233,BECS 31233 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_31242_lecture,BECS 31242,BECS 31242 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_31412_lecture,BECS 31412,BECS 31412 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_31421_lab,BECS 31421,BECS 31421 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_becs_31421_lecture,BECS 31421,BECS 31421 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_31433_lecture,BECS 31433,BECS 31433 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_31443_lecture,BECS 31443,BECS 31443 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_31722_lecture,BECS 31722,BECS 31722 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_31811_lecture,BECS 31811,BECS 31811 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_43033_lecture,BECS 43033,BECS 43033 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_becs_43432_lecture,BECS 43432,BECS 43432 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bioc_21612_lecture,BIOC 21612,BIOC 21612 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bioc_21622_lecture,BIOC 21622,BIOC 21622 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bioc_21631_lecture,BIOC 21631,BIOC 21631 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bioc_31611_lecture,BIOC 31611,BIOC 31611 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bioc_31622_lecture,BIOC 31622,BIOC 31622 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bioc_31632_lecture,BIOC 31632,BIOC 31632 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bioc_31641_lecture,BIOC 31641,BIOC 31641 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bioc_43803_lecture,BIOC 43803,BIOC 43803 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bioc_43818_lecture,BIOC 43818,BIOC 43818 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_biol_11512_lecture,BIOL 11512,BIOL 11512 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_biol_11522_lecture,BIOL 11522,BIOL 11522 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_biol_11532_lecture,BIOL 11532,BIOL 11532 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_biol_11552_lecture,BIOL 11552,BIOL 11552 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_11011_lecture,BSSS 11011,BSSS 11011 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_11023_lecture,BSSS 11023,BSSS 11023 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_11032_lecture,BSSS 11032,BSSS 11032 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_11042_lecture,BSSS 11042,BSSS 11042 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_11052_lecture,BSSS 11052,BSSS 11052 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_11062_lecture,BSSS 11062,BSSS 11062 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_11072_lecture,BSSS 11072,BSSS 11072 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_11082_lecture,BSSS 11082,BSSS 11082 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_21013_lecture,BSSS 21013,BSSS 21013 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_21022_lecture,BSSS 21022,BSSS 21022 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_21032_lecture,BSSS 21032,BSSS 21032 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_21042_lecture,BSSS 21042,BSSS 21042 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_21052_lecture,BSSS 21052,BSSS 21052 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_21061_lecture,BSSS 21061,BSSS 21061 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_21072_lecture,BSSS 21072,BSSS 21072 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_21081_lecture,BSSS 21081,BSSS 21081 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_31012_lecture,BSSS 31012,BSSS 31012 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_31022_lecture,BSSS 31022,BSSS 31022 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_31032_lecture,BSSS 31032,BSSS 31032 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_31041_lecture,BSSS 31041,BSSS 31041 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_31052_lecture,BSSS 31052,BSSS 31052 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_31062_lecture,BSSS 31062,BSSS 31062 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_31072_lecture,BSSS 31072,BSSS 31072 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_31083_lecture,BSSS 31083,BSSS 31083 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_bsss_31091_lecture,BSSS 31091,BSSS 31091 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_chem_11601_lecture,CHEM 11601,CHEM 11601 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_chem_11612_lecture,CHEM 11612,CHEM 11612 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_chem_11622_lecture,CHEM 11622,CHEM 11622 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_chem_11631_lecture,CHEM 11631,CHEM 11631 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_chem_21672_lecture,CHEM 21672,CHEM 21672 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_chem_21682_lecture,CHEM 21682,CHEM 21682 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_chem_21691_lecture,CHEM 21691,CHEM 21691 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_chem_31731_lecture,CHEM 31731,CHEM 31731 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_chem_31742_lecture,CHEM 31742,CHEM 31742 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_chem_31752_lecture,CHEM 31752,CHEM 31752 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_chem_43928_lecture,CHEM 43928,CHEM 43928 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_cosc_11012_lecture,COSC 11012,COSC 11012 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_cosc_11023_lecture,COSC 11023,COSC 11023 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_cosc_21052_lecture,COSC 21052,COSC 21052 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_cosc_21063_lecture,COSC 21063,COSC 21063 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_cosc_31093_lecture,COSC 31093,COSC 31093 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_cosc_31103_lab,COSC 31103,COSC 31103 Lab,lab,180,1,lab,computer,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_cosc_31103_lecture,COSC 31103,COSC 31103 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_cosc_31112_lab,COSC 31112,COSC 31112 Lab,lab,180,1,lab,computer,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_cosc_31112_lecture,COSC 31112,COSC 31112 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_cosc_43378_lecture,COSC 43378,COSC 43378 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_cost_11012_lecture,COST 11012,COST 11012 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_cost_11023_lecture,COST 11023,COST 11023 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_cost_21053_lecture,COST 21053,COST 21053 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_cost_21063_lecture,COST 21063,COST 21063 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_cost_31093_lecture,COST 31093,COST 31093 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_cost_31102_lecture,COST 31102,COST 31102 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_cost_31112_lecture,COST 31112,COST 31112 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_cost_31122_lecture,COST 31122,COST 31122 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_cost_31133_lecture,COST 31133,COST 31133 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_cost_43378_lecture,COST 43378,COST 43378 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_delt_11232_lecture,DELT 11232,DELT 11232 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_delt_21222_lecture,DELT 21222,DELT 21222 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_elec_11513_lecture,ELEC 11513,ELEC 11513 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_elec_11521_lecture,ELEC 11521,ELEC 11521 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_elec_11534_lab,ELEC 11534,ELEC 11534 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_elec_11534_lecture,ELEC 11534,ELEC 11534 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_elec_11541_lab,ELEC 11541,ELEC 11541 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_elec_11541_lecture,ELEC 11541,ELEC 11541 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_elec_21513_lab,ELEC 21513,ELEC 21513 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_elec_21513_lecture,ELEC 21513,ELEC 21513 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_elec_21521_lab,ELEC 21521,ELEC 21521 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_elec_21521_lecture,ELEC 21521,ELEC 21521 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_elec_31513_lab,ELEC 31513,ELEC 31513 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_elec_31513_lecture,ELEC 31513,ELEC 31513 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_elec_31521_lab,ELEC 31521,ELEC 31521 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_elec_31521_lecture,ELEC 31521,ELEC 31521 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_elec_31553_lab,ELEC 31553,ELEC 31553 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_elec_31553_lecture,ELEC 31553,ELEC 31553 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_elec_31563_lab,ELEC 31563,ELEC 31563 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_elec_31563_lecture,ELEC 31563,ELEC 31563 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_elec_33542_lab,ELEC 33542,ELEC 33542 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_elec_33542_lecture,ELEC 33542,ELEC 33542 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_elec_43042_lab,ELEC 43042,ELEC 43042 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_elec_43042_lecture,ELEC 43042,ELEC 43042 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_elec_43053_lab,ELEC 43053,ELEC 43053 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_elec_43053_lecture,ELEC 43053,ELEC 43053 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_11702_lecture,ENCM 11702,ENCM 11702 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_11713_lecture,ENCM 11713,ENCM 11713 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_11722_lecture,ENCM 11722,ENCM 11722 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_21703_lecture,ENCM 21703,ENCM 21703 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_21711_lecture,ENCM 21711,ENCM 21711 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_21722_lecture,ENCM 21722,ENCM 21722 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_21732_lecture,ENCM 21732,ENCM 21732 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_21743_lecture,ENCM 21743,ENCM 21743 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_21752_lecture,ENCM 21752,ENCM 21752 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_31702_lecture,ENCM 31702,ENCM 31702 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_31712_lecture,ENCM 31712,ENCM 31712 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_31722_lecture,ENCM 31722,ENCM 31722 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_31732_lecture,ENCM 31732,ENCM 31732 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_31742_lecture,ENCM 31742,ENCM 31742 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_31752_lecture,ENCM 31752,ENCM 31752 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_31762_lecture,ENCM 31762,ENCM 31762 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_31812_lecture,ENCM 31812,ENCM 31812 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_31823_lecture,ENCM 31823,ENCM 31823 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_33774_lecture,ENCM 33774,ENCM 33774 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_41702_lecture,ENCM 41702,ENCM 41702 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_41713_lecture,ENCM 41713,ENCM 41713 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_41753_lecture,ENCM 41753,ENCM 41753 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_41774_lecture,ENCM 41774,ENCM 41774 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_41793_lecture,ENCM 41793,ENCM 41793 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_41802_lecture,ENCM 41802,ENCM 41802 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_41813_lecture,ENCM 41813,ENCM 41813 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_41822_lecture,ENCM 41822,ENCM 41822 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_41842_lecture,ENCM 41842,ENCM 41842 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_43722_lecture,ENCM 43722,ENCM 43722 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_encm_43868_lecture,ENCM 43868,ENCM 43868 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_fren_13352_lecture,FREN 13352,FREN 13352 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_gesr_31022_lecture,GESR 31022,GESR 31022 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_gnct_11212_lecture,GNCT 11212,GNCT 11212 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_gnct_13212_lecture,GNCT 13212,GNCT 13212 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_gnct_21212_lecture,GNCT 21212,GNCT 21212 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_gnct_23212_lecture,GNCT 23212,GNCT 23212 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_11213_lecture,INTE 11213,INTE 11213 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_11223_lecture,INTE 11223,INTE 11223 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_21213_lecture,INTE 21213,INTE 21213 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_21233_lecture,INTE 21233,INTE 21233 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_21243_lecture,INTE 21243,INTE 21243 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_21253_lecture,INTE 21253,INTE 21253 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_21263_lecture,INTE 21263,INTE 21263 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_21273_lecture,INTE 21273,INTE 21273 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_21282_lecture,INTE 21282,INTE 21282 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_21292_lecture,INTE 21292,INTE 21292 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_21303_lecture,INTE 21303,INTE 21303 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_31213_lecture,INTE 31213,INTE 31213 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_31223_lecture,INTE 31223,INTE 31223 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_31233_lecture,INTE 31233,INTE 31233 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_31243_lecture,INTE 31243,INTE 31243 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_31273_lecture,INTE 31273,INTE 31273 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_31283_lecture,INTE 31283,INTE 31283 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_31356_lecture,INTE 31356,INTE 31356 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_31362_lecture,INTE 31362,INTE 31362 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_31373_lecture,INTE 31373,INTE 31373 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_31382_lecture,INTE 31382,INTE 31382 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_41232_lecture,INTE 41232,INTE 41232 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_41272_lecture,INTE 41272,INTE 41272 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_41292_lecture,INTE 41292,INTE 41292 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_41302_lecture,INTE 41302,INTE 41302 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_41312_lecture,INTE 41312,INTE 41312 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_41323_lecture,INTE 41323,INTE 41323 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_41333_lecture,INTE 41333,INTE 41333 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_41352_lecture,INTE 41352,INTE 41352 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_inte_43216_lecture,INTE 43216,INTE 43216 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_jpns_13354_lecture,JPNS 13354,JPNS 13354 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_kore_13362_lecture,KORE 13362,KORE 13362 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_macs_11512_lecture,MACS 11512,MACS 11512 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_macs_11521_lecture,MACS 11521,MACS 11521 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_maps_11512_lecture,MAPS 11512,MAPS 11512 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mbbt_31514_lecture,MBBT 31514,MBBT 31514 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mbbt_31522_lecture,MBBT 31522,MBBT 31522 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mbbt_41763_lecture,MBBT 41763,MBBT 41763 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mbbt_41773_lecture,MBBT 41773,MBBT 41773 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mbbt_41804_lecture,MBBT 41804,MBBT 41804 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mbbt_41813_lecture,MBBT 41813,MBBT 41813 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mbbt_41824_lecture,MBBT 41824,MBBT 41824 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mbbt_41834_lecture,MBBT 41834,MBBT 41834 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mbbt_41844_lecture,MBBT 41844,MBBT 41844 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mbbt_43872_lecture,MBBT 43872,MBBT 43872 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mbbt_43888_lecture,MBBT 43888,MBBT 43888 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgmt_11012_lecture,MGMT 11012,MGMT 11012 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgmt_11022_lecture,MGMT 11022,MGMT 11022 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgmt_21012_lecture,MGMT 21012,MGMT 21012 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgte_11233_lecture,MGTE 11233,MGTE 11233 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgte_11243_lecture,MGTE 11243,MGTE 11243 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgte_21222_lecture,MGTE 21222,MGTE 21222 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgte_21233_lecture,MGTE 21233,MGTE 21233 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgte_31212_lecture,MGTE 31212,MGTE 31212 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgte_31222_lecture,MGTE 31222,MGTE 31222 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgte_31233_lecture,MGTE 31233,MGTE 31233 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgte_31272_lecture,MGTE 31272,MGTE 31272 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgte_31283_lecture,MGTE 31283,MGTE 31283 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgte_31293_lecture,MGTE 31293,MGTE 31293 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgte_31303_lecture,MGTE 31303,MGTE 31303 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgte_31312_lecture,MGTE 31312,MGTE 31312 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgte_41212_lecture,MGTE 41212,MGTE 41212 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgte_41222_lecture,MGTE 41222,MGTE 41222 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgte_41233_lecture,MGTE 41233,MGTE 41233 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgte_41262_lecture,MGTE 41262,MGTE 41262 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgte_41292_lecture,MGTE 41292,MGTE 41292 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgte_41303_lecture,MGTE 41303,MGTE 41303 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mgte_43216_lecture,MGTE 43216,MGTE 43216 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mibi_21514_lecture,MIBI 21514,MIBI 21514 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mibi_21522_lecture,MIBI 21522,MIBI 21522 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mibi_31514_lecture,MIBI 31514,MIBI 31514 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mibi_31522_lecture,MIBI 31522,MIBI 31522 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mibi_33534_lecture,MIBI 33534,MIBI 33534 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mibi_33541_lecture,MIBI 33541,MIBI 33541 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mibi_41784_lecture,MIBI 41784,MIBI 41784 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mibi_41804_lecture,MIBI 41804,MIBI 41804 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mibi_41824_lecture,MIBI 41824,MIBI 41824 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mibi_43764_lecture,MIBI 43764,MIBI 43764 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mibi_43774_lecture,MIBI 43774,MIBI 43774 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mibi_43794_lecture,MIBI 43794,MIBI 43794 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mibi_43814_lecture,MIBI 43814,MIBI 43814 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mibi_43834_lecture,MIBI 43834,MIBI 43834 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mibi_43846_lecture,MIBI 43846,MIBI 43846 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mibi_43852_lecture,MIBI 43852,MIBI 43852 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_mibi_43868_lecture,MIBI 43868,MIBI 43868 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_phys_11512_lecture,PHYS 11512,PHYS 11512 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_phys_11521_lecture,PHYS 11521,PHYS 11521 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_phys_11532_lecture,PHYS 11532,PHYS 11532 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_phys_21513_lecture,PHYS 21513,PHYS 21513 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_phys_21521_lecture,PHYS 21521,PHYS 21521 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_phys_31512_lecture,PHYS 31512,PHYS 31512 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_phys_31521_lecture,PHYS 31521,PHYS 31521 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_phys_31532_lab,PHYS 31532,PHYS 31532 Lab,lab,180,1,lab,physics,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_phys_31532_lecture,PHYS 31532,PHYS 31532 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_phys_31544_lab,PHYS 31544,PHYS 31544 Lab,lab,180,1,lab,physics,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_phys_31544_lecture,PHYS 31544,PHYS 31544 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_phys_43793_lab,PHYS 43793,PHYS 43793 Lab,lab,180,1,lab,physics,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_phys_43793_lecture,PHYS 43793,PHYS 43793 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_phys_43875_lecture,PHYS 43875,PHYS 43875 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_phys_43888_lecture,PHYS 43888,PHYS 43888 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_plbl_11543_lecture,PLBL 11543,PLBL 11543 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_plbl_21513_lecture,PLBL 21513,PLBL 21513 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_plbl_21521_lecture,PLBL 21521,PLBL 21521 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_plbl_21532_lecture,PLBL 21532,PLBL 21532 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_plbl_31514_lecture,PLBL 31514,PLBL 31514 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_plbl_31521_lecture,PLBL 31521,PLBL 31521 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_plbl_41763_lecture,PLBL 41763,PLBL 41763 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_plbl_41772_lecture,PLBL 41772,PLBL 41772 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_plbl_41783_lecture,PLBL 41783,PLBL 41783 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_plbl_41833_lecture,PLBL 41833,PLBL 41833 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_plbl_41854_lecture,PLBL 41854,PLBL 41854 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_plbl_41863_lecture,PLBL 41863,PLBL 41863 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_plbl_43872_lecture,PLBL 43872,PLBL 43872 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_plbl_43882_lecture,PLBL 43882,PLBL 43882 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_plbl_43918_lecture,PLBL 43918,PLBL 43918 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_pmat_11203_lecture,PMAT 11203,PMAT 11203 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_pmat_11212_lecture,PMAT 11212,PMAT 11212 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_pmat_11223_lecture,PMAT 11223,PMAT 11223 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_pmat_11232_lecture,PMAT 11232,PMAT 11232 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_pmat_21263_lecture,PMAT 21263,PMAT 21263 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_pmat_21272_lecture,PMAT 21272,PMAT 21272 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_pmat_31212_lecture,PMAT 31212,PMAT 31212 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_pmat_31303_lecture,PMAT 31303,PMAT 31303 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_pmat_31312_lecture,PMAT 31312,PMAT 31312 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_pmat_41343_lecture,PMAT 41343,PMAT 41343 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_pmat_41353_lecture,PMAT 41353,PMAT 41353 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_pmat_41813_lecture,PMAT 41813,PMAT 41813 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_pmat_41823_lecture,PMAT 41823,PMAT 41823 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_pmat_43976_lecture,PMAT 43976,PMAT 43976 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_prpl_31992_lecture,PRPL 31992,PRPL 31992 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_11213_lecture,SENG 11213,SENG 11213 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_11223_lab,SENG 11223,SENG 11223 Lab,lab,180,1,lab,computer,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_seng_11223_lecture,SENG 11223,SENG 11223 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_11232_lab,SENG 11232,SENG 11232 Lab,lab,180,1,lab,computer,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_seng_11232_lecture,SENG 11232,SENG 11232 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_11243_lecture,SENG 11243,SENG 11243 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_21213_lab,SENG 21213,SENG 21213 Lab,lab,180,1,lab,computer,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_seng_21213_lecture,SENG 21213,SENG 21213 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_21222_lab,SENG 21222,SENG 21222 Lab,lab,180,1,lab,computer,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_seng_21222_lecture,SENG 21222,SENG 21222 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_21233_lecture,SENG 21233,SENG 21233 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_21243_lab,SENG 21243,SENG 21243 Lab,lab,180,1,lab,computer,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_seng_21243_lecture,SENG 21243,SENG 21243 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_21253_lecture,SENG 21253,SENG 21253 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_21263_lecture,SENG 21263,SENG 21263 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_31212_lab,SENG 31212,SENG 31212 Lab,lab,180,1,lab,computer,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_seng_31212_lecture,SENG 31212,SENG 31212 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_31222_lecture,SENG 31222,SENG 31222 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_31232_lecture,SENG 31232,SENG 31232 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_31242_lab,SENG 31242,SENG 31242 Lab,lab,180,1,lab,computer,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_seng_31242_lecture,SENG 31242,SENG 31242 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_31252_lecture,SENG 31252,SENG 31252 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_31313_lecture,SENG 31313,SENG 31313 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_31323_lab,SENG 31323,SENG 31323 Lab,lab,180,1,lab,computer,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_seng_31323_lecture,SENG 31323,SENG 31323 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_31333_lecture,SENG 31333,SENG 31333 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_31343_lecture,SENG 31343,SENG 31343 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_31353_lab,SENG 31353,SENG 31353 Lab,lab,180,1,lab,computer,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_seng_31353_lecture,SENG 31353,SENG 31353 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_31363_lecture,SENG 31363,SENG 31363 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_41212_lecture,SENG 41212,SENG 41212 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_41222_lecture,SENG 41222,SENG 41222 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_41242_lecture,SENG 41242,SENG 41242 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_41252_lecture,SENG 41252,SENG 41252 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_41283_lecture,SENG 41283,SENG 41283 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_41293_lecture,SENG 41293,SENG 41293 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_41303_lecture,SENG 41303,SENG 41303 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_41313_lecture,SENG 41313,SENG 41313 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_41323_lecture,SENG 41323,SENG 41323 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_41333_lecture,SENG 41333,SENG 41333 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_seng_43216_lecture,SENG 43216,SENG 43216 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_stat_11613_lecture,STAT 11613,STAT 11613 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_stat_11621_lecture,STAT 11621,STAT 11621 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_stat_11632_lecture,STAT 11632,STAT 11632 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_stat_21613_lecture,STAT 21613,STAT 21613 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_stat_21623_lecture,STAT 21623,STAT 21623 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_stat_31613_lecture,STAT 31613,STAT 31613 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_stat_31622_lecture,STAT 31622,STAT 31622 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_stat_31631_lecture,STAT 31631,STAT 31631 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_stat_31642_lab,STAT 31642,STAT 31642 Lab,lab,180,1,lab,statistics,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_stat_31642_lecture,STAT 31642,STAT 31642 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_stat_31653_lab,STAT 31653,STAT 31653 Lab,lab,180,1,lab,statistics,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_stat_31653_lecture,STAT 31653,STAT 31653 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_stat_41613_lab,STAT 41613,STAT 41613 Lab,lab,180,1,lab,statistics,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_stat_41613_lecture,STAT 41613,STAT 41613 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_stat_43878_lab,STAT 43878,STAT 43878 Lab,lab,180,1,lab,statistics,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
-session_stat_43878_lecture,STAT 43878,STAT 43878 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_zool_21702_lecture,ZOOL 21702,ZOOL 21702 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_zool_21711_lecture,ZOOL 21711,ZOOL 21711 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_zool_21722_lecture,ZOOL 21722,ZOOL 21722 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_zool_31703_lecture,ZOOL 31703,ZOOL 31703 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_zool_31713_lecture,ZOOL 31713,ZOOL 31713 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_zool_31722_lecture,ZOOL 31722,ZOOL 31722 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_zool_41703_lecture,ZOOL 41703,ZOOL 41703 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_zool_41711_lecture,ZOOL 41711,ZOOL 41711 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_zool_41722_lecture,ZOOL 41722,ZOOL 41722 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_zool_41732_lecture,ZOOL 41732,ZOOL 41732 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_zool_41752_lecture,ZOOL 41752,ZOOL 41752 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_zool_41792_lecture,ZOOL 41792,ZOOL 41792 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_zool_41802_lecture,ZOOL 41802,ZOOL 41802 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_zool_41813_lecture,ZOOL 41813,ZOOL 41813 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_zool_41823_lecture,ZOOL 41823,ZOOL 41823 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_zool_41832_lecture,ZOOL 41832,ZOOL 41832 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_zool_41842_lecture,ZOOL 41842,ZOOL 41842 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_zool_43742_lecture,ZOOL 43742,ZOOL 43742 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
-session_zool_43948_lecture,ZOOL 43948,ZOOL 43948 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_code,module_code,module_codes,session_name,session_type,duration_minutes,occurrences_per_week,required_room_type,required_lab_type,specific_room_code,max_students_per_group,allow_parallel_rooms,notes
+session_aclt_11013_lecture,ACLT 11013,,ACLT 11013 Lecture,lecture,60,2,lecture,,,150,true,Seeded from real enrollment data for 2022/2023 semester 1. Repeated twice weekly to exercise multi-occurrence scheduling. Fixed to the auditorium for the large shared cohort. Large intake delivered in parallel rooms with one lecturer per room.
+session_amat_11223_lecture,AMAT 11223,AMAT 11232,AMAT 11223 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1. Shared teaching event attached to multiple curriculum modules.
+session_amat_21262_lecture,AMAT 21262,,AMAT 21262 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_amat_21272_lecture,AMAT 21272,,AMAT 21272 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_amat_31303_lecture,AMAT 31303,,AMAT 31303 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_amat_31313_lecture,AMAT 31313,,AMAT 31313 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_amat_41363_lecture,AMAT 41363,,AMAT 41363 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_amat_41373_lecture,AMAT 41373,,AMAT 41373 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_amat_41813_lecture,AMAT 41813,,AMAT 41813 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_amat_41823_lecture,AMAT 41823,,AMAT 41823 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_amat_41833_lecture,AMAT 41833,,AMAT 41833 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_amat_43976_lecture,AMAT 43976,,AMAT 43976 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_apch_11612_lab,APCH 11612,,APCH 11612 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_apch_11612_lecture,APCH 11612,,APCH 11612 Lecture,lecture,60,1,lecture,,room_a11205,,false,Seeded from real enrollment data for 2022/2023 semester 1. Assigned to a year-restricted teaching room.
+session_apch_21642_lab,APCH 21642,,APCH 21642 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_apch_21642_lecture,APCH 21642,,APCH 21642 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_apch_21652_lab,APCH 21652,,APCH 21652 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_apch_21652_lecture,APCH 21652,,APCH 21652 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_apch_21663_lab,APCH 21663,,APCH 21663 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_apch_21663_lecture,APCH 21663,,APCH 21663 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_apch_21672_lab,APCH 21672,,APCH 21672 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_apch_21672_lecture,APCH 21672,,APCH 21672 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_apch_21682_lab,APCH 21682,,APCH 21682 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_apch_21682_lecture,APCH 21682,,APCH 21682 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_apch_31742_lab,APCH 31742,,APCH 31742 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_apch_31742_lecture,APCH 31742,,APCH 31742 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_apch_31752_lab,APCH 31752,,APCH 31752 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_apch_31752_lecture,APCH 31752,,APCH 31752 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_apch_31761_lab,APCH 31761,,APCH 31761 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_apch_31761_lecture,APCH 31761,,APCH 31761 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_apch_31772_lab,APCH 31772,,APCH 31772 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_apch_31772_lecture,APCH 31772,,APCH 31772 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_apch_31782_lab,APCH 31782,,APCH 31782 Lab,lab,180,1,lab,chemistry,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_apch_31782_lecture,APCH 31782,,APCH 31782 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_11212_lecture,BECS 11212,,BECS 11212 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_11223_lecture,BECS 11223,,BECS 11223 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_11413_lecture,BECS 11413,,BECS 11413 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_11422_lecture,BECS 11422,,BECS 11422 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_11431_lab,BECS 11431,,BECS 11431 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_becs_11431_lecture,BECS 11431,,BECS 11431 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_11613_lecture,BECS 11613,,BECS 11613 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_21213_lecture,BECS 21213,,BECS 21213 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_21223_lecture,BECS 21223,,BECS 21223 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_21413_lecture,BECS 21413,,BECS 21413 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_21422_lecture,BECS 21422,,BECS 21422 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_21431_lab,BECS 21431,,BECS 21431 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_becs_21431_lecture,BECS 21431,,BECS 21431 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_21613_lecture,BECS 21613,,BECS 21613 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_31213_lecture,BECS 31213,,BECS 31213 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_31233_lecture,BECS 31233,,BECS 31233 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_31242_lecture,BECS 31242,,BECS 31242 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_31412_lecture,BECS 31412,,BECS 31412 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_31421_lab,BECS 31421,,BECS 31421 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_becs_31421_lecture,BECS 31421,,BECS 31421 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_31433_lecture,BECS 31433,,BECS 31433 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_31443_lecture,BECS 31443,,BECS 31443 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_31722_lecture,BECS 31722,,BECS 31722 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_31811_lecture,BECS 31811,,BECS 31811 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_43033_lecture,BECS 43033,,BECS 43033 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_becs_43432_lecture,BECS 43432,,BECS 43432 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bioc_21612_lecture,BIOC 21612,,BIOC 21612 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bioc_21622_lecture,BIOC 21622,,BIOC 21622 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bioc_21631_lecture,BIOC 21631,,BIOC 21631 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bioc_31611_lecture,BIOC 31611,,BIOC 31611 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bioc_31622_lecture,BIOC 31622,,BIOC 31622 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bioc_31632_lecture,BIOC 31632,,BIOC 31632 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bioc_31641_lecture,BIOC 31641,,BIOC 31641 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bioc_43803_lecture,BIOC 43803,,BIOC 43803 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bioc_43818_lecture,BIOC 43818,,BIOC 43818 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_biol_11512_lecture,BIOL 11512,,BIOL 11512 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_biol_11522_lecture,BIOL 11522,,BIOL 11522 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_biol_11532_lecture,BIOL 11532,,BIOL 11532 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_biol_11552_lecture,BIOL 11552,,BIOL 11552 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_11011_lecture,BSSS 11011,,BSSS 11011 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_11023_lecture,BSSS 11023,,BSSS 11023 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_11032_lecture,BSSS 11032,,BSSS 11032 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_11042_lecture,BSSS 11042,,BSSS 11042 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_11052_lecture,BSSS 11052,,BSSS 11052 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_11062_lecture,BSSS 11062,,BSSS 11062 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_11072_lecture,BSSS 11072,,BSSS 11072 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_11082_lecture,BSSS 11082,,BSSS 11082 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_21013_lecture,BSSS 21013,,BSSS 21013 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_21022_lecture,BSSS 21022,,BSSS 21022 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_21032_lecture,BSSS 21032,,BSSS 21032 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_21042_lecture,BSSS 21042,,BSSS 21042 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_21052_lecture,BSSS 21052,,BSSS 21052 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_21061_lecture,BSSS 21061,,BSSS 21061 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_21072_lecture,BSSS 21072,,BSSS 21072 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_21081_lecture,BSSS 21081,,BSSS 21081 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_31012_lecture,BSSS 31012,,BSSS 31012 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_31022_lecture,BSSS 31022,,BSSS 31022 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_31032_lecture,BSSS 31032,,BSSS 31032 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_31041_lecture,BSSS 31041,,BSSS 31041 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_31052_lecture,BSSS 31052,,BSSS 31052 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_31062_lecture,BSSS 31062,,BSSS 31062 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_31072_lecture,BSSS 31072,,BSSS 31072 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_31083_lecture,BSSS 31083,,BSSS 31083 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_bsss_31091_lecture,BSSS 31091,,BSSS 31091 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_chem_11601_lecture,CHEM 11601,,CHEM 11601 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_chem_11612_lecture,CHEM 11612,,CHEM 11612 Lecture,lecture,60,2,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1. Repeated twice weekly to exercise multi-occurrence scheduling.
+session_chem_11622_lecture,CHEM 11622,,CHEM 11622 Lecture,lecture,60,2,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1. Repeated twice weekly to exercise multi-occurrence scheduling.
+session_chem_11631_lecture,CHEM 11631,,CHEM 11631 Lecture,lecture,60,2,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1. Repeated twice weekly to exercise multi-occurrence scheduling.
+session_chem_21672_lecture,CHEM 21672,,CHEM 21672 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_chem_21682_lecture,CHEM 21682,,CHEM 21682 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_chem_21691_lecture,CHEM 21691,,CHEM 21691 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_chem_31731_lecture,CHEM 31731,,CHEM 31731 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_chem_31742_lecture,CHEM 31742,,CHEM 31742 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_chem_31752_lecture,CHEM 31752,,CHEM 31752 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_chem_43928_lecture,CHEM 43928,,CHEM 43928 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_cosc_11012_lecture,COSC 11012,,COSC 11012 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_cosc_11023_lecture,COSC 11023,,COSC 11023 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_cosc_21052_lecture,COSC 21052,,COSC 21052 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_cosc_21063_lecture,COSC 21063,,COSC 21063 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_cosc_31093_lecture,COSC 31093,,COSC 31093 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_cosc_31103_lab,COSC 31103,,COSC 31103 Lab,lab,180,1,lab,computer,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_cosc_31103_lecture,COSC 31103,,COSC 31103 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_cosc_31112_lab,COSC 31112,,COSC 31112 Lab,lab,180,1,lab,computer,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_cosc_31112_lecture,COSC 31112,,COSC 31112 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_cosc_43378_lecture,COSC 43378,,COSC 43378 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_cost_11012_lecture,COST 11012,,COST 11012 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_cost_11023_lecture,COST 11023,,COST 11023 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_cost_21053_lecture,COST 21053,,COST 21053 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_cost_21063_lecture,COST 21063,,COST 21063 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_cost_31093_lecture,COST 31093,,COST 31093 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_cost_31102_lecture,COST 31102,,COST 31102 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_cost_31112_lecture,COST 31112,,COST 31112 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_cost_31122_lecture,COST 31122,,COST 31122 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_cost_31133_lecture,COST 31133,,COST 31133 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_cost_43378_lecture,COST 43378,,COST 43378 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_delt_11232_lecture,DELT 11232,,DELT 11232 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_delt_21222_lecture,DELT 21222,,DELT 21222 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_elec_11513_lecture,ELEC 11513,,ELEC 11513 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_elec_11521_lecture,ELEC 11521,,ELEC 11521 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_elec_11534_lab,ELEC 11534,,ELEC 11534 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_elec_11534_lecture,ELEC 11534,,ELEC 11534 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_elec_11541_lab,ELEC 11541,,ELEC 11541 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_elec_11541_lecture,ELEC 11541,,ELEC 11541 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_elec_21513_lab,ELEC 21513,,ELEC 21513 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_elec_21513_lecture,ELEC 21513,,ELEC 21513 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_elec_21521_lab,ELEC 21521,,ELEC 21521 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_elec_21521_lecture,ELEC 21521,,ELEC 21521 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_elec_31513_lab,ELEC 31513,,ELEC 31513 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_elec_31513_lecture,ELEC 31513,,ELEC 31513 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_elec_31521_lab,ELEC 31521,,ELEC 31521 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_elec_31521_lecture,ELEC 31521,,ELEC 31521 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_elec_31553_lab,ELEC 31553,,ELEC 31553 Lab,lab,180,1,lab,electronics,room_electronics_lab,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1. Uses a dedicated electronics lab room.
+session_elec_31553_lecture,ELEC 31553,,ELEC 31553 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_elec_31563_lab,ELEC 31563,,ELEC 31563 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_elec_31563_lecture,ELEC 31563,,ELEC 31563 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_elec_33542_lab,ELEC 33542,,ELEC 33542 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_elec_33542_lecture,ELEC 33542,,ELEC 33542 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_elec_43042_lab,ELEC 43042,,ELEC 43042 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_elec_43042_lecture,ELEC 43042,,ELEC 43042 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_elec_43053_lab,ELEC 43053,,ELEC 43053 Lab,lab,180,1,lab,electronics,,32,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_elec_43053_lecture,ELEC 43053,,ELEC 43053 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_11702_lecture,ENCM 11702,,ENCM 11702 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_11713_lecture,ENCM 11713,,ENCM 11713 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_11722_lecture,ENCM 11722,,ENCM 11722 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_21703_lecture,ENCM 21703,,ENCM 21703 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_21711_lecture,ENCM 21711,,ENCM 21711 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_21722_lecture,ENCM 21722,,ENCM 21722 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_21732_lecture,ENCM 21732,,ENCM 21732 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_21743_lecture,ENCM 21743,,ENCM 21743 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_21752_lecture,ENCM 21752,,ENCM 21752 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_31702_lecture,ENCM 31702,,ENCM 31702 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_31712_lecture,ENCM 31712,,ENCM 31712 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_31722_lecture,ENCM 31722,,ENCM 31722 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_31732_lecture,ENCM 31732,,ENCM 31732 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_31742_lecture,ENCM 31742,,ENCM 31742 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_31752_lecture,ENCM 31752,,ENCM 31752 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_31762_lecture,ENCM 31762,,ENCM 31762 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_31812_lecture,ENCM 31812,,ENCM 31812 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_31823_lecture,ENCM 31823,,ENCM 31823 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_33774_lecture,ENCM 33774,,ENCM 33774 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_41702_lecture,ENCM 41702,,ENCM 41702 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_41713_lecture,ENCM 41713,,ENCM 41713 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_41753_lecture,ENCM 41753,,ENCM 41753 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_41774_lecture,ENCM 41774,,ENCM 41774 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_41793_lecture,ENCM 41793,,ENCM 41793 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_41802_lecture,ENCM 41802,,ENCM 41802 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_41813_lecture,ENCM 41813,,ENCM 41813 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_41822_lecture,ENCM 41822,,ENCM 41822 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_41842_lecture,ENCM 41842,,ENCM 41842 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_43722_lecture,ENCM 43722,,ENCM 43722 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_encm_43868_lecture,ENCM 43868,,ENCM 43868 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_fren_13352_lecture,FREN 13352,,FREN 13352 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_gesr_31022_lecture,GESR 31022,,GESR 31022 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_gnct_11212_lecture,GNCT 11212,,GNCT 11212 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_gnct_13212_lecture,GNCT 13212,,GNCT 13212 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_gnct_21212_lecture,GNCT 21212,,GNCT 21212 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_gnct_23212_lecture,GNCT 23212,,GNCT 23212 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_11213_lecture,INTE 11213,,INTE 11213 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_11223_lecture,INTE 11223,,INTE 11223 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_21213_lecture,INTE 21213,,INTE 21213 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_21233_lecture,INTE 21233,,INTE 21233 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_21243_lecture,INTE 21243,,INTE 21243 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_21253_lecture,INTE 21253,,INTE 21253 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_21263_lecture,INTE 21263,,INTE 21263 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_21273_lecture,INTE 21273,,INTE 21273 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_21282_lecture,INTE 21282,,INTE 21282 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_21292_lecture,INTE 21292,,INTE 21292 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_21303_lecture,INTE 21303,,INTE 21303 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_31213_lecture,INTE 31213,,INTE 31213 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_31223_lecture,INTE 31223,,INTE 31223 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_31233_lecture,INTE 31233,,INTE 31233 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_31243_lecture,INTE 31243,,INTE 31243 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_31273_lecture,INTE 31273,,INTE 31273 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_31283_lecture,INTE 31283,,INTE 31283 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_31356_lecture,INTE 31356,,INTE 31356 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_31362_lecture,INTE 31362,,INTE 31362 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_31373_lecture,INTE 31373,,INTE 31373 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_31382_lecture,INTE 31382,,INTE 31382 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_41232_lecture,INTE 41232,,INTE 41232 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_41272_lecture,INTE 41272,,INTE 41272 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_41292_lecture,INTE 41292,,INTE 41292 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_41302_lecture,INTE 41302,,INTE 41302 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_41312_lecture,INTE 41312,,INTE 41312 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_41323_lecture,INTE 41323,,INTE 41323 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_41333_lecture,INTE 41333,,INTE 41333 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_41352_lecture,INTE 41352,,INTE 41352 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_inte_43216_lecture,INTE 43216,,INTE 43216 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_jpns_13354_lecture,JPNS 13354,,JPNS 13354 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_kore_13362_lecture,KORE 13362,,KORE 13362 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_macs_11512_lecture,MACS 11512,,MACS 11512 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_macs_11521_lecture,MACS 11521,,MACS 11521 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_maps_11512_lecture,MAPS 11512,,MAPS 11512 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mbbt_31514_lecture,MBBT 31514,,MBBT 31514 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mbbt_31522_lecture,MBBT 31522,,MBBT 31522 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mbbt_41763_lecture,MBBT 41763,,MBBT 41763 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mbbt_41773_lecture,MBBT 41773,,MBBT 41773 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mbbt_41804_lecture,MBBT 41804,,MBBT 41804 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mbbt_41813_lecture,MBBT 41813,,MBBT 41813 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mbbt_41824_lecture,MBBT 41824,,MBBT 41824 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mbbt_41834_lecture,MBBT 41834,,MBBT 41834 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mbbt_41844_lecture,MBBT 41844,,MBBT 41844 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mbbt_43872_lecture,MBBT 43872,,MBBT 43872 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mbbt_43888_lecture,MBBT 43888,,MBBT 43888 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgmt_11012_lecture,MGMT 11012,,MGMT 11012 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgmt_11022_lecture,MGMT 11022,,MGMT 11022 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgmt_21012_lecture,MGMT 21012,,MGMT 21012 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgte_11233_lecture,MGTE 11233,,MGTE 11233 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgte_11243_lecture,MGTE 11243,,MGTE 11243 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgte_21222_lecture,MGTE 21222,,MGTE 21222 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgte_21233_lecture,MGTE 21233,,MGTE 21233 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgte_31212_lecture,MGTE 31212,,MGTE 31212 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgte_31222_lecture,MGTE 31222,,MGTE 31222 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgte_31233_lecture,MGTE 31233,,MGTE 31233 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgte_31272_lecture,MGTE 31272,,MGTE 31272 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgte_31283_lecture,MGTE 31283,,MGTE 31283 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgte_31293_lecture,MGTE 31293,,MGTE 31293 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgte_31303_lecture,MGTE 31303,,MGTE 31303 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgte_31312_lecture,MGTE 31312,,MGTE 31312 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgte_41212_lecture,MGTE 41212,,MGTE 41212 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgte_41222_lecture,MGTE 41222,,MGTE 41222 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgte_41233_lecture,MGTE 41233,,MGTE 41233 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgte_41262_lecture,MGTE 41262,,MGTE 41262 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgte_41292_lecture,MGTE 41292,,MGTE 41292 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgte_41303_lecture,MGTE 41303,,MGTE 41303 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mgte_43216_lecture,MGTE 43216,,MGTE 43216 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mibi_21514_lecture,MIBI 21514,,MIBI 21514 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mibi_21522_lecture,MIBI 21522,,MIBI 21522 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mibi_31514_lecture,MIBI 31514,,MIBI 31514 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mibi_31522_lecture,MIBI 31522,,MIBI 31522 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mibi_33534_lecture,MIBI 33534,,MIBI 33534 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mibi_33541_lecture,MIBI 33541,,MIBI 33541 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mibi_41784_lecture,MIBI 41784,,MIBI 41784 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mibi_41804_lecture,MIBI 41804,,MIBI 41804 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mibi_41824_lecture,MIBI 41824,,MIBI 41824 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mibi_43764_lecture,MIBI 43764,,MIBI 43764 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mibi_43774_lecture,MIBI 43774,,MIBI 43774 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mibi_43794_lecture,MIBI 43794,,MIBI 43794 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mibi_43814_lecture,MIBI 43814,,MIBI 43814 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mibi_43834_lecture,MIBI 43834,,MIBI 43834 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mibi_43846_lecture,MIBI 43846,,MIBI 43846 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mibi_43852_lecture,MIBI 43852,,MIBI 43852 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_mibi_43868_lecture,MIBI 43868,,MIBI 43868 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_phys_11512_lecture,PHYS 11512,,PHYS 11512 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_phys_11521_lecture,PHYS 11521,,PHYS 11521 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_phys_11532_lecture,PHYS 11532,,PHYS 11532 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_phys_21513_lecture,PHYS 21513,,PHYS 21513 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_phys_21521_lecture,PHYS 21521,,PHYS 21521 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_phys_31512_lecture,PHYS 31512,,PHYS 31512 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_phys_31521_lecture,PHYS 31521,,PHYS 31521 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_phys_31532_lab,PHYS 31532,,PHYS 31532 Lab,lab,180,1,lab,physics,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_phys_31532_lecture,PHYS 31532,,PHYS 31532 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_phys_31544_lab,PHYS 31544,,PHYS 31544 Lab,lab,180,1,lab,physics,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_phys_31544_lecture,PHYS 31544,,PHYS 31544 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_phys_43793_lab,PHYS 43793,,PHYS 43793 Lab,lab,180,1,lab,physics,room_physics_lab_1,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1. Uses a dedicated physics lab room.
+session_phys_43793_lecture,PHYS 43793,,PHYS 43793 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_phys_43875_lecture,PHYS 43875,,PHYS 43875 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_phys_43888_lecture,PHYS 43888,,PHYS 43888 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_plbl_11543_lecture,PLBL 11543,,PLBL 11543 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_plbl_21513_lecture,PLBL 21513,,PLBL 21513 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_plbl_21521_lecture,PLBL 21521,,PLBL 21521 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_plbl_21532_lecture,PLBL 21532,,PLBL 21532 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_plbl_31514_lecture,PLBL 31514,,PLBL 31514 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_plbl_31521_lecture,PLBL 31521,,PLBL 31521 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_plbl_41763_lecture,PLBL 41763,,PLBL 41763 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_plbl_41772_lecture,PLBL 41772,,PLBL 41772 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_plbl_41783_lecture,PLBL 41783,,PLBL 41783 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_plbl_41833_lecture,PLBL 41833,,PLBL 41833 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_plbl_41854_lecture,PLBL 41854,,PLBL 41854 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_plbl_41863_lecture,PLBL 41863,,PLBL 41863 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_plbl_43872_lecture,PLBL 43872,,PLBL 43872 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_plbl_43882_lecture,PLBL 43882,,PLBL 43882 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_plbl_43918_lecture,PLBL 43918,,PLBL 43918 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_pmat_11203_lecture,PMAT 11203,,PMAT 11203 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_pmat_11212_lecture,PMAT 11212,,PMAT 11212 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_pmat_11223_lecture,PMAT 11223,,PMAT 11223 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_pmat_11232_lecture,PMAT 11232,,PMAT 11232 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_pmat_21263_lecture,PMAT 21263,,PMAT 21263 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_pmat_21272_lecture,PMAT 21272,,PMAT 21272 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_pmat_31212_lecture,PMAT 31212,,PMAT 31212 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_pmat_31303_lecture,PMAT 31303,,PMAT 31303 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_pmat_31312_lecture,PMAT 31312,,PMAT 31312 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_pmat_41343_lecture,PMAT 41343,,PMAT 41343 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_pmat_41353_lecture,PMAT 41353,,PMAT 41353 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_pmat_41813_lecture,PMAT 41813,,PMAT 41813 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_pmat_41823_lecture,PMAT 41823,,PMAT 41823 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_pmat_43976_lecture,PMAT 43976,,PMAT 43976 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_prpl_31992_lecture,PRPL 31992,,PRPL 31992 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_11213_lecture,SENG 11213,,SENG 11213 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_11223_lab,SENG 11223,,SENG 11223 Lab,lab,180,1,lab,computer,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_seng_11223_lecture,SENG 11223,,SENG 11223 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_11232_lab,SENG 11232,,SENG 11232 Lab,lab,180,1,lab,computer,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_seng_11232_lecture,SENG 11232,,SENG 11232 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_11243_lecture,SENG 11243,,SENG 11243 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_21213_lab,SENG 21213,,SENG 21213 Lab,lab,180,1,lab,computer,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_seng_21213_lecture,SENG 21213,,SENG 21213 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_21222_lab,SENG 21222,,SENG 21222 Lab,lab,180,1,lab,computer,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_seng_21222_lecture,SENG 21222,,SENG 21222 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_21233_lecture,SENG 21233,,SENG 21233 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_21243_lab,SENG 21243,,SENG 21243 Lab,lab,180,1,lab,computer,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_seng_21243_lecture,SENG 21243,,SENG 21243 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_21253_lecture,SENG 21253,,SENG 21253 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_21263_lecture,SENG 21263,,SENG 21263 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_31212_lab,SENG 31212,,SENG 31212 Lab,lab,180,1,lab,computer,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_seng_31212_lecture,SENG 31212,,SENG 31212 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_31222_lecture,SENG 31222,,SENG 31222 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_31232_lecture,SENG 31232,,SENG 31232 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_31242_lab,SENG 31242,,SENG 31242 Lab,lab,180,1,lab,computer,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_seng_31242_lecture,SENG 31242,,SENG 31242 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_31252_lecture,SENG 31252,,SENG 31252 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_31313_lecture,SENG 31313,,SENG 31313 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_31323_lab,SENG 31323,,SENG 31323 Lab,lab,180,1,lab,computer,,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_seng_31323_lecture,SENG 31323,,SENG 31323 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_31333_lecture,SENG 31333,,SENG 31333 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_31343_lecture,SENG 31343,,SENG 31343 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_31353_lab,SENG 31353,,SENG 31353 Lab,lab,180,1,lab,computer,room_computer_lab_1,40,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1. Uses a dedicated computer lab room.
+session_seng_31353_lecture,SENG 31353,,SENG 31353 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_31363_lecture,SENG 31363,,SENG 31363 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_41212_lecture,SENG 41212,,SENG 41212 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_41222_lecture,SENG 41222,,SENG 41222 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_41242_lecture,SENG 41242,,SENG 41242 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_41252_lecture,SENG 41252,,SENG 41252 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_41283_lecture,SENG 41283,,SENG 41283 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_41293_lecture,SENG 41293,,SENG 41293 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_41303_lecture,SENG 41303,,SENG 41303 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_41313_lecture,SENG 41313,,SENG 41313 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_41323_lecture,SENG 41323,,SENG 41323 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_41333_lecture,SENG 41333,,SENG 41333 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_seng_43216_lecture,SENG 43216,,SENG 43216 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_stat_11613_lecture,STAT 11613,,STAT 11613 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_stat_11621_lecture,STAT 11621,,STAT 11621 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_stat_11632_lecture,STAT 11632,,STAT 11632 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_stat_21613_lecture,STAT 21613,,STAT 21613 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_stat_21623_lecture,STAT 21623,,STAT 21623 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_stat_31613_lecture,STAT 31613,,STAT 31613 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_stat_31622_lecture,STAT 31622,,STAT 31622 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_stat_31631_lecture,STAT 31631,,STAT 31631 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_stat_31642_lab,STAT 31642,,STAT 31642 Lab,lab,180,1,lab,statistics,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_stat_31642_lecture,STAT 31642,,STAT 31642 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_stat_31653_lab,STAT 31653,,STAT 31653 Lab,lab,180,1,lab,statistics,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_stat_31653_lecture,STAT 31653,,STAT 31653 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_stat_41613_lab,STAT 41613,,STAT 41613 Lab,lab,180,1,lab,statistics,,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1.
+session_stat_41613_lecture,STAT 41613,,STAT 41613 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_stat_43878_lab,STAT 43878,,STAT 43878 Lab,lab,180,1,lab,statistics,room_statistics_lab,30,false,Synthetic laboratory block inferred from real enrollment data for 2022/2023 semester 1. Uses a dedicated statistics lab room.
+session_stat_43878_lecture,STAT 43878,,STAT 43878 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_zool_21702_lecture,ZOOL 21702,,ZOOL 21702 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_zool_21711_lecture,ZOOL 21711,,ZOOL 21711 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_zool_21722_lecture,ZOOL 21722,,ZOOL 21722 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_zool_31703_lecture,ZOOL 31703,,ZOOL 31703 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_zool_31713_lecture,ZOOL 31713,,ZOOL 31713 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_zool_31722_lecture,ZOOL 31722,,ZOOL 31722 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_zool_41703_lecture,ZOOL 41703,,ZOOL 41703 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_zool_41711_lecture,ZOOL 41711,,ZOOL 41711 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_zool_41722_lecture,ZOOL 41722,,ZOOL 41722 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_zool_41732_lecture,ZOOL 41732,,ZOOL 41732 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_zool_41752_lecture,ZOOL 41752,,ZOOL 41752 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_zool_41792_lecture,ZOOL 41792,,ZOOL 41792 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_zool_41802_lecture,ZOOL 41802,,ZOOL 41802 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_zool_41813_lecture,ZOOL 41813,,ZOOL 41813 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_zool_41823_lecture,ZOOL 41823,,ZOOL 41823 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_zool_41832_lecture,ZOOL 41832,,ZOOL 41832 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_zool_41842_lecture,ZOOL 41842,,ZOOL 41842 Lecture,lecture,60,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_zool_43742_lecture,ZOOL 43742,,ZOOL 43742 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
+session_zool_43948_lecture,ZOOL 43948,,ZOOL 43948 Lecture,lecture,120,1,lecture,,,,false,Seeded from real enrollment data for 2022/2023 semester 1.
