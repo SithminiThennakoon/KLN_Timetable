@@ -159,6 +159,10 @@ const localImportTemplates = {
       "batch",
       "student_hash",
     ],
+    rows: [
+      ["1", "CHEM 11612", "1", "2022/2023", "1", "PS", "2022", "stu_hash_0001"],
+      ["1", "AMAT 11113", "1", "2022/2023", "1", "PS", "2022", "stu_hash_0001"],
+    ],
   },
   rooms: {
     filename: "rooms_template.csv",
@@ -172,11 +176,19 @@ const localImportTemplates = {
       "location",
       "year_restriction",
     ],
+    rows: [
+      ["A7-H1", "A7 Hall 1", "180", "lecture", "", "A7 Building", ""],
+      ["CHEM-LAB-1", "Chemistry Lab 1", "30", "lab", "chemistry", "Science Block", ""],
+    ],
   },
   lecturers: {
     filename: "lecturers_template.csv",
     label: "Lecturers",
     columns: ["lecturer_code", "name", "email"],
+    rows: [
+      ["LECT-CHEM-01", "Dr. Silva", "silva@example.edu"],
+      ["LECT-MATH-01", "Prof. Perera", "perera@example.edu"],
+    ],
   },
   modules: {
     filename: "modules_template.csv",
@@ -188,6 +200,10 @@ const localImportTemplates = {
       "nominal_year",
       "semester_bucket",
       "is_full_year",
+    ],
+    rows: [
+      ["CHEM 11612", "Foundations of Chemistry", "Chemistry", "1", "1", "false"],
+      ["AMAT 11113", "Calculus I", "Applied Mathematics", "1", "1", "false"],
     ],
   },
   sessions: {
@@ -207,11 +223,45 @@ const localImportTemplates = {
       "allow_parallel_rooms",
       "notes",
     ],
+    rows: [
+      [
+        "CHEM11612-LEC",
+        "CHEM 11612",
+        "Chemistry Lecture",
+        "lecture",
+        "120",
+        "2",
+        "lecture",
+        "",
+        "",
+        "",
+        "false",
+        "Main weekly lecture",
+      ],
+      [
+        "CHEM11612-LAB",
+        "CHEM 11612",
+        "Chemistry Lab",
+        "lab",
+        "180",
+        "1",
+        "lab",
+        "chemistry",
+        "CHEM-LAB-1",
+        "30",
+        "true",
+        "Split if needed by lab capacity",
+      ],
+    ],
   },
   session_lecturers: {
     filename: "session_lecturers_template.csv",
     label: "Session Lecturers",
     columns: ["session_code", "lecturer_code"],
+    rows: [
+      ["CHEM11612-LEC", "LECT-CHEM-01"],
+      ["CHEM11612-LAB", "LECT-CHEM-01"],
+    ],
   },
 };
 
@@ -238,7 +288,8 @@ function buildLocalTemplateCsv(template) {
   if (!template?.columns?.length) {
     return "";
   }
-  return `${template.columns.join(",")}\n`;
+  const rows = [template.columns, ...(template.rows || [])];
+  return `${rows.map((row) => row.join(",")).join("\n")}\n`;
 }
 
 function buildWorkspaceSummary(workspace) {
