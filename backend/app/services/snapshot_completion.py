@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import math
 import re
+from collections import defaultdict
 
 from sqlalchemy.orm import Session, joinedload
 
@@ -361,6 +362,8 @@ REALISTIC_SNAPSHOT_ROOMS = [
         "notes": "Realistic seed room",
     },
 ]
+
+ROOM_WEEKLY_CAPACITY_MINUTES = 45 * 60
 
 
 def _dedupe_ids(values: list[int]) -> list[int]:
@@ -1493,6 +1496,116 @@ def seed_realistic_snapshot_missing_data(db: Session, *, import_run_id: int) -> 
                 if semester > 0:
                     modules_by_prefix_year_semester.setdefault((prefix, year, semester), []).append(module)
 
+    def find_matching_modules(code: str) -> list[dict]:
+        if not code:
+            return []
+        prefix = code.split()[0].strip().upper()
+        if not prefix:
+            return []
+        exact = modules_by_code.get(code, [])
+        if exact:
+            return exact
+        parts = code.split()
+        year = 0
+        semester = 0
+        if len(parts) > 1:
+            num_part = parts[-1] if parts[-1].isdigit() else ""
+            if len(num_part) >= 2:
+                year = int(num_part[0]) if num_part[0].isdigit() else 0
+                semester = int(num_part[1]) if num_part[1].isdigit() else 0
+        if year > 0 and semester > 0:
+            by_year_sem = modules_by_prefix_year_semester.get((prefix, year, semester), [])
+            if by_year_sem:
+                return by_year_sem
+        if year > 0:
+            by_year = modules_by_prefix_year.get((prefix, year), [])
+            if by_year:
+                return by_year
+        return modules_by_prefix.get(prefix, [])
+
+    legacy_module_code_by_client_key = {
+        module["client_key"]: module["code"] for module in legacy_seed["modules"]
+    }
+
+    existing_room_count_by_pool: dict[tuple[str, str | None], int] = {}
+    for room in [*workspace["rooms"], *created_rooms]:
+        pool_key = (room["room_type"], room.get("lab_type"))
+        existing_room_count_by_pool[pool_key] = (
+            existing_room_count_by_pool.get(pool_key, 0) + 1
+        )
+
+    required_room_minutes_by_pool: dict[tuple[str, str | None], int] = {}
+    for legacy_session in legacy_seed["sessions"]:
+        module_code = legacy_module_code_by_client_key.get(
+            legacy_session["module_client_key"]
+        )
+        if not module_code:
+            continue
+        matching_modules = find_matching_modules(module_code)
+        attendance_group_sizes = [
+            int(attendance_group_by_id[int(group_id)]["student_count"])
+            for module in matching_modules
+            for group_id in module.get("attendance_group_ids", [])
+            if int(group_id) in attendance_group_by_id
+        ]
+        split_count = max(
+            1,
+            _split_assignment_count(
+                attendance_group_sizes,
+                legacy_session.get("max_students_per_group"),
+            ),
+        )
+        pool_key = (
+            legacy_session.get("required_room_type") or "lecture",
+            legacy_session.get("required_lab_type"),
+        )
+        required_room_minutes_by_pool[pool_key] = (
+            required_room_minutes_by_pool.get(pool_key, 0)
+            + int(legacy_session.get("duration_minutes", 0) or 0)
+            * int(legacy_session.get("occurrences_per_week", 1) or 1)
+            * split_count
+        )
+
+    supplemental_rooms: list[dict] = []
+    for (room_type, lab_type), total_minutes in sorted(required_room_minutes_by_pool.items()):
+        required_count = max(1, math.ceil(total_minutes / ROOM_WEEKLY_CAPACITY_MINUTES))
+        existing_count = existing_room_count_by_pool.get((room_type, lab_type), 0)
+        if existing_count >= required_count:
+            continue
+        for ordinal in range(existing_count + 1, required_count + 1):
+            if room_type == "lab":
+                normalized_lab_type = (lab_type or "general").strip().lower()
+                client_key = f"seed_{normalized_lab_type}_lab_{ordinal}"
+                name = f"{normalized_lab_type.title()} Lab {ordinal}"
+                capacity = LAB_SPLIT_LIMIT_BY_TYPE.get(normalized_lab_type, 30)
+                location = "Supplemental Labs"
+            else:
+                client_key = f"seed_{room_type}_room_{ordinal}"
+                name = f"Supplemental {room_type.title()} Room {ordinal}"
+                capacity = 500 if room_type == "lecture" else 120
+                location = "Supplemental Teaching Block"
+            lowered_name = name.strip().lower()
+            if lowered_name in existing_room_names:
+                continue
+            existing_room_names.add(lowered_name)
+            supplemental_rooms.append(
+                {
+                    "client_key": client_key,
+                    "name": name,
+                    "capacity": capacity,
+                    "room_type": room_type,
+                    "lab_type": lab_type,
+                    "location": location,
+                    "year_restriction": None,
+                    "notes": "Demand-based supplemental seed room",
+                }
+            )
+
+    if supplemental_rooms:
+        create_snapshot_rooms_batch(
+            db, import_run_id=import_run_id, rooms=supplemental_rooms
+        )
+
     lecturers_to_create: list[dict] = []
     legacy_lecturer_by_client_key = {
         lecturer["client_key"]: lecturer for lecturer in legacy_seed["lecturers"]
@@ -1527,10 +1640,8 @@ def seed_realistic_snapshot_missing_data(db: Session, *, import_run_id: int) -> 
         db, import_run_id=import_run_id, lecturers=lecturers_to_create
     )
 
-    legacy_module_code_by_client_key = {
-        module["client_key"]: module["code"] for module in legacy_seed["modules"]
-    }
     required_lecturer_slots_by_prefix: dict[str, int] = {}
+    required_lecturer_minutes_by_prefix: dict[str, int] = {}
     for legacy_session in legacy_seed["sessions"]:
         module_code = legacy_module_code_by_client_key.get(
             legacy_session["module_client_key"]
@@ -1540,13 +1651,32 @@ def seed_realistic_snapshot_missing_data(db: Session, *, import_run_id: int) -> 
         prefix = module_code.split()[0].strip().upper()
         if not prefix:
             continue
+        matching_modules = find_matching_modules(module_code)
+        attendance_group_sizes = [
+            int(attendance_group_by_id[int(group_id)]["student_count"])
+            for module in matching_modules
+            for group_id in module.get("attendance_group_ids", [])
+            if int(group_id) in attendance_group_by_id
+        ]
         explicit_count = len(legacy_session.get("lecturer_client_keys", []))
-        required_count = explicit_count or (
-            2 if legacy_session.get("allow_parallel_rooms") else 1
+        split_count = _split_assignment_count(
+            attendance_group_sizes,
+            legacy_session.get("max_students_per_group"),
+        )
+        required_count = max(
+            explicit_count,
+            split_count,
+            2 if legacy_session.get("allow_parallel_rooms") else 1,
         )
         required_lecturer_slots_by_prefix[prefix] = max(
             required_lecturer_slots_by_prefix.get(prefix, 0),
             required_count,
+        )
+        required_lecturer_minutes_by_prefix[prefix] = (
+            required_lecturer_minutes_by_prefix.get(prefix, 0)
+            + int(legacy_session.get("duration_minutes", 0) or 0)
+            * int(legacy_session.get("occurrences_per_week", 1) or 1)
+            * required_count
         )
 
     existing_snapshot_lecturers = (
@@ -1564,7 +1694,12 @@ def seed_realistic_snapshot_missing_data(db: Session, *, import_run_id: int) -> 
             )
 
     placeholder_lecturers: list[dict] = []
+    lecturer_target_minutes = max(TARGET_WEEKLY_LECTURER_HOURS * 60, 1)
     for prefix, required_count in sorted(required_lecturer_slots_by_prefix.items()):
+        minute_based_count = math.ceil(
+            required_lecturer_minutes_by_prefix.get(prefix, 0) / lecturer_target_minutes
+        )
+        required_count = max(required_count, minute_based_count)
         existing_count = existing_counts_by_prefix.get(prefix, 0)
         for ordinal in range(existing_count + 1, required_count + 1):
             name = f"{prefix} Lecturer {ordinal}"
@@ -1594,12 +1729,19 @@ def seed_realistic_snapshot_missing_data(db: Session, *, import_run_id: int) -> 
     )
     lecturer_ids_by_prefix: dict[str, list[int]] = {}
     lecturer_id_by_client_key: dict[str, int] = {}
+    lecturer_minutes_by_id: dict[int, int] = defaultdict(int)
     for lecturer in snapshot_lecturers:
         name = lecturer.name or ""
         prefix = name.split(" Lecturer ")[0].strip().upper()
         lecturer_ids_by_prefix.setdefault(prefix, []).append(int(lecturer.id))
         if lecturer.client_key:
             lecturer_id_by_client_key[lecturer.client_key] = int(lecturer.id)
+
+    for shared_session in workspace["shared_sessions"]:
+        duration = int(shared_session.get("duration_minutes", 0) or 0)
+        occurrences = int(shared_session.get("occurrences_per_week", 1) or 1)
+        for lecturer_id in shared_session.get("lecturer_ids", []):
+            lecturer_minutes_by_id[int(lecturer_id)] += duration * occurrences
 
     room_id_by_client_key = {
         room.client_key: int(room.id)
@@ -1620,33 +1762,6 @@ def seed_realistic_snapshot_missing_data(db: Session, *, import_run_id: int) -> 
         module_code = legacy_module_code_by_client_key.get(legacy_session["module_client_key"])
         if not module_code:
             continue
-
-        def find_matching_modules(code: str) -> list[dict]:
-            if not code:
-                return []
-            prefix = code.split()[0].strip().upper()
-            if not prefix:
-                return []
-            exact = modules_by_code.get(code, [])
-            if exact:
-                return exact
-            parts = code.split()
-            year = 0
-            semester = 0
-            if len(parts) > 1:
-                num_part = parts[-1] if parts[-1].isdigit() else ""
-                if len(num_part) >= 2:
-                    year = int(num_part[0]) if num_part[0].isdigit() else 0
-                    semester = int(num_part[1]) if num_part[1].isdigit() else 0
-            if year > 0 and semester > 0:
-                by_year_sem = modules_by_prefix_year_semester.get((prefix, year, semester), [])
-                if by_year_sem:
-                    return by_year_sem
-            if year > 0:
-                by_year = modules_by_prefix_year.get((prefix, year), [])
-                if by_year:
-                    return by_year
-            return modules_by_prefix.get(prefix, [])
 
         matching_modules = find_matching_modules(module_code)
         if not matching_modules:
@@ -1674,12 +1789,41 @@ def seed_realistic_snapshot_missing_data(db: Session, *, import_run_id: int) -> 
             for client_key in legacy_session.get("lecturer_client_keys", [])
             if client_key in lecturer_id_by_client_key
         ]
-        if not lecturer_ids and module_prefix:
-            fallback_lecturers = lecturer_ids_by_prefix.get(module_prefix, [])
-            if legacy_session.get("allow_parallel_rooms"):
-                lecturer_ids = fallback_lecturers[:2]
-            else:
-                lecturer_ids = fallback_lecturers[:1]
+        split_count = _split_assignment_count(
+            [
+                int(attendance_group_by_id[int(group_id)]["student_count"])
+                for group_id in attendance_group_ids
+                if int(group_id) in attendance_group_by_id
+            ],
+            legacy_session.get("max_students_per_group"),
+        )
+        required_lecturer_count = max(
+            len(lecturer_ids),
+            split_count,
+            2 if legacy_session.get("allow_parallel_rooms") else 1,
+        )
+        if module_prefix:
+            prefix_pool = lecturer_ids_by_prefix.get(module_prefix, [])
+            prefix_pool_sorted = sorted(
+                prefix_pool,
+                key=lambda lecturer_id: (
+                    lecturer_minutes_by_id.get(int(lecturer_id), 0),
+                    int(lecturer_id),
+                ),
+            )
+            if len(lecturer_ids) < required_lecturer_count:
+                for lecturer_id in prefix_pool_sorted:
+                    if lecturer_id in lecturer_ids:
+                        continue
+                    lecturer_ids.append(lecturer_id)
+                    if len(lecturer_ids) >= required_lecturer_count:
+                        break
+            lecturer_ids = lecturer_ids[:required_lecturer_count]
+        session_minutes = int(legacy_session.get("duration_minutes", 0) or 0) * int(
+            legacy_session.get("occurrences_per_week", 1) or 1
+        )
+        for lecturer_id in lecturer_ids:
+            lecturer_minutes_by_id[int(lecturer_id)] += session_minutes
         shared_sessions_to_create.append(
             {
                 "client_key": legacy_session["client_key"],

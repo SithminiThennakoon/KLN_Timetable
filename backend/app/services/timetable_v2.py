@@ -186,6 +186,19 @@ def _partition_lecturers(
     return [tuple(items) for items in assignments]
 
 
+def _lecturer_chunks_for_splits(
+    lecturer_ids: tuple[int, ...],
+    split_count: int,
+    *,
+    allow_parallel_rooms: bool,
+) -> list[tuple[int, ...]]:
+    if allow_parallel_rooms:
+        return _partition_lecturers(lecturer_ids, split_count)
+    if split_count > 1 and lecturer_ids and len(lecturer_ids) >= split_count:
+        return _partition_lecturers(lecturer_ids, split_count)
+    return [lecturer_ids for _ in range(split_count)]
+
+
 def list_soft_constraint_options() -> list[SoftConstraintOption]:
     return list(SOFT_CONSTRAINTS.values())
 
@@ -443,6 +456,71 @@ def _build_snapshot_split_assignments(
     return assignments
 
 
+def _snapshot_split_audience_details(
+    session: SnapshotSharedSession,
+) -> dict[int, dict[str, object]]:
+    student_count_by_group_id = {
+        int(group.id): int(group.student_count)
+        for group in session.attendance_groups
+    }
+    student_hashes_by_group_id = {
+        int(group.id): sorted(
+            item.student.student_hash
+            for item in group.students
+            if item.student is not None and item.student.student_hash
+        )
+        for group in session.attendance_groups
+    }
+    study_year_by_group_id = {
+        int(group.id): int(group.study_year)
+        for group in session.attendance_groups
+    }
+
+    split_details: dict[int, dict[str, object]] = {}
+    group_offsets: dict[int, int] = defaultdict(int)
+    for split_assignment in _build_snapshot_split_assignments(session):
+        student_hashes: list[str] = []
+        study_years: set[int] = set()
+        attendance_group_ids: list[int] = []
+        whole_group_ids: list[int] = []
+        for group_id, fragment_size, _fragment_label in split_assignment.fragments:
+            group_id = int(group_id)
+            all_hashes = student_hashes_by_group_id.get(group_id, [])
+            start_index = group_offsets.get(group_id, 0)
+            end_index = start_index + int(fragment_size)
+            student_hashes.extend(all_hashes[start_index:end_index])
+            group_offsets[group_id] = end_index
+            attendance_group_ids.append(group_id)
+            if int(fragment_size) >= int(student_count_by_group_id.get(group_id, 0)):
+                whole_group_ids.append(group_id)
+            study_year = study_year_by_group_id.get(group_id)
+            if study_year is not None:
+                study_years.add(study_year)
+        split_details[int(split_assignment.split_index)] = {
+            "attendance_group_ids": tuple(sorted(set(whole_group_ids))),
+            "audience_group_ids": tuple(sorted(set(attendance_group_ids))),
+            "student_hashes": tuple(sorted(student_hashes)),
+            "study_years": tuple(sorted(study_years)),
+        }
+    return split_details
+
+
+def _snapshot_split_lecturer_ids(
+    session: SnapshotSharedSession,
+) -> dict[int, tuple[int, ...]]:
+    split_assignments = _build_snapshot_split_assignments(session)
+    lecturer_ids = tuple(sorted(int(item.id) for item in session.lecturers))
+    lecturer_chunks = _lecturer_chunks_for_splits(
+        lecturer_ids,
+        len(split_assignments),
+        allow_parallel_rooms=session.allow_parallel_rooms,
+    )
+    return {
+        int(split.split_index): tuple(chunk)
+        for split, chunk in zip(split_assignments, lecturer_chunks, strict=True)
+    }
+
+
 def _build_tasks(db: Session) -> list[SessionTask]:
     sessions = (
         db.query(V2Session)
@@ -469,10 +547,10 @@ def _build_tasks(db: Session) -> list[SessionTask]:
                 }
             )
         )
-        lecturer_chunks = (
-            _partition_lecturers(lecturer_ids, len(split_assignments))
-            if session.allow_parallel_rooms
-            else [lecturer_ids for _ in split_assignments]
+        lecturer_chunks = _lecturer_chunks_for_splits(
+            lecturer_ids,
+            len(split_assignments),
+            allow_parallel_rooms=session.allow_parallel_rooms,
         )
         study_year_by_group_id = {
             int(group.id): int(group.year)
@@ -567,20 +645,11 @@ def _build_snapshot_tasks(
         module_name = " / ".join(module_names) if module_names else session.name
 
         split_assignments = _build_snapshot_split_assignments(session)
-        student_membership_keys = tuple(
-            sorted(
-                {
-                    attendance_student.student.student_hash
-                    for group in session.attendance_groups
-                    for attendance_student in group.students
-                    if attendance_student.student is not None
-                }
-            )
-        )
-        lecturer_chunks = (
-            _partition_lecturers(lecturer_ids, len(split_assignments))
-            if session.allow_parallel_rooms
-            else [lecturer_ids for _ in split_assignments]
+        split_audience_details = _snapshot_split_audience_details(session)
+        lecturer_chunks = _lecturer_chunks_for_splits(
+            lecturer_ids,
+            len(split_assignments),
+            allow_parallel_rooms=session.allow_parallel_rooms,
         )
         study_year_by_group_id = {
             int(group.id): int(group.study_year)
@@ -590,6 +659,7 @@ def _build_snapshot_tasks(
             for split, assigned_lecturers in zip(
                 split_assignments, lecturer_chunks, strict=True
             ):
+                split_details = split_audience_details.get(int(split.split_index), {})
                 tasks.append(
                     SessionTask(
                         session_id=int(session.id),
@@ -608,15 +678,24 @@ def _build_snapshot_tasks(
                         if session.specific_room_id
                         else None,
                         lecturer_ids=assigned_lecturers,
-                        student_group_ids=split.student_group_ids,
-                        student_membership_keys=student_membership_keys,
+                        student_group_ids=tuple(
+                            split_details.get("attendance_group_ids", split.student_group_ids)
+                        ),
+                        student_membership_keys=tuple(
+                            split_details.get("student_hashes", tuple())
+                        ),
                         study_years=tuple(
-                            sorted(
-                                {
-                                    study_year_by_group_id[group_id]
-                                    for group_id in split.student_group_ids
-                                    if group_id in study_year_by_group_id
-                                }
+                            split_details.get(
+                                "study_years",
+                                tuple(
+                                    sorted(
+                                        {
+                                            study_year_by_group_id[group_id]
+                                            for group_id in split.student_group_ids
+                                            if group_id in study_year_by_group_id
+                                        }
+                                    )
+                                ),
                             )
                         ),
                         student_count=split.student_count,
@@ -3393,6 +3472,9 @@ def _snapshot_solution_entry_payload(solution: SnapshotTimetableSolution) -> lis
         ),
     ):
         session = entry.shared_session
+        split_lecturer_ids = set(
+            _snapshot_split_lecturer_ids(session).get(int(entry.split_index), tuple())
+        )
         split_map = {
             item.split_index: item for item in _build_snapshot_split_assignments(session)
         }
@@ -3442,7 +3524,11 @@ def _snapshot_solution_entry_payload(solution: SnapshotTimetableSolution) -> lis
                 "duration_minutes": int(entry.duration_minutes),
                 "occurrence_index": int(entry.occurrence_index),
                 "split_index": int(entry.split_index),
-                "lecturer_names": [lecturer.name for lecturer in session.lecturers],
+                "lecturer_names": [
+                    lecturer.name
+                    for lecturer in session.lecturers
+                    if int(lecturer.id) in split_lecturer_ids
+                ],
                 "student_group_names": group_labels,
                 "degree_path_labels": sorted(set(degree_path_labels)),
                 "total_students": int(split_assignment.student_count),
@@ -3876,6 +3962,7 @@ def build_snapshot_verification_payload(db: Session, import_run_id: int) -> dict
     ):
         session = entry.shared_session
         split_details = split_audience_details(session).get(int(entry.split_index), {})
+        split_lecturer_ids = _snapshot_split_lecturer_ids(session)
         entries.append(
             {
                 "shared_session_id": int(entry.shared_session_id),
@@ -3894,7 +3981,9 @@ def build_snapshot_verification_payload(db: Session, import_run_id: int) -> dict
                     "location": entry.room.location,
                     "year_restriction": entry.room.year_restriction,
                 },
-                "lecturer_ids": [int(item.id) for item in session.lecturers],
+                "lecturer_ids": list(
+                    split_lecturer_ids.get(int(entry.split_index), tuple())
+                ),
                 "curriculum_module_ids": [int(item.id) for item in session.curriculum_modules],
                 "attendance_group_ids": split_details.get(
                     "attendance_group_ids",
