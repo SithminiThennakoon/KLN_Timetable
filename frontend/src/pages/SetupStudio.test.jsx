@@ -410,4 +410,98 @@ describe("SetupStudio", () => {
     });
     expect(await screen.findByText(/Shared session repaired in the current snapshot\./i)).toBeInTheDocument();
   });
+
+  it("lists room-related session blockers in the targeted repair queue", async () => {
+    timetableStudioService.listImportRuns.mockResolvedValue({
+      runs: [
+        {
+          import_run_id: 77,
+          source_file: "students_processed_TT_J.csv",
+          status: "materialized",
+          selected_academic_year: "2022/2023",
+        },
+      ],
+    });
+    timetableStudioService.getImportWorkspace.mockResolvedValue({
+      ...emptyWorkspace(),
+      import_run_id: 77,
+      lecturers: [{ id: 10, name: "Dr Silva", email: "silva@example.com", notes: null }],
+      rooms: [
+        {
+          id: 20,
+          name: "Tiny Lab",
+          capacity: 20,
+          room_type: "lab",
+          lab_type: "chemistry",
+          location: "A7",
+          year_restriction: null,
+          notes: null,
+        },
+      ],
+      attendance_groups: [
+        {
+          id: 30,
+          programme_id: 1,
+          programme_path_id: null,
+          academic_year: "2022/2023",
+          study_year: 1,
+          label: "PS Y1 General",
+          student_count: 80,
+        },
+      ],
+      curriculum_modules: [
+        {
+          id: 40,
+          code: "CHEM 11612",
+          name: "Foundations of Chemistry",
+          subject_name: "Chemistry",
+          nominal_year: 1,
+          semester_bucket: 1,
+          is_full_year: false,
+          attendance_group_ids: [30],
+        },
+      ],
+      shared_sessions: [
+        {
+          id: 50,
+          name: "Chemistry Practical",
+          session_type: "lab",
+          duration_minutes: 180,
+          occurrences_per_week: 1,
+          required_room_type: "lab",
+          required_lab_type: "chemistry",
+          specific_room_id: 20,
+          max_students_per_group: null,
+          allow_parallel_rooms: false,
+          notes: null,
+          lecturer_ids: [10],
+          curriculum_module_ids: [40],
+          attendance_group_ids: [30],
+        },
+      ],
+      readiness: {
+        ready: false,
+        import_needed: [],
+        repair_needed: [
+          {
+            key: "room-capacity-50",
+            title: "Specific room capacity is too small",
+            detail: "Chemistry Practical has no room that can host it in required room Tiny Lab.",
+            action: "Repair sessions",
+            form: "session",
+          },
+        ],
+        warnings: [],
+      },
+    });
+
+    renderSetupStudio();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Utilities" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open" }));
+
+    expect(await screen.findByText("Chemistry Practical")).toBeInTheDocument();
+    expect(screen.getByText(/Missing room assignment\./i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Repair Session" })).toBeInTheDocument();
+  });
 });

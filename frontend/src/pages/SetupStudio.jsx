@@ -68,6 +68,30 @@ function buildSessionFormFromWorkspaceSession(session) {
   };
 }
 
+function describeSessionRepairNeeds(session, readinessBlocking) {
+  const missing = [];
+  if (!session.lecturer_ids?.length) {
+    missing.push("lecturers");
+  }
+  if (!session.curriculum_module_ids?.length) {
+    missing.push("module links");
+  }
+  if (!session.attendance_group_ids?.length) {
+    missing.push("attendance groups");
+  }
+  const roomIssues = readinessBlocking.filter(
+    (item) =>
+      item.form === "session" &&
+      (item.key === `room-mismatch-${session.id}` ||
+        item.key === `lab-mismatch-${session.id}` ||
+        item.key === `room-capacity-${session.id}`)
+  );
+  if (roomIssues.length > 0) {
+    missing.push("room assignment");
+  }
+  return missing;
+}
+
 const supportCsvDefinitions = [
   {
     key: "rooms",
@@ -461,9 +485,15 @@ function SetupStudio() {
         (session) =>
           !session.lecturer_ids?.length ||
           !session.curriculum_module_ids?.length ||
-          !session.attendance_group_ids?.length
+          !session.attendance_group_ids?.length ||
+          readinessBlocking.some((item) =>
+            item.form === "session" &&
+            (item.key === `room-mismatch-${session.id}` ||
+              item.key === `lab-mismatch-${session.id}` ||
+              item.key === `room-capacity-${session.id}`)
+          )
       ),
-    [workspace]
+    [workspace, readinessBlocking]
   );
 
   async function refreshRecentRuns() {
@@ -1208,16 +1238,7 @@ function SetupStudio() {
               <h3>Repair Queue</h3>
               <div className="constraint-list">
                 {sessionsNeedingRepair.map((session) => {
-                  const missing = [];
-                  if (!session.lecturer_ids?.length) {
-                    missing.push("lecturers");
-                  }
-                  if (!session.curriculum_module_ids?.length) {
-                    missing.push("module links");
-                  }
-                  if (!session.attendance_group_ids?.length) {
-                    missing.push("attendance groups");
-                  }
+                  const missing = describeSessionRepairNeeds(session, readinessBlocking);
                   return (
                     <div key={session.id} className="constraint-row static">
                       <div>
