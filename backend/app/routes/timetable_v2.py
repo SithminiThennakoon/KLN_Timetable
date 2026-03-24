@@ -5,7 +5,7 @@ import logging
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -51,6 +51,16 @@ from app.services.import_materialization import (
     materialize_import_run,
     summarize_import_run,
 )
+from app.services.import_templates import (
+    get_import_template,
+    list_import_templates,
+    render_import_template_csv,
+)
+from app.services.lecturer_csv_import import import_lecturers_csv
+from app.services.module_csv_import import import_modules_csv
+from app.services.room_csv_import import import_rooms_csv
+from app.services.session_csv_import import import_sessions_csv
+from app.services.session_lecturer_csv_import import import_session_lecturers_csv
 from app.services.snapshot_completion import (
     build_legacy_dataset_from_import_run,
     build_import_workspace,
@@ -134,6 +144,14 @@ async def _write_upload_to_temp_file(upload: UploadFile) -> Path:
     return Path(handle.name)
 
 
+def _csv_download_response(filename: str, content: str) -> Response:
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/dataset", response_model=DatasetResponse)
 def get_dataset_summary(db: Session = Depends(get_db)):
     return {"summary": DatasetSummary(**dataset_summary(db))}
@@ -165,6 +183,20 @@ def get_lookups(
     db: Session = Depends(get_db),
 ):
     return lookup_options(db, import_run_id=import_run_id)
+
+
+@router.get("/imports/templates", response_model=dict)
+def get_import_templates():
+    return {"templates": list_import_templates()}
+
+
+@router.get("/imports/templates/{template_name}", response_model=None)
+def download_import_template(template_name: str):
+    rendered = render_import_template_csv(template_name)
+    if rendered is None:
+        raise HTTPException(status_code=404, detail="Import template not found")
+    filename, content = rendered
+    return _csv_download_response(filename, content)
 
 
 @router.get("/imports/enrollment-analysis", response_model=ImportAnalysisResponse)
@@ -403,6 +435,29 @@ async def materialize_enrollment_import_from_upload(
         temp_path.unlink(missing_ok=True)
 
 
+async def _run_csv_import_upload(
+    *,
+    file: UploadFile | None,
+    missing_file_detail: str,
+    importer,
+) -> dict:
+    if file is None:
+        raise HTTPException(status_code=400, detail=missing_file_detail)
+
+    temp_path = await _write_upload_to_temp_file(file)
+    try:
+        return importer(str(temp_path))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        detail = str(exc)
+        if "was not found" in detail.lower():
+            raise HTTPException(status_code=404, detail=detail) from exc
+        raise HTTPException(status_code=400, detail=detail) from exc
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
 @router.get(
     "/imports/{import_run_id}/snapshot",
     response_model=SnapshotCompletionResponse,
@@ -412,6 +467,107 @@ def get_import_snapshot_completion(import_run_id: int, db: Session = Depends(get
         return list_snapshot_completion(db, import_run_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/imports/{import_run_id}/modules-upload", response_model=dict)
+async def upload_modules_csv(
+    import_run_id: int,
+    db: Session = Depends(get_db),
+    file: UploadFile | None = File(default=None),
+):
+    try:
+        payload = await _run_csv_import_upload(
+            file=file,
+            missing_file_detail="Modules CSV file is required.",
+            importer=lambda path: import_modules_csv(db, import_run_id=import_run_id, csv_path=path),
+        )
+        db.commit()
+        return payload
+    except HTTPException:
+        db.rollback()
+        raise
+
+
+@router.post("/imports/{import_run_id}/rooms-upload", response_model=dict)
+async def upload_rooms_csv(
+    import_run_id: int,
+    db: Session = Depends(get_db),
+    file: UploadFile | None = File(default=None),
+):
+    try:
+        payload = await _run_csv_import_upload(
+            file=file,
+            missing_file_detail="Rooms CSV file is required.",
+            importer=lambda path: import_rooms_csv(db, import_run_id=import_run_id, csv_path=path),
+        )
+        db.commit()
+        return payload
+    except HTTPException:
+        db.rollback()
+        raise
+
+
+@router.post("/imports/{import_run_id}/lecturers-upload", response_model=dict)
+async def upload_lecturers_csv(
+    import_run_id: int,
+    db: Session = Depends(get_db),
+    file: UploadFile | None = File(default=None),
+):
+    try:
+        payload = await _run_csv_import_upload(
+            file=file,
+            missing_file_detail="Lecturers CSV file is required.",
+            importer=lambda path: import_lecturers_csv(
+                db, import_run_id=import_run_id, csv_path=path
+            ),
+        )
+        db.commit()
+        return payload
+    except HTTPException:
+        db.rollback()
+        raise
+
+
+@router.post("/imports/{import_run_id}/sessions-upload", response_model=dict)
+async def upload_sessions_csv(
+    import_run_id: int,
+    db: Session = Depends(get_db),
+    file: UploadFile | None = File(default=None),
+):
+    try:
+        payload = await _run_csv_import_upload(
+            file=file,
+            missing_file_detail="Sessions CSV file is required.",
+            importer=lambda path: import_sessions_csv(
+                db, import_run_id=import_run_id, csv_path=path
+            ),
+        )
+        db.commit()
+        return payload
+    except HTTPException:
+        db.rollback()
+        raise
+
+
+@router.post("/imports/{import_run_id}/session-lecturers-upload", response_model=dict)
+async def upload_session_lecturers_csv(
+    import_run_id: int,
+    db: Session = Depends(get_db),
+    file: UploadFile | None = File(default=None),
+):
+    try:
+        payload = await _run_csv_import_upload(
+            file=file,
+            missing_file_detail="Session lecturers CSV file is required.",
+            importer=lambda path: import_session_lecturers_csv(
+                db, import_run_id=import_run_id, csv_path=path
+            ),
+        )
+        db.commit()
+        return payload
+    except HTTPException:
+        db.rollback()
+        raise
 
 
 @router.get(
