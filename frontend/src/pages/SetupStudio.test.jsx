@@ -353,6 +353,85 @@ describe("SetupStudio", () => {
     });
   });
 
+  it("shows a blocking overlay while analyzing the enrollment CSV", async () => {
+    let resolveAnalyze;
+    timetableStudioService.analyzeEnrollmentImport.mockReturnValue(
+      new Promise((resolve) => {
+        resolveAnalyze = resolve;
+      })
+    );
+
+    renderSetupStudio();
+
+    const fileInput = screen.getAllByLabelText("Import CSV")[0];
+    const file = new File(["CoursePathNo,CourseCode\n1,CHEM 11612\n"], "student_enrollments.csv", {
+      type: "text/csv",
+    });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "Analyze Import" }));
+
+    expect(await screen.findByText("Working on your import")).toBeInTheDocument();
+    expect(screen.getByText(/Analyzing the enrollment CSV/i)).toBeInTheDocument();
+
+    resolveAnalyze({
+      source_file: "students_processed_TT_J.csv",
+      summary: {
+        total_rows: 2,
+        unique_students: 1,
+      },
+      buckets: [],
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Working on your import")).not.toBeInTheDocument();
+    });
+  });
+
+  it("shows a blocking overlay while reviewing the enrollment import", async () => {
+    timetableStudioService.analyzeEnrollmentImport.mockResolvedValue({
+      source_file: "students_processed_TT_J.csv",
+      summary: {
+        total_rows: 2,
+        unique_students: 1,
+      },
+      buckets: [],
+    });
+
+    let resolveReview;
+    timetableStudioService.previewEnrollmentImport.mockReturnValue(
+      new Promise((resolve) => {
+        resolveReview = resolve;
+      })
+    );
+
+    renderSetupStudio();
+
+    const fileInput = screen.getAllByLabelText("Import CSV")[0];
+    const file = new File(["CoursePathNo,CourseCode\n1,CHEM 11612\n"], "student_enrollments.csv", {
+      type: "text/csv",
+    });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "Analyze Import" }));
+    await screen.findByText("Needs Review");
+
+    fireEvent.click(screen.getByRole("button", { name: "Review Import" }));
+
+    expect(await screen.findByText("Working on your import")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Reviewing the enrollment CSV decisions and building the projection/i)
+    ).toBeInTheDocument();
+
+    resolveReview({
+      projection_summary: {
+        projected_rows: 2,
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Working on your import")).not.toBeInTheDocument();
+    });
+  });
+
   it("opens a targeted repair flow for sessions missing lecturer links", async () => {
     timetableStudioService.listImportRuns.mockResolvedValue({
       runs: [

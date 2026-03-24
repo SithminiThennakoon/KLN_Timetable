@@ -65,11 +65,21 @@ class SnapshotWorkspaceFlowTests(unittest.TestCase):
         import_run_id = self._materialize_import()
 
         readiness = build_import_readiness_summary(self.db, import_run_id)
+        import_needed_details = [item["detail"] for item in readiness["import_needed"]]
 
         self.assertFalse(readiness["ready"])
-        self.assertIn("Import rooms.csv or add rooms manually.", readiness["blocking"])
-        self.assertIn("Import lecturers.csv or add lecturers manually.", readiness["blocking"])
-        self.assertIn("Import sessions.csv or add teaching sessions manually.", readiness["blocking"])
+        self.assertIn(
+            "Import rooms.csv or add only the missing rooms manually.",
+            import_needed_details,
+        )
+        self.assertIn(
+            "Import lecturers.csv or add only the missing lecturers manually.",
+            import_needed_details,
+        )
+        self.assertIn(
+            "Import sessions.csv or add the missing shared sessions manually.",
+            import_needed_details,
+        )
         self.assertGreater(readiness["counts"]["curriculum_modules"], 0)
         self.assertGreater(readiness["counts"]["attendance_groups"], 0)
 
