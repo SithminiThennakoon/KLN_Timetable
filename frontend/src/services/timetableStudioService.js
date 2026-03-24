@@ -40,15 +40,12 @@ async function downloadCsvTemplate(path) {
 }
 
 export const timetableStudioService = {
-  getDatasetSummary: () => apiClient.get("/v2/dataset"),
-  getFullDataset: () => apiClient.get("/v2/dataset/full"),
   getLookups: (importRunId = null) => {
     if (!importRunId) {
       return apiClient.get("/v2/lookups");
     }
     return apiClient.get(`/v2/lookups?import_run_id=${importRunId}`);
   },
-  loadDemoDataset: (profile = "realistic") => apiClient.post(`/v2/dataset/demo?profile=${profile}`, {}),
   analyzeEnrollmentImport: (file) => {
     return apiClient.postForm("/v2/imports/enrollment-analysis-upload", buildImportFormData({}, file));
   },
@@ -81,8 +78,6 @@ export const timetableStudioService = {
       buildSimpleCsvFormData(file)
     ),
   getImportWorkspace: (importRunId) => apiClient.get(`/v2/imports/${importRunId}/workspace`),
-  publishImportWorkspaceToLegacyDataset: (importRunId) =>
-    apiClient.post(`/v2/imports/${importRunId}/publish-legacy`, {}),
   seedRealisticSnapshotMissingData: (importRunId) =>
     apiClient.post(`/v2/imports/${importRunId}/snapshot/seed-realistic-missing-data`, {}),
   getImportSnapshot: (importRunId) => apiClient.get(`/v2/imports/${importRunId}/snapshot`),
@@ -116,7 +111,6 @@ export const timetableStudioService = {
   deleteSnapshotSharedSession: (importRunId, sharedSessionId) =>
     apiClient.delete(`/v2/imports/${importRunId}/snapshot/shared-sessions/${sharedSessionId}`),
   loadEnrollmentImport: (payload) => apiClient.post("/v2/imports/enrollment-load", payload),
-  saveDataset: (payload) => apiClient.post("/v2/dataset", payload),
   generate: (payload) => apiClient.post("/v2/generate", payload),
   latestGeneration: (importRunId = null) => {
     if (!importRunId) {
