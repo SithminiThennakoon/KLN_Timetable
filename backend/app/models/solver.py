@@ -30,7 +30,7 @@ class AttendanceGroup(Base):
     )
     label = Column(String(255), nullable=False)
     derivation_basis = Column(String(64), nullable=False, default="student_membership")
-    membership_signature = Column(Text, nullable=False)
+    membership_signature = Column(String(40), nullable=False)
     interpretation_confidence = Column(String(32), nullable=True)
     student_count = Column(Integer, nullable=False, default=0)
     notes = Column(Text, nullable=True)
