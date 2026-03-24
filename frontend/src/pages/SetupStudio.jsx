@@ -806,7 +806,7 @@ function SetupStudio() {
               only the missing local issues.
             </p>
             {activeImportRunId ? (
-              <p className="helper-copy">
+              <p className="helper-copy setup-context-chip">
                 Active snapshot #{activeImportRunId}
                 {workspace.selected_academic_year
                   ? ` for ${workspace.selected_academic_year}`
@@ -843,7 +843,7 @@ function SetupStudio() {
         {loadingWorkspace && <div className="info-banner">Loading the current import snapshot...</div>}
 
         {showUtilities && (
-          <section className="studio-card">
+          <section className="studio-card setup-utilities-card">
             <div className="studio-header compact">
               <div>
                 <h2>Utilities</h2>
@@ -904,10 +904,12 @@ function SetupStudio() {
             Start with student enrolments, then add whichever support CSVs the admin can export
             from the main system. Anything still missing can be repaired locally below.
           </p>
-          <div className="summary-grid">
-            <article className="summary-item">
+          <div className="summary-grid setup-import-grid">
+            <article className="summary-item setup-import-card setup-import-card-primary">
               <span>Student Enrolments</span>
-              <strong>{activeImportRunId ? "Snapshot available" : "Creates the snapshot"}</strong>
+              <strong className="setup-card-status">
+                {activeImportRunId ? "Snapshot available" : "Creates the snapshot"}
+              </strong>
               <p>
                 Import the registration CSV that tells the system which students take which modules.
               </p>
@@ -959,7 +961,7 @@ function SetupStudio() {
                   {working ? "Working..." : "Analyze Import"}
                 </button>
               </div>
-              <p className="helper-copy">
+              <p className="helper-copy setup-inline-note">
                 {selectedFile
                   ? `Selected file: ${selectedFile.name}`
                   : useSampleCsv
@@ -1038,7 +1040,7 @@ function SetupStudio() {
               )}
 
               {projection && (
-                <div className="info-banner">
+                <div className="info-banner setup-inline-banner">
                   Review result: {projection.projection_summary?.projected_rows ?? 0} projected
                   rows are ready to materialize into a working snapshot.
                 </div>
@@ -1048,9 +1050,9 @@ function SetupStudio() {
             {supportCsvDefinitions.map((definition) => {
               const template = importTemplates.find((item) => item.name === definition.templateName);
               return (
-                <article key={definition.key} className="summary-item">
+                <article key={definition.key} className="summary-item setup-import-card">
                   <span>{definition.title}</span>
-                  <strong>
+                  <strong className="setup-card-status">
                     {activeImportRunId
                       ? definition.statusFromWorkspace(workspace)
                       : "Waiting for student enrolments"}
@@ -1168,7 +1170,7 @@ function SetupStudio() {
           )}
 
           {sessionsNeedingRepair.length > 0 && (
-            <div className="schema-notes compact">
+            <div className="schema-notes compact setup-repair-queue">
               <h3>Repair Queue</h3>
               <div className="constraint-list">
                 {sessionsNeedingRepair.map((session) => {
