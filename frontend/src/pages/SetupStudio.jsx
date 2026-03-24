@@ -142,7 +142,13 @@ const supportCsvDefinitions = [
     templateName: "session_lecturers",
     upload: "uploadSessionLecturersCsv",
     detail: "Links existing sessions to existing lecturers.",
-    statusFromWorkspace: () => "Import after sessions + lecturers",
+    statusFromWorkspace: (workspace) => {
+      const linkCount = workspace.shared_sessions.reduce(
+        (total, session) => total + (session.lecturer_ids?.length || 0),
+        0
+      );
+      return linkCount > 0 ? `${linkCount} imported` : "Import needed";
+    },
   },
 ];
 
@@ -663,6 +669,7 @@ function SetupStudio() {
       return;
     }
     setWorking(true);
+    setBlockingMessage("Analyzing the enrollment CSV...");
     setError("");
     setStatus("");
     try {
@@ -679,6 +686,7 @@ function SetupStudio() {
     } catch (err) {
       setError(err.message || "Failed to analyze the enrollment CSV.");
     } finally {
+      setBlockingMessage("");
       setWorking(false);
     }
   }
@@ -688,6 +696,7 @@ function SetupStudio() {
       return;
     }
     setWorking(true);
+    setBlockingMessage("Reviewing the enrollment CSV decisions and building the projection...");
     setError("");
     setStatus("");
     try {
@@ -702,6 +711,7 @@ function SetupStudio() {
     } catch (err) {
       setError(err.message || "Failed to review the analyzed import.");
     } finally {
+      setBlockingMessage("");
       setWorking(false);
     }
   }
