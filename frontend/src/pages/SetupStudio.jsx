@@ -1102,42 +1102,55 @@ function SetupStudio() {
                 </div>
               )}
             </article>
+          </div>
 
-            {supportCsvDefinitions.map((definition) => {
-              const template = importTemplates.find((item) => item.name === definition.templateName);
-              return (
-                <article key={definition.key} className="summary-item setup-import-card">
-                  <span>{definition.title}</span>
-                  <strong className="setup-card-status">
-                    {activeImportRunId
-                      ? definition.statusFromWorkspace(workspace)
-                      : "Waiting for student enrolments"}
-                  </strong>
-                  <p>{template?.description || definition.detail}</p>
-                  <div className="studio-actions">
-                    <button
-                      type="button"
-                      className="ghost-btn"
-                      onClick={() => handleDownloadTemplate(definition.templateName)}
-                    >
-                      Download Template
-                    </button>
-                    <label className="ghost-btn file-picker-btn">
-                      Import CSV
-                      <input
-                        type="file"
-                        accept=".csv,text/csv"
-                        hidden
-                        disabled={!activeImportRunId}
-                        onChange={(event) =>
-                          handleSupportCsvUpload(definition, event.target.files?.[0] || null)
-                        }
-                      />
-                    </label>
+          <div className="setup-support-imports">
+            <div className="setup-support-imports-head">
+              <h3>Support CSVs</h3>
+              <p className="helper-copy">
+                Import these after the enrollment snapshot exists. Keep templates for format, use
+                the fixture pack for realistic full-flow testing.
+              </p>
+            </div>
+            <div className="constraint-list">
+              {supportCsvDefinitions.map((definition) => {
+                const template = importTemplates.find((item) => item.name === definition.templateName);
+                return (
+                  <div key={definition.key} className="constraint-row static setup-support-row">
+                    <div>
+                      <strong>{definition.title}</strong>
+                      <span>{template?.description || definition.detail}</span>
+                      <span className="setup-support-status">
+                        {activeImportRunId
+                          ? definition.statusFromWorkspace(workspace)
+                          : "Waiting for student enrolments"}
+                      </span>
+                    </div>
+                    <div className="studio-actions">
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        onClick={() => handleDownloadTemplate(definition.templateName)}
+                      >
+                        Download Template
+                      </button>
+                      <label className="ghost-btn file-picker-btn">
+                        Import CSV
+                        <input
+                          type="file"
+                          accept=".csv,text/csv"
+                          hidden
+                          disabled={!activeImportRunId}
+                          onChange={(event) =>
+                            handleSupportCsvUpload(definition, event.target.files?.[0] || null)
+                          }
+                        />
+                      </label>
+                    </div>
                   </div>
-                </article>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </section>
 
