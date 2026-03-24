@@ -898,7 +898,7 @@ function SetupStudio() {
           </section>
         )}
 
-        <section className="studio-card">
+        <section className="studio-card setup-import-section">
           <h2>Import Files</h2>
           <p className="helper-copy">
             Start with student enrolments, then add whichever support CSVs the admin can export
@@ -1085,7 +1085,7 @@ function SetupStudio() {
           </div>
         </section>
 
-        <section className="studio-card">
+        <section className="studio-card setup-summary-section">
           <h2>What The System Understood</h2>
           <p className="helper-copy">
             This section confirms the interpreted structure. It is intentionally summary-first
@@ -1106,7 +1106,7 @@ function SetupStudio() {
           )}
         </section>
 
-        <section className="studio-card">
+        <section className="studio-card setup-readiness-section">
           <div className="studio-header compact">
             <div>
               <h2>Missing For Generation</h2>
@@ -1212,7 +1212,7 @@ function SetupStudio() {
           )}
         </section>
 
-        <section className="studio-card">
+        <section className="studio-card setup-continue-section">
           <h2>Continue</h2>
           <p className="helper-copy">
             Move to generation only when the blocking list is empty. Warnings can remain if you are
