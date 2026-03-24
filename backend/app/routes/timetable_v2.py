@@ -161,6 +161,14 @@ def _csv_download_response(filename: str, content: str) -> Response:
     )
 
 
+def _build_materialized_import_response(db: Session, import_run_id: int) -> dict:
+    response = summarize_import_run(db, import_run_id)
+    workspace = build_import_workspace(db, import_run_id)
+    workspace["readiness"] = build_import_readiness_summary(db, import_run_id)
+    response["workspace"] = workspace
+    return response
+
+
 @router.get("/dataset", response_model=DatasetResponse)
 def get_dataset_summary(db: Session = Depends(get_db)):
     return {"summary": DatasetSummary(**dataset_summary(db))}
@@ -402,7 +410,7 @@ def materialize_enrollment_import(
             allowed_attempts=tuple(payload.allowed_attempts),
         )
         db.commit()
-        return summarize_import_run(db, int(import_run.id))
+        return _build_materialized_import_response(db, int(import_run.id))
     except FileNotFoundError as exc:
         db.rollback()
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -443,7 +451,7 @@ async def materialize_enrollment_import_from_upload(
                 notes="Bundled sample CSV materialized via upload-compatible route.",
             )
             db.commit()
-            response = summarize_import_run(db, int(import_run.id))
+            response = _build_materialized_import_response(db, int(import_run.id))
             logger.info(
                 "Enrollment materialize completed import_run_id=%s counts=%s",
                 response.get("import_run_id"),
@@ -469,7 +477,7 @@ async def materialize_enrollment_import_from_upload(
         )
         import_run.source_file = file.filename or "uploaded.csv"
         db.commit()
-        response = summarize_import_run(db, int(import_run.id))
+        response = _build_materialized_import_response(db, int(import_run.id))
         logger.info(
             "Enrollment materialize completed import_run_id=%s counts=%s",
             response.get("import_run_id"),

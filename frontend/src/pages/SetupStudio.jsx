@@ -475,6 +475,7 @@ function SetupStudio() {
   const [workspace, setWorkspace] = useState(emptyWorkspace);
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
   const [working, setWorking] = useState(false);
+  const [blockingMessage, setBlockingMessage] = useState("");
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
@@ -606,6 +607,17 @@ function SetupStudio() {
     }
   }
 
+  function applyWorkspaceSnapshot(importRunId, nextWorkspace, nextStatus = "") {
+    setWorkspace(nextWorkspace || emptyWorkspace);
+    setActiveImportRunId(importRunId);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(activeImportRunStorageKey, String(importRunId));
+    }
+    if (nextStatus) {
+      setStatus(nextStatus);
+    }
+  }
+
   useEffect(() => {
     timetableStudioService
       .listImportTemplates()
@@ -699,6 +711,7 @@ function SetupStudio() {
       return;
     }
     setWorking(true);
+    setBlockingMessage("Materializing the enrollment import into a working snapshot...");
     setError("");
     setStatus("");
     try {
@@ -710,13 +723,23 @@ function SetupStudio() {
       setProjection(null);
       setSelectedFile(null);
       setBucketOverrides({});
-      await loadWorkspace(
-        response.import_run_id,
-        `The CSV import has been materialized into snapshot #${response.import_run_id}.`
-      );
+      if (response.workspace) {
+        applyWorkspaceSnapshot(
+          response.import_run_id,
+          response.workspace,
+          `The CSV import has been materialized into snapshot #${response.import_run_id}.`
+        );
+      } else {
+        await loadWorkspace(
+          response.import_run_id,
+          `The CSV import has been materialized into snapshot #${response.import_run_id}.`
+        );
+      }
+      await refreshRecentRuns();
     } catch (err) {
       setError(err.message || "Failed to materialize the import into a working snapshot.");
     } finally {
+      setBlockingMessage("");
       setWorking(false);
     }
   }
@@ -925,6 +948,16 @@ function SetupStudio() {
 
   return (
     <div className="page-shell">
+      {blockingMessage ? (
+        <div className="setup-blocking-overlay" role="status" aria-live="polite" aria-busy="true">
+          <div className="setup-blocking-dialog">
+            <div className="setup-blocking-spinner" aria-hidden="true" />
+            <strong>Working on your import</strong>
+            <p>{blockingMessage}</p>
+            <span>This can take a while for large enrollment CSVs.</span>
+          </div>
+        </div>
+      ) : null}
       <div className="panel studio-panel">
         <div className="studio-header">
           <div>
@@ -1300,7 +1333,7 @@ function SetupStudio() {
                       onClick={handleUseImport}
                       disabled={working}
                     >
-                      Use This Import
+                      {blockingMessage ? "Materializing..." : "Use This Import"}
                     </button>
                   </div>
                 </div>
@@ -1336,6 +1369,12 @@ function SetupStudio() {
                           ? definition.statusFromWorkspace(workspace)
                           : "Waiting for student enrolments"}
                       </span>
+                      {!activeImportRunId && (
+                        <span className="setup-support-note">
+                          Import becomes available after you review and use the student enrolment
+                          CSV.
+                        </span>
+                      )}
                     </div>
                     <div className="studio-actions">
                       <button

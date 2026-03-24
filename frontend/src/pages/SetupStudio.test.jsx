@@ -213,10 +213,10 @@ describe("SetupStudio", () => {
         programmes: 1,
         attendance_groups: 2,
       },
-    });
-    timetableStudioService.getImportWorkspace.mockResolvedValue({
-      ...emptyWorkspace(),
-      import_run_id: 88,
+      workspace: {
+        ...emptyWorkspace(),
+        import_run_id: 88,
+      },
     });
 
     renderSetupStudio();
@@ -295,11 +295,62 @@ describe("SetupStudio", () => {
         file
       );
       expect(timetableStudioService.analyzeEnrollmentImport).toHaveBeenCalledWith(file);
-      expect(timetableStudioService.getImportWorkspace).toHaveBeenCalledWith(88);
+      expect(timetableStudioService.getImportWorkspace).not.toHaveBeenCalled();
     });
     expect(
       await screen.findByText(/The CSV import has been materialized into snapshot #88\./i)
     ).toBeInTheDocument();
+  });
+
+  it("shows a blocking materialization overlay while using the enrollment import", async () => {
+    timetableStudioService.analyzeEnrollmentImport.mockResolvedValue({
+      source_file: "students_processed_TT_J.csv",
+      summary: {
+        total_rows: 2,
+        unique_students: 1,
+      },
+      buckets: [],
+    });
+
+    let resolveMaterialize;
+    timetableStudioService.materializeEnrollmentImport.mockReturnValue(
+      new Promise((resolve) => {
+        resolveMaterialize = resolve;
+      })
+    );
+
+    renderSetupStudio();
+
+    const fileInput = screen.getAllByLabelText("Import CSV")[0];
+    const file = new File(["CoursePathNo,CourseCode\n1,CHEM 11612\n"], "student_enrollments.csv", {
+      type: "text/csv",
+    });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "Analyze Import" }));
+
+    await screen.findByText("Needs Review");
+    fireEvent.click(screen.getByRole("button", { name: "Use This Import" }));
+
+    expect(await screen.findByText("Working on your import")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Materializing the enrollment import into a working snapshot/i)
+    ).toBeInTheDocument();
+
+    resolveMaterialize({
+      import_run_id: 91,
+      counts: {
+        programmes: 1,
+        attendance_groups: 1,
+      },
+      workspace: {
+        ...emptyWorkspace(),
+        import_run_id: 91,
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Working on your import")).not.toBeInTheDocument();
+    });
   });
 
   it("opens a targeted repair flow for sessions missing lecturer links", async () => {

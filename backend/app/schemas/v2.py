@@ -343,6 +343,7 @@ class MaterializedImportResponse(BaseModel):
     selected_academic_year: str | None = None
     allowed_attempts: list[str] = Field(default_factory=list)
     counts: MaterializedImportCounts
+    workspace: "ImportWorkspaceResponse | None" = None
 
 
 class SnapshotSeedResponse(BaseModel):
