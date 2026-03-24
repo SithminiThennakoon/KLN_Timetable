@@ -422,7 +422,10 @@ function SetupStudio() {
     [activeImportRunId, workspace]
   );
   const summaryCards = useMemo(() => buildWorkspaceSummary(workspace), [workspace]);
-  const readiness = useMemo(() => buildReadiness(workspace), [workspace]);
+  const readiness = useMemo(
+    () => workspace.readiness || buildReadiness(workspace),
+    [workspace]
+  );
 
   async function refreshRecentRuns() {
     try {
@@ -912,8 +915,15 @@ function SetupStudio() {
           </div>
 
           <div className="studio-actions">
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => handleDownloadTemplate("student_enrollments")}
+            >
+              Download Template
+            </button>
             <label className="ghost-btn file-picker-btn">
-              Choose Enrollment CSV
+              Import CSV
               <input
                 type="file"
                 accept=".csv,text/csv"
@@ -949,7 +959,7 @@ function SetupStudio() {
               onClick={handleAnalyze}
               disabled={!hasChosenImportSource || working}
             >
-              {working ? "Working..." : "Analyze Enrollment CSV"}
+              {working ? "Working..." : "Analyze Import"}
             </button>
           </div>
 

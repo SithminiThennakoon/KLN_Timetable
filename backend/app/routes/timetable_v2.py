@@ -63,6 +63,7 @@ from app.services.session_csv_import import import_sessions_csv
 from app.services.session_lecturer_csv_import import import_session_lecturers_csv
 from app.services.snapshot_completion import (
     build_legacy_dataset_from_import_run,
+    build_import_readiness_summary,
     list_import_runs,
     build_import_workspace,
     create_snapshot_lecturers_batch,
@@ -585,7 +586,9 @@ async def upload_session_lecturers_csv(
 )
 def get_import_workspace(import_run_id: int, db: Session = Depends(get_db)):
     try:
-        return build_import_workspace(db, import_run_id)
+        workspace = build_import_workspace(db, import_run_id)
+        workspace["readiness"] = build_import_readiness_summary(db, import_run_id)
+        return workspace
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

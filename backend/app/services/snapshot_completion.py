@@ -751,20 +751,51 @@ def list_import_runs(db: Session, *, limit: int = 20) -> list[dict]:
 
 def build_import_readiness_summary(db: Session, import_run_id: int) -> dict:
     workspace = build_import_workspace(db, import_run_id)
+    return _build_import_readiness_summary_from_workspace(db, import_run_id, workspace)
+
+
+def _build_import_readiness_summary_from_workspace(
+    db: Session, import_run_id: int, workspace: dict
+) -> dict:
     room_by_id = {int(room["id"]): room for room in workspace["rooms"]}
     attendance_group_by_id = {
         int(group["id"]): group for group in workspace["attendance_groups"]
     }
 
-    blocking: list[str] = []
-    warnings: list[str] = []
+    import_needed: list[dict] = []
+    repair_needed: list[dict] = []
+    warnings: list[dict] = []
 
     if not workspace["rooms"]:
-        blocking.append("Import rooms.csv or add rooms manually.")
+        import_needed.append(
+            {
+                "key": "rooms-empty",
+                "title": "Rooms not imported",
+                "detail": "Import rooms.csv or add only the missing rooms manually.",
+                "action": "Add rooms",
+                "form": "room",
+            }
+        )
     if not workspace["lecturers"]:
-        blocking.append("Import lecturers.csv or add lecturers manually.")
+        import_needed.append(
+            {
+                "key": "lecturers-empty",
+                "title": "Lecturers not imported",
+                "detail": "Import lecturers.csv or add only the missing lecturers manually.",
+                "action": "Add lecturers",
+                "form": "lecturer",
+            }
+        )
     if not workspace["shared_sessions"]:
-        blocking.append("Import sessions.csv or add teaching sessions manually.")
+        import_needed.append(
+            {
+                "key": "sessions-empty",
+                "title": "Sessions not imported",
+                "detail": "Import sessions.csv or add the missing shared sessions manually.",
+                "action": "Add shared sessions",
+                "form": "session",
+            }
+        )
 
     sessions_without_lecturers = sum(
         1 for session in workspace["shared_sessions"] if not session["lecturer_ids"]
@@ -781,13 +812,35 @@ def build_import_readiness_summary(db: Session, import_run_id: int) -> dict:
     )
 
     if sessions_without_lecturers:
-        blocking.append(f"{sessions_without_lecturers} session still need lecturers.")
+        repair_needed.append(
+            {
+                "key": "sessions-missing-lecturers",
+                "title": "Sessions missing lecturers",
+                "detail": f"{sessions_without_lecturers} session still need lecturers.",
+                "action": "Repair lecturers",
+                "form": "lecturer",
+            }
+        )
     if sessions_without_attendance_groups:
-        blocking.append(
-            f"{sessions_without_attendance_groups} session still need attendance groups."
+        repair_needed.append(
+            {
+                "key": "sessions-missing-attendance",
+                "title": "Sessions missing attendance groups",
+                "detail": f"{sessions_without_attendance_groups} session still need attendance groups.",
+                "action": "Repair sessions",
+                "form": "session",
+            }
         )
     if sessions_without_module_links:
-        blocking.append(f"{sessions_without_module_links} session still need module links.")
+        repair_needed.append(
+            {
+                "key": "sessions-missing-modules",
+                "title": "Sessions missing module links",
+                "detail": f"{sessions_without_module_links} session still need module links.",
+                "action": "Repair sessions",
+                "form": "session",
+            }
+        )
 
     invalid_lab_sessions = sum(
         1
@@ -798,7 +851,13 @@ def build_import_readiness_summary(db: Session, import_run_id: int) -> dict:
         )
     )
     if invalid_lab_sessions:
-        warnings.append(f"{invalid_lab_sessions} lab-like session are not 180 minutes.")
+        warnings.append(
+            {
+                "key": "invalid-lab-duration",
+                "title": "Lab-like sessions use unusual durations",
+                "detail": f"{invalid_lab_sessions} lab-like session are not 180 minutes.",
+            }
+        )
 
     split_without_parallel = sum(
         1
@@ -807,7 +866,11 @@ def build_import_readiness_summary(db: Session, import_run_id: int) -> dict:
     )
     if split_without_parallel:
         warnings.append(
-            f"{split_without_parallel} split-limited session do not allow parallel rooms."
+            {
+                "key": "split-without-parallel",
+                "title": "Split sessions may need parallel rooms",
+                "detail": f"{split_without_parallel} split-limited session do not allow parallel rooms.",
+            }
         )
 
     for session in workspace["shared_sessions"]:
@@ -820,13 +883,25 @@ def build_import_readiness_summary(db: Session, import_run_id: int) -> dict:
         required_room_type = session.get("required_room_type")
         required_lab_type = session.get("required_lab_type")
         if required_room_type and room["room_type"] != required_room_type:
-            blocking.append(
-                f'{session["name"]} has no room that can host it in required room {room["name"]}.'
+            repair_needed.append(
+                {
+                    "key": f"room-mismatch-{session['id']}",
+                    "title": "Specific room does not match session requirement",
+                    "detail": f'{session["name"]} has no room that can host it in required room {room["name"]}.',
+                    "action": "Repair sessions",
+                    "form": "session",
+                }
             )
             continue
         if required_lab_type and room.get("lab_type") != required_lab_type:
-            blocking.append(
-                f'{session["name"]} has no room that can host it in required room {room["name"]}.'
+            repair_needed.append(
+                {
+                    "key": f"lab-mismatch-{session['id']}",
+                    "title": "Specific room lab type does not match session requirement",
+                    "detail": f'{session["name"]} has no room that can host it in required room {room["name"]}.',
+                    "action": "Repair sessions",
+                    "form": "session",
+                }
             )
             continue
         session_group_ids = [
@@ -839,8 +914,14 @@ def build_import_readiness_summary(db: Session, import_run_id: int) -> dict:
                 if group_id in attendance_group_by_id
             )
             if total_students > int(room["capacity"]):
-                blocking.append(
-                    f'{session["name"]} has no room that can host it in required room {room["name"]}.'
+                repair_needed.append(
+                    {
+                        "key": f"room-capacity-{session['id']}",
+                        "title": "Specific room capacity is too small",
+                        "detail": f'{session["name"]} has no room that can host it in required room {room["name"]}.',
+                        "action": "Repair sessions",
+                        "form": "session",
+                    }
                 )
 
     from app.services.timetable_v2 import _build_snapshot_tasks, _precheck_diagnostics
@@ -850,10 +931,19 @@ def build_import_readiness_summary(db: Session, import_run_id: int) -> dict:
     )
     diagnostics = _precheck_diagnostics(tasks, rooms, lecturer_names, group_names)
     for issue in diagnostics:
-        if issue not in blocking and issue not in warnings:
+        known_details = {
+            item["detail"] for item in [*import_needed, *repair_needed, *warnings]
+        }
+        if issue not in known_details:
             if "has no room that can host" in issue:
                 continue
-            warnings.append(issue)
+            warnings.append(
+                {
+                    "key": f"precheck-{len(warnings) + 1}",
+                    "title": "Solver precheck warning",
+                    "detail": issue,
+                }
+            )
 
     counts = {
         "programmes": len(workspace["programmes"]),
@@ -867,8 +957,10 @@ def build_import_readiness_summary(db: Session, import_run_id: int) -> dict:
 
     return {
         "import_run_id": int(import_run_id),
-        "ready": len(blocking) == 0,
-        "blocking": blocking,
+        "ready": len(import_needed) == 0 and len(repair_needed) == 0,
+        "import_needed": import_needed,
+        "repair_needed": repair_needed,
+        "blocking": [*import_needed, *repair_needed],
         "warnings": warnings,
         "counts": counts,
     }

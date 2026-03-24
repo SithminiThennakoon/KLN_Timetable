@@ -81,7 +81,7 @@ describe("SetupStudio", () => {
     expect(screen.getByText("What The System Understood")).toBeInTheDocument();
     expect(screen.getByText("Missing For Generation")).toBeInTheDocument();
     expect(screen.getByText("No CSV selected yet.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Analyze Enrollment CSV" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Analyze Import" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Continue to Generate" })).toBeDisabled();
   });
 
@@ -208,7 +208,7 @@ describe("SetupStudio", () => {
     renderSetupStudio();
 
     fireEvent.click(screen.getByRole("button", { name: "Use Sample CSV" }));
-    fireEvent.click(screen.getByRole("button", { name: "Analyze Enrollment CSV" }));
+    fireEvent.click(screen.getByRole("button", { name: "Analyze Import" }));
 
     expect(await screen.findByText(/CSV Year 2 does not match nominal module year 1\./i)).toBeInTheDocument();
 

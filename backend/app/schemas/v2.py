@@ -497,6 +497,21 @@ class ImportWorkspaceAttendanceGroupResponse(BaseModel):
     student_count: int
 
 
+class ImportWorkspaceIssueResponse(BaseModel):
+    key: str
+    title: str
+    detail: str
+    action: str | None = None
+    form: str | None = None
+
+
+class ImportWorkspaceReadinessResponse(BaseModel):
+    ready: bool
+    import_needed: list[ImportWorkspaceIssueResponse] = Field(default_factory=list)
+    repair_needed: list[ImportWorkspaceIssueResponse] = Field(default_factory=list)
+    warnings: list[ImportWorkspaceIssueResponse] = Field(default_factory=list)
+
+
 class ImportWorkspaceResponse(BaseModel):
     import_run_id: int
     selected_academic_year: str | None = None
@@ -511,3 +526,4 @@ class ImportWorkspaceResponse(BaseModel):
     lecturers: list[SnapshotLecturerResponse] = Field(default_factory=list)
     rooms: list[SnapshotRoomResponse] = Field(default_factory=list)
     shared_sessions: list[SnapshotSharedSessionResponse] = Field(default_factory=list)
+    readiness: ImportWorkspaceReadinessResponse | None = None

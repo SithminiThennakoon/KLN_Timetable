@@ -230,6 +230,18 @@ class ImportCsvRoutesTestCase(unittest.TestCase):
         self.assertIn("rooms_created", payload)
         self.assertIn("shared_sessions_created", payload)
 
+    def test_workspace_includes_structured_readiness(self):
+        import_run_id, _module_id = self._seed_materialized_import_run()
+
+        response = self.client.get(f"/api/v2/imports/{import_run_id}/workspace")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("readiness", payload)
+        self.assertFalse(payload["readiness"]["ready"])
+        self.assertGreaterEqual(len(payload["readiness"]["import_needed"]), 1)
+        self.assertEqual(payload["readiness"]["repair_needed"], [])
+
 
 if __name__ == "__main__":
     unittest.main()
