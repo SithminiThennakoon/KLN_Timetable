@@ -26,12 +26,6 @@ vi.mock("../services/timetableStudioService", () => ({
     createSnapshotLecturersBatch: vi.fn(),
     createSnapshotRoomsBatch: vi.fn(),
     createSnapshotSharedSessionsBatch: vi.fn(),
-    updateSnapshotLecturer: vi.fn(),
-    updateSnapshotRoom: vi.fn(),
-    updateSnapshotSharedSession: vi.fn(),
-    deleteSnapshotLecturer: vi.fn(),
-    deleteSnapshotRoom: vi.fn(),
-    deleteSnapshotSharedSession: vi.fn(),
   },
 }));
 
@@ -64,33 +58,24 @@ describe("SetupStudio", () => {
     window.localStorage.clear();
   });
 
-  it("shows snapshot-first import guidance before a CSV is chosen", async () => {
+  it("shows the minimal import-first setup flow before a CSV is chosen", async () => {
     renderSetupStudio();
 
     expect(await screen.findByText("Setup Studio")).toBeInTheDocument();
-    expect(screen.getByText("Start with the easiest path")).toBeInTheDocument();
-    expect(screen.getByText("Import Student Enrolments")).toBeInTheDocument();
-    expect(screen.getByText("Review The CSV")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Start Demo with Sample Data" })).toBeInTheDocument();
+    expect(screen.getByText("Import Files")).toBeInTheDocument();
+    expect(screen.getByText("What The System Understood")).toBeInTheDocument();
+    expect(screen.getByText("Missing For Generation")).toBeInTheDocument();
+    expect(screen.getByText("No CSV selected yet.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Analyze Enrollment CSV" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Continue to Generate" })).toBeDisabled();
   });
 
-  it("shows restored snapshot guidance and opens generation when setup is ready", async () => {
+  it("restores the snapshot and allows generation when setup is ready", async () => {
     window.localStorage.setItem("kln_active_import_run_id", "77");
     timetableStudioService.getImportWorkspace.mockResolvedValue({
       ...emptyWorkspace(),
-      programmes: [
-        {
-          id: 1,
-          code: "PS",
-          name: "Physical Science",
-          duration_years: 3,
-          intake_label: "PS Intake",
-        },
-      ],
-      lecturers: [
-        { id: 10, name: "Dr Silva", email: "silva@example.com", notes: null },
-      ],
+      programmes: [{ id: 1, code: "PS", name: "Physical Science", duration_years: 3 }],
+      lecturers: [{ id: 10, name: "Dr Silva", email: "silva@example.com", notes: null }],
       rooms: [
         {
           id: 20,
@@ -151,11 +136,11 @@ describe("SetupStudio", () => {
     expect(
       await screen.findByText(/Restored snapshot #77\. Continue completing the missing teaching details\./i)
     ).toBeInTheDocument();
-    expect(screen.getByText(/Student enrolments are loaded\. Now complete the missing teaching details\./i)).toBeInTheDocument();
-    const openGenerateButtons = screen.getAllByRole("button", { name: "Open Generate" });
+    expect(screen.getByText("This snapshot is currently generation-ready.")).toBeInTheDocument();
+    const openGenerateButtons = screen.getAllByRole("button", { name: /generate/i });
     expect(openGenerateButtons.length).toBeGreaterThan(0);
 
-    fireEvent.click(openGenerateButtons[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Open Generate" }));
 
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith("/generate");
@@ -207,7 +192,7 @@ describe("SetupStudio", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Review Import" }));
 
-    expect(await screen.findByText("Review result")).toBeInTheDocument();
+    expect(await screen.findByText(/Review result:/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Use This Import" }));
 

@@ -24,12 +24,6 @@ vi.mock("../services/timetableStudioService", () => ({
     createSnapshotLecturersBatch: vi.fn(),
     createSnapshotRoomsBatch: vi.fn(),
     createSnapshotSharedSessionsBatch: vi.fn(),
-    updateSnapshotLecturer: vi.fn(),
-    updateSnapshotRoom: vi.fn(),
-    updateSnapshotSharedSession: vi.fn(),
-    deleteSnapshotLecturer: vi.fn(),
-    deleteSnapshotRoom: vi.fn(),
-    deleteSnapshotSharedSession: vi.fn(),
   },
 }));
 
@@ -47,7 +41,7 @@ function workspaceWithSnapshot() {
   };
 }
 
-describe("SetupStudio snapshot-first UI", () => {
+describe("SetupStudio minimal setup UI", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     window.localStorage.clear();
@@ -61,17 +55,16 @@ describe("SetupStudio snapshot-first UI", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Import Student Enrolments")).toBeInTheDocument();
-    expect(screen.getByText("Start with the easiest path")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Start Demo with Sample Data" })
-    ).toBeInTheDocument();
-    expect(screen.getByText("Review The CSV")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Analyze Enrollment CSV" })).toBeDisabled();
-    expect(screen.getByText("No CSV selected yet")).toBeInTheDocument();
+    expect(await screen.findByText("Import Files")).toBeInTheDocument();
+    expect(screen.getAllByText("Student Enrolments").length).toBeGreaterThan(0);
+    expect(screen.getByText("What The System Understood")).toBeInTheDocument();
+    expect(screen.getByText("Missing For Generation")).toBeInTheDocument();
+    expect(screen.getByText("Continue")).toBeInTheDocument();
+    expect(screen.queryByText("Edit Manually")).not.toBeInTheDocument();
+    expect(screen.queryByText("CSV Uploads")).not.toBeInTheDocument();
   });
 
-  it("restores the snapshot completion flow when an active import exists", async () => {
+  it("shows the snapshot gap-fill forms when an active import exists", async () => {
     window.localStorage.setItem("kln_active_import_run_id", "77");
 
     render(
@@ -83,12 +76,10 @@ describe("SetupStudio snapshot-first UI", () => {
     expect(
       await screen.findByText(/Restored snapshot #77\. Continue completing the missing teaching details\./i)
     ).toBeInTheDocument();
-    expect(screen.getByText("Complete Missing Details")).toBeInTheDocument();
-    expect(
-      screen.getAllByRole("button", { name: "Fill Demo Teaching Data" }).length
-    ).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Review Before Generate" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Edit Manually" })).not.toBeInTheDocument();
-    expect(screen.queryByText("CSV Uploads")).not.toBeInTheDocument();
+    expect(screen.getByText("Gap Fill Forms")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add Lecturer" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add Room" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add Shared Session" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Fill Demo Teaching Data" })).toBeInTheDocument();
   });
 });
