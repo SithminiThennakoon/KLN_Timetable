@@ -476,6 +476,114 @@ function ToggleList({ title, items, selectedIds, onToggle, renderLabel, emptyMes
   );
 }
 
+function SearchableLinkPicker({
+  title,
+  items,
+  selectedIds,
+  onToggle,
+  emptyMessage,
+  searchLabel,
+  searchPlaceholder,
+  selectedLabel,
+  availableLabel,
+  getSearchText,
+  renderItem,
+  getRemoveAriaLabel,
+}) {
+  const [search, setSearch] = useState("");
+
+  const selectedItems = useMemo(
+    () => items.filter((item) => selectedIds.includes(item.id)),
+    [items, selectedIds]
+  );
+  const availableItems = useMemo(
+    () =>
+      items.filter((item) => {
+        if (selectedIds.includes(item.id)) {
+          return false;
+        }
+        const query = search.trim().toLowerCase();
+        if (!query) {
+          return true;
+        }
+        return getSearchText(item).toLowerCase().includes(query);
+      }),
+    [getSearchText, items, search, selectedIds]
+  );
+
+  return (
+    <div className="schema-notes compact">
+      <h3>{title}</h3>
+      {items.length === 0 ? (
+        <p className="helper-copy">{emptyMessage}</p>
+      ) : (
+        <div className="selection-picker">
+          <label className="selection-picker-search">
+            <span>{searchLabel}</span>
+            <input
+              type="text"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={searchPlaceholder}
+              aria-label={searchLabel}
+            />
+          </label>
+
+          <div className="selection-picker-selected">
+            <span className="selection-picker-label">
+              {selectedLabel} {selectedItems.length > 0 ? `(${selectedItems.length})` : ""}
+            </span>
+            {selectedItems.length > 0 ? (
+              <div className="selection-chip-row">
+                {selectedItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="selection-chip"
+                    onClick={() => onToggle(item.id)}
+                    aria-label={getRemoveAriaLabel(item)}
+                  >
+                    {renderItem(item)}
+                    <span className="selection-chip-remove" aria-hidden="true">
+                      ×
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="helper-copy">Nothing selected yet.</p>
+            )}
+          </div>
+
+          <div className="selection-picker-results">
+            <span className="selection-picker-label">{availableLabel}</span>
+            {availableItems.length > 0 ? (
+              <div className="selection-result-list" role="list">
+                {availableItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="selection-result-row"
+                    onClick={() => onToggle(item.id)}
+                    aria-label={`Add ${getSearchText(item)}`}
+                  >
+                    {renderItem(item)}
+                    <span className="selection-result-action">Add</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="helper-copy">
+                {search.trim() ? "No items match the current search." : "All available items are already selected."}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SetupStudio() {
   const navigate = useNavigate();
   const [activeImportRunId, setActiveImportRunId] = useState(null);
@@ -1942,37 +2050,64 @@ function SetupStudio() {
                   </label>
                 </div>
 
-                <ToggleList
+                <SearchableLinkPicker
                   title="Link modules"
                   items={workspace.curriculum_modules}
                   selectedIds={sessionForm.curriculum_module_ids}
                   onToggle={(id) => toggleSessionValue("curriculum_module_ids", id)}
-                  renderLabel={(item) => ({ title: item.code, detail: item.name })}
                   emptyMessage="No modules are available in this snapshot yet."
+                  searchLabel="Search modules"
+                  searchPlaceholder="Search by code or name"
+                  selectedLabel="Selected modules"
+                  availableLabel="Available modules"
+                  getSearchText={(item) => `${item.code} ${item.name}`}
+                  renderItem={(item) => (
+                    <div className="selection-item-copy">
+                      <strong>{item.code}</strong>
+                      <span>{item.name}</span>
+                    </div>
+                  )}
+                  getRemoveAriaLabel={(item) => `Remove module ${item.code}`}
                 />
 
-                <ToggleList
+                <SearchableLinkPicker
                   title="Link attendance groups"
                   items={workspace.attendance_groups}
                   selectedIds={sessionForm.attendance_group_ids}
                   onToggle={(id) => toggleSessionValue("attendance_group_ids", id)}
-                  renderLabel={(item) => ({
-                    title: item.label,
-                    detail: `${item.student_count} students`,
-                  })}
                   emptyMessage="No attendance groups are available in this snapshot yet."
+                  searchLabel="Search attendance groups"
+                  searchPlaceholder="Search by group label"
+                  selectedLabel="Selected attendance groups"
+                  availableLabel="Available attendance groups"
+                  getSearchText={(item) => item.label}
+                  renderItem={(item) => (
+                    <div className="selection-item-copy">
+                      <strong>{item.label}</strong>
+                      <span>{item.student_count} students</span>
+                    </div>
+                  )}
+                  getRemoveAriaLabel={(item) => `Remove attendance group ${item.label}`}
                 />
 
-                <ToggleList
+                <SearchableLinkPicker
                   title="Link lecturers"
                   items={workspace.lecturers}
                   selectedIds={sessionForm.lecturer_ids}
                   onToggle={(id) => toggleSessionValue("lecturer_ids", id)}
-                  renderLabel={(item) => ({
-                    title: item.name,
-                    detail: item.email || "No email",
-                  })}
                   emptyMessage="No lecturers are available in this snapshot yet."
+                  searchLabel="Search lecturers"
+                  searchPlaceholder="Search by name or email"
+                  selectedLabel="Selected lecturers"
+                  availableLabel="Available lecturers"
+                  getSearchText={(item) => `${item.name} ${item.email || ""}`}
+                  renderItem={(item) => (
+                    <div className="selection-item-copy">
+                      <strong>{item.name}</strong>
+                      <span>{item.email || "No email"}</span>
+                    </div>
+                  )}
+                  getRemoveAriaLabel={(item) => `Remove lecturer ${item.name}`}
                 />
 
                 <div className="studio-actions">
