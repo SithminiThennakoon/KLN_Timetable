@@ -2612,10 +2612,12 @@ select {
   inset: 0;
   background: rgba(6, 9, 13, 0.3);
   backdrop-filter: blur(2px);
+  pointer-events: none;
 }
 
 .ob-tour-spotlight {
   position: absolute;
+  pointer-events: none;
   border-radius: 18px;
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.18),
