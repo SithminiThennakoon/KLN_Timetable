@@ -1167,6 +1167,7 @@ def view_timetable(
 def export_timetable(
     mode: str = Query(default="admin"),
     export_format: str = Query(default="csv"),
+    scope: str = Query(default="whole_week"),
     import_run_id: int | None = Query(default=None),
     lecturer_id: int | None = Query(default=None),
     student_group_id: int | None = Query(default=None),
@@ -1186,6 +1187,6 @@ def export_timetable(
             path_id=path_id,
             study_year=study_year,
         )
-        return export_view(view_payload, export_format)
+        return export_view(view_payload, export_format, scope)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

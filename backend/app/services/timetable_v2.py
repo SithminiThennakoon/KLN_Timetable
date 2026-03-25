@@ -4179,9 +4179,10 @@ def build_view_payload(
     }
 
 
-def export_view(view_payload: dict, export_format: str) -> ExportResponse:
+def export_view(view_payload: dict, export_format: str, scope: str = "whole_week") -> ExportResponse:
     entries = view_payload["solution"]["entries"]
     filename_root = view_payload["mode"]
+    filename_suffix = "daily-bundle" if scope == "daily_bundle" else "week"
 
     if export_format == "csv":
         buffer = io.StringIO()
@@ -4219,7 +4220,7 @@ def export_view(view_payload: dict, export_format: str) -> ExportResponse:
             )
         data = buffer.getvalue().encode("utf-8")
         return ExportResponse(
-            filename=f"{filename_root}-timetable.csv",
+            filename=f"{filename_root}-timetable-{filename_suffix}.csv",
             content_type="text/csv",
             content=base64.b64encode(data).decode("ascii"),
         )
@@ -4249,7 +4250,7 @@ def export_view(view_payload: dict, export_format: str) -> ExportResponse:
             buffer.write("\n")
         data = buffer.getvalue().encode("utf-8")
         return ExportResponse(
-            filename=f"{filename_root}-timetable.xls",
+            filename=f"{filename_root}-timetable-{filename_suffix}.xls",
             content_type="application/vnd.ms-excel",
             content=base64.b64encode(data).decode("ascii"),
         )
@@ -4263,7 +4264,7 @@ def export_view(view_payload: dict, export_format: str) -> ExportResponse:
     content_type = "application/pdf" if export_format == "pdf" else "image/png"
     extension = export_format
     return ExportResponse(
-        filename=f"{filename_root}-timetable.{extension}",
+        filename=f"{filename_root}-timetable-{filename_suffix}.{extension}",
         content_type=content_type,
         content=base64.b64encode(data).decode("ascii"),
     )

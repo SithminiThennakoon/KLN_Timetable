@@ -160,8 +160,9 @@ export const timetableStudioService = {
     if (importRunId) params.set("import_run_id", importRunId);
     return apiClient.get(`/v2/views?${params.toString()}`);
   },
-  exportView: ({ mode, format, lecturerId, studentGroupId, degreeId, pathId, studyYear, importRunId }) => {
+  exportView: ({ mode, format, scope, lecturerId, studentGroupId, degreeId, pathId, studyYear, importRunId }) => {
     const params = new URLSearchParams({ mode, export_format: format });
+    if (scope) params.set("scope", scope);
     if (lecturerId) params.set("lecturer_id", lecturerId);
     if (studentGroupId) params.set("student_group_id", studentGroupId);
     if (degreeId) params.set("degree_id", degreeId);

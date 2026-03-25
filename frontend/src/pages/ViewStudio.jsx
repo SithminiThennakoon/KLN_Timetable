@@ -208,6 +208,399 @@ function downloadBlob(filename, blob) {
   URL.revokeObjectURL(url);
 }
 
+function collectActiveDays(entries = []) {
+  return days.filter((day) => entries.some((entry) => entry.day === day));
+}
+
+function buildExportFilename(mode, suffix, extension) {
+  return `${mode}-timetable-${suffix}.${extension}`;
+}
+
+function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  let line = "";
+  let cursorY = y;
+  words.forEach((word) => {
+    const candidate = line ? `${line} ${word}` : word;
+    if (ctx.measureText(candidate).width > maxWidth && line) {
+      ctx.fillText(line, x, cursorY);
+      line = word;
+      cursorY += lineHeight;
+    } else {
+      line = candidate;
+    }
+  });
+  if (line) {
+    ctx.fillText(line, x, cursorY);
+    cursorY += lineHeight;
+  }
+  return cursorY;
+}
+
+function createCanvas(width, height) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("Canvas export is not supported in this browser.");
+  }
+  return { canvas, ctx };
+}
+
+async function canvasToBlob(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob);
+      } else {
+        reject(new Error("Failed to render image export."));
+      }
+    }, "image/png");
+  });
+}
+
+function drawDayGrid(ctx, x, y, width, height, minuteHeight, dayLabel) {
+  ctx.fillStyle = "#11161a";
+  ctx.fillRect(x, y, width, height);
+  ctx.fillStyle = "#465462";
+  ctx.fillRect(x, y, width, 36);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 16px Georgia, serif";
+  ctx.fillText(dayLabel, x + 16, y + 23);
+
+  ctx.strokeStyle = "rgba(255,255,255,0.1)";
+  for (let minute = calendarStartMinute; minute <= calendarEndMinute; minute += 60) {
+    const lineY = y + 36 + (minute - calendarStartMinute) * minuteHeight;
+    ctx.beginPath();
+    ctx.moveTo(x, lineY);
+    ctx.lineTo(x + width, lineY);
+    ctx.stroke();
+  }
+}
+
+function drawEntryCard(ctx, entry, x, y, width, height) {
+  const toneClass = getEntryToneClass(entry);
+  const sessionShort = compactSessionName(entry.module_code, entry.session_name);
+  ctx.fillStyle = toneClass === "is-lab" ? "#2f7c82" : "#3d6f9e";
+  ctx.beginPath();
+  ctx.roundRect(x, y, width, height, 10);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.16)";
+  ctx.stroke();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 13px Georgia, serif";
+  ctx.fillText(entry.module_code, x + 10, y + 18);
+
+  ctx.font = "11px Arial";
+  ctx.fillStyle = "rgba(255,255,255,0.92)";
+  ctx.fillText(`${formatMinute(entry.start_minute)}-${formatMinute(entry.start_minute + entry.duration_minutes)}`, x + 10, y + 34);
+  ctx.fillText(entry.room_name, x + 10, y + 48);
+
+  if (height >= 66 && sessionShort) {
+    drawWrappedText(ctx, sessionShort, x + 10, y + 64, width - 20, 12);
+  }
+  if (height >= 90) {
+    ctx.fillStyle = "rgba(255,255,255,0.86)";
+    drawWrappedText(ctx, compactLecturerNames(entry.lecturer_names), x + 10, y + 80, width - 20, 12);
+  }
+}
+
+function renderDailyCanvas(view, day, { detailed = false } = {}) {
+  const minuteHeight = 0.9;
+  const timeWidth = 78;
+  const bodyWidth = 960;
+  const headerHeight = 112;
+  const gridHeaderHeight = 36;
+  const calendarHeight = (calendarEndMinute - calendarStartMinute) * minuteHeight + gridHeaderHeight;
+  const detailRows = detailed
+    ? view.solution.entries.filter((entry) => entry.day === day).sort((a, b) => a.start_minute - b.start_minute)
+    : [];
+  const detailHeight = detailRows.length > 0 ? Math.max(140, detailRows.length * 22 + 44) : 0;
+  const width = timeWidth + bodyWidth + 48;
+  const height = headerHeight + calendarHeight + detailHeight + 40;
+  const { canvas, ctx } = createCanvas(width, height);
+
+  ctx.fillStyle = "#f4efe7";
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = "#101826";
+  ctx.font = "bold 28px Georgia, serif";
+  ctx.fillText(view.title, 24, 40);
+  ctx.font = "16px Arial";
+  ctx.fillStyle = "#4e6376";
+  ctx.fillText(`${view.subtitle} — ${day}`, 24, 68);
+
+  const gridTop = headerHeight;
+  ctx.fillStyle = "#11161a";
+  ctx.fillRect(0, gridTop, timeWidth, calendarHeight);
+  ctx.strokeStyle = "rgba(255,255,255,0.1)";
+  ctx.beginPath();
+  ctx.moveTo(timeWidth, gridTop);
+  ctx.lineTo(timeWidth, gridTop + calendarHeight);
+  ctx.stroke();
+
+  for (let minute = calendarStartMinute; minute <= calendarEndMinute; minute += 60) {
+    const lineY = gridTop + gridHeaderHeight + (minute - calendarStartMinute) * minuteHeight;
+    ctx.beginPath();
+    ctx.moveTo(0, lineY);
+    ctx.lineTo(width - 24, lineY);
+    ctx.stroke();
+    ctx.fillStyle = "#cad3dc";
+    ctx.font = "bold 12px Arial";
+    ctx.fillText(formatMinute(minute), 10, lineY + 4);
+  }
+
+  drawDayGrid(ctx, timeWidth, gridTop, bodyWidth, calendarHeight, minuteHeight, day);
+
+  const dayEntries = view.solution.entries.filter((entry) => entry.day === day);
+  if (view.mode === "admin") {
+    const placements = buildLanePlacements(dayEntries, minuteHeight);
+    const laneCount = Math.max(
+      1,
+      ...Array.from(placements.values()).map((placement) => placement.lane + 1),
+      1
+    );
+    const laneWidth = (bodyWidth - 16) / laneCount;
+    dayEntries.forEach((entry) => {
+      const placement = placements.get(entry);
+      if (!placement) return;
+      drawEntryCard(
+        ctx,
+        entry,
+        timeWidth + 8 + placement.lane * laneWidth,
+        gridTop + gridHeaderHeight + placement.top + 4,
+        laneWidth - 10,
+        Math.max(placement.height - 8, 24)
+      );
+    });
+  } else {
+    const placements = groupOverlappingEntries(dayEntries, minuteHeight);
+    dayEntries.forEach((entry) => {
+      const placement = placements.get(entry);
+      if (!placement) return;
+      drawEntryCard(
+        ctx,
+        entry,
+        timeWidth + 12,
+        gridTop + gridHeaderHeight + placement.top + 4,
+        bodyWidth - 24,
+        Math.max(placement.height - 8, 24)
+      );
+    });
+  }
+
+  if (detailRows.length > 0) {
+    const detailTop = gridTop + calendarHeight + 28;
+    ctx.fillStyle = "#101826";
+    ctx.font = "bold 20px Georgia, serif";
+    ctx.fillText("Session list", 24, detailTop);
+    ctx.font = "13px Arial";
+    ctx.fillStyle = "#35506a";
+    detailRows.forEach((entry, index) => {
+      ctx.fillText(
+        `${formatMinute(entry.start_minute)} | ${entry.module_code} | ${entry.room_name} | ${compactLecturerNames(entry.lecturer_names)}`,
+        24,
+        detailTop + 28 + index * 22
+      );
+    });
+  }
+
+  return canvas;
+}
+
+function renderWeeklyCanvas(view) {
+  const minuteHeight = 0.82;
+  const activeDays = collectActiveDays(view.solution.entries);
+  const timeWidth = 72;
+  const dayWidth = 248;
+  const headerHeight = 112;
+  const gridHeaderHeight = 40;
+  const calendarHeight = (calendarEndMinute - calendarStartMinute) * minuteHeight + gridHeaderHeight;
+  const width = timeWidth + activeDays.length * dayWidth + 32;
+  const height = headerHeight + calendarHeight + 28;
+  const { canvas, ctx } = createCanvas(width, height);
+
+  ctx.fillStyle = "#f4efe7";
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = "#101826";
+  ctx.font = "bold 30px Georgia, serif";
+  ctx.fillText(view.title, 24, 42);
+  ctx.font = "16px Arial";
+  ctx.fillStyle = "#4e6376";
+  ctx.fillText(view.subtitle, 24, 70);
+
+  const gridTop = headerHeight;
+  ctx.fillStyle = "#11161a";
+  ctx.fillRect(0, gridTop, timeWidth, calendarHeight);
+
+  for (let minute = calendarStartMinute; minute <= calendarEndMinute; minute += 60) {
+    const lineY = gridTop + gridHeaderHeight + (minute - calendarStartMinute) * minuteHeight;
+    ctx.strokeStyle = "rgba(255,255,255,0.1)";
+    ctx.beginPath();
+    ctx.moveTo(0, lineY);
+    ctx.lineTo(width - 16, lineY);
+    ctx.stroke();
+    ctx.fillStyle = "#cad3dc";
+    ctx.font = "bold 12px Arial";
+    ctx.fillText(formatMinute(minute), 8, lineY + 4);
+  }
+
+  activeDays.forEach((day, index) => {
+    const columnX = timeWidth + index * dayWidth;
+    drawDayGrid(ctx, columnX, gridTop, dayWidth, calendarHeight, minuteHeight, day);
+    const dayEntries = view.solution.entries.filter((entry) => entry.day === day);
+    const placements = groupOverlappingEntries(dayEntries, minuteHeight);
+    dayEntries.forEach((entry) => {
+      const placement = placements.get(entry);
+      if (!placement) return;
+      drawEntryCard(
+        ctx,
+        entry,
+        columnX + 8,
+        gridTop + gridHeaderHeight + placement.top + 4,
+        dayWidth - 16,
+        Math.max(placement.height - 8, 24)
+      );
+    });
+  });
+
+  return canvas;
+}
+
+function combineCanvasesVertical(canvases, title) {
+  const width = Math.max(...canvases.map((canvas) => canvas.width));
+  const gap = 24;
+  const headerHeight = 88;
+  const height = headerHeight + canvases.reduce((sum, canvas) => sum + canvas.height, 0) + gap * (canvases.length - 1) + 24;
+  const { canvas, ctx } = createCanvas(width, height);
+  ctx.fillStyle = "#f4efe7";
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = "#101826";
+  ctx.font = "bold 28px Georgia, serif";
+  ctx.fillText(title, 24, 42);
+  ctx.font = "15px Arial";
+  ctx.fillStyle = "#4e6376";
+  ctx.fillText("Whole-week visual export", 24, 66);
+  let offsetY = headerHeight;
+  canvases.forEach((part) => {
+    ctx.drawImage(part, 0, offsetY);
+    offsetY += part.height + gap;
+  });
+  return canvas;
+}
+
+async function blobToUint8Array(blob) {
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+const crcTable = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i += 1) {
+    let c = i;
+    for (let j = 0; j < 8; j += 1) {
+      c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    table[i] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i += 1) {
+    crc = crcTable[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function toDosDateTime(date = new Date()) {
+  const year = Math.max(1980, date.getFullYear());
+  const dosTime = ((date.getHours() & 0x1f) << 11) | ((date.getMinutes() & 0x3f) << 5) | (Math.floor(date.getSeconds() / 2) & 0x1f);
+  const dosDate = (((year - 1980) & 0x7f) << 9) | (((date.getMonth() + 1) & 0xf) << 5) | (date.getDate() & 0x1f);
+  return { dosDate, dosTime };
+}
+
+function writeUint16(view, offset, value) {
+  view.setUint16(offset, value, true);
+}
+
+function writeUint32(view, offset, value) {
+  view.setUint32(offset, value, true);
+}
+
+async function buildZipBlob(files) {
+  const encoder = new TextEncoder();
+  const prepared = await Promise.all(files.map(async (file) => {
+    const data = file.blob instanceof Blob ? await blobToUint8Array(file.blob) : file.data;
+    return {
+      name: file.name,
+      nameBytes: encoder.encode(file.name),
+      data,
+      crc: crc32(data),
+    };
+  }));
+
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+  const { dosDate, dosTime } = toDosDateTime();
+
+  prepared.forEach((file) => {
+    const localHeader = new Uint8Array(30 + file.nameBytes.length);
+    const localView = new DataView(localHeader.buffer);
+    writeUint32(localView, 0, 0x04034b50);
+    writeUint16(localView, 4, 20);
+    writeUint16(localView, 6, 0);
+    writeUint16(localView, 8, 0);
+    writeUint16(localView, 10, dosTime);
+    writeUint16(localView, 12, dosDate);
+    writeUint32(localView, 14, file.crc);
+    writeUint32(localView, 18, file.data.length);
+    writeUint32(localView, 22, file.data.length);
+    writeUint16(localView, 26, file.nameBytes.length);
+    writeUint16(localView, 28, 0);
+    localHeader.set(file.nameBytes, 30);
+    localParts.push(localHeader, file.data);
+
+    const centralHeader = new Uint8Array(46 + file.nameBytes.length);
+    const centralView = new DataView(centralHeader.buffer);
+    writeUint32(centralView, 0, 0x02014b50);
+    writeUint16(centralView, 4, 20);
+    writeUint16(centralView, 6, 20);
+    writeUint16(centralView, 8, 0);
+    writeUint16(centralView, 10, 0);
+    writeUint16(centralView, 12, dosTime);
+    writeUint16(centralView, 14, dosDate);
+    writeUint32(centralView, 16, file.crc);
+    writeUint32(centralView, 20, file.data.length);
+    writeUint32(centralView, 24, file.data.length);
+    writeUint16(centralView, 28, file.nameBytes.length);
+    writeUint16(centralView, 30, 0);
+    writeUint16(centralView, 32, 0);
+    writeUint16(centralView, 34, 0);
+    writeUint16(centralView, 36, 0);
+    writeUint32(centralView, 38, 0);
+    writeUint32(centralView, 42, offset);
+    centralHeader.set(file.nameBytes, 46);
+    centralParts.push(centralHeader);
+
+    offset += localHeader.length + file.data.length;
+  });
+
+  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+  const end = new Uint8Array(22);
+  const endView = new DataView(end.buffer);
+  writeUint32(endView, 0, 0x06054b50);
+  writeUint16(endView, 8, prepared.length);
+  writeUint16(endView, 10, prepared.length);
+  writeUint32(endView, 12, centralSize);
+  writeUint32(endView, 16, offset);
+  writeUint16(endView, 20, 0);
+
+  return new Blob([...localParts, ...centralParts, end], { type: "application/zip" });
+}
+
 async function exportWorkbook(view, entryMap) {
   const XLSX = await import("xlsx");
   const workbook = XLSX.utils.book_new();
@@ -257,124 +650,79 @@ async function exportWorkbook(view, entryMap) {
   XLSX.utils.book_append_sheet(workbook, summarySheet, "Summary");
   XLSX.utils.book_append_sheet(workbook, gridSheet, "Timetable");
   XLSX.utils.book_append_sheet(workbook, detailSheet, "Session Details");
-  XLSX.writeFile(workbook, `${view.mode}-timetable.xlsx`);
+  XLSX.writeFile(workbook, buildExportFilename(view.mode, "week", "xlsx"));
 }
 
-async function exportPdf(view, entryMap, selectedDay) {
-  const [{ default: jsPDF }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
-  const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
-  const colors = { bg: [17, 22, 26], text: [255, 255, 255], muted: [169, 177, 166], header: [70, 84, 98] };
-  doc.setFillColor(...colors.bg);
-  doc.rect(0, 0, doc.internal.pageSize.width, doc.internal.pageSize.height, "F");
-  doc.setTextColor(...colors.text);
-  doc.setFontSize(22);
-  doc.text(view.title, 40, 50);
-  doc.setFontSize(12);
-  doc.setTextColor(...colors.muted);
-  doc.text(`${view.subtitle} — ${selectedDay}`, 40, 70);
-  const dayEntries = view.solution.entries
-    .filter((e) => e.day === selectedDay)
-    .sort((a, b) => a.start_minute - b.start_minute);
-  const tableData = dayEntries.map((e) => [
-    formatMinute(e.start_minute),
-    e.module_code,
-    e.session_name,
-    e.room_name,
-    e.lecturer_names.join(", "),
-    e.total_students,
-  ]);
-  doc.autoTable({
-    head: [["Time", "Code", "Session", "Room", "Lecturers", "Students"]],
-    body: tableData,
-    startY: 100,
-    theme: "grid",
-    headStyles: { fillColor: colors.header, textColor: [255, 255, 255], fontStyle: "bold" },
-    bodyStyles: { fillColor: [30, 35, 40], textColor: [240, 240, 240], fontSize: 9 },
-    alternateRowStyles: { fillColor: [35, 42, 48] },
-    margin: { left: 40, right: 40 },
-  });
-  doc.save(`${view.mode}-${selectedDay}-timetable.pdf`);
-}
+async function exportPdf(view, scope) {
+  const [{ default: jsPDF }] = await Promise.all([import("jspdf")]);
+  const renderPdf = async (canvases, filename) => {
+    const first = canvases[0];
+    const doc = new jsPDF({
+      orientation: first.width >= first.height ? "landscape" : "portrait",
+      unit: "px",
+      format: [first.width, first.height],
+    });
+    canvases.forEach((canvas, index) => {
+      if (index > 0) {
+        doc.addPage([canvas.width, canvas.height], canvas.width >= canvas.height ? "landscape" : "portrait");
+      }
+      doc.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, canvas.width, canvas.height);
+    });
+    doc.save(filename);
+  };
 
-async function exportPng(view, entryMap, selectedDay) {
-  const exportMinuteHeight = densityModes.comfortable.minuteHeight;
-  const colWidth = 800;
-  const timeWidth = 90;
-  const headerHeight = 60;
-  const calendarHeight = (calendarEndMinute - calendarStartMinute) * exportMinuteHeight + 40;
-  const detailHeight = Math.max(180, view.solution.entries.length * 28 + 60);
-  const width = timeWidth + colWidth;
-  const height = 120 + headerHeight + calendarHeight + detailHeight;
-
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas export is not supported in this browser.");
-
-  ctx.fillStyle = "#11161a";
-  ctx.fillRect(0, 0, width, height);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 32px sans-serif";
-  ctx.fillText(view.title, 30, 50);
-  ctx.font = "18px sans-serif";
-  ctx.fillStyle = "#a9b1a6";
-  ctx.fillText(`${view.subtitle} — ${selectedDay}`, 30, 85);
-  const top = 120;
-  ctx.fillStyle = "#465462";
-  ctx.fillRect(0, top, width, headerHeight);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 20px sans-serif";
-  ctx.fillText("Time", 20, top + 38);
-  ctx.fillText(selectedDay, timeWidth + 20, top + 38);
-  const calTop = top + headerHeight;
-  ctx.strokeStyle = "rgba(255,255,255,0.1)";
-  for (let m = calendarStartMinute; m <= calendarEndMinute; m += 60) {
-    const y = calTop + (m - calendarStartMinute) * exportMinuteHeight;
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
-    ctx.fillStyle = "#cbd6e1";
-    ctx.font = "bold 14px sans-serif";
-    ctx.fillText(formatMinute(m), 10, y + 5);
-  }
-  ctx.beginPath(); ctx.moveTo(timeWidth, calTop); ctx.lineTo(timeWidth, calTop + calendarHeight); ctx.stroke();
-  const dayEntries = view.solution.entries.filter((e) => e.day === selectedDay);
-  const placements = groupOverlappingEntries(dayEntries, exportMinuteHeight);
-  dayEntries.forEach((entry) => {
-    const p = placements.get(entry);
-    if (!p) return; // extras are not in placements map
-    const xBase = timeWidth + 10;
-    const w = colWidth - 40;
-    const x = xBase;
-    const y = calTop + p.top + 5;
-    const h = Math.max(p.height - 10, 28);
-    ctx.fillStyle = getEntryToneClass(entry) === "is-lab" ? "#2d6f74" : "#3a6793";
-    ctx.beginPath(); ctx.roundRect(x, y, w, h, 8); ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.2)"; ctx.stroke();
-    ctx.fillStyle = "#ffffff"; ctx.font = "bold 14px sans-serif";
-    ctx.fillText(entry.module_code, x + 10, y + 22);
-    ctx.font = "12px sans-serif"; ctx.fillStyle = "rgba(255,255,255,0.9)";
-    ctx.fillText(entry.room_name, x + 10, y + 40);
-    if (p.extraCount > 0) {
-      ctx.fillStyle = "rgba(246,179,90,0.9)";
-      ctx.font = "bold 11px sans-serif";
-      ctx.fillText(`+${p.extraCount} more`, x + w - 60, y + 16);
+  const activeDays = collectActiveDays(view.solution.entries);
+  if (view.mode === "admin" && scope === "daily_bundle") {
+    const files = [];
+    for (const day of activeDays) {
+      const canvas = renderDailyCanvas(view, day, { detailed: true });
+      const doc = new jsPDF({
+        orientation: canvas.width >= canvas.height ? "landscape" : "portrait",
+        unit: "px",
+        format: [canvas.width, canvas.height],
+      });
+      doc.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, canvas.width, canvas.height);
+      files.push({
+        name: buildExportFilename(view.mode, day.toLowerCase(), "pdf"),
+        blob: doc.output("blob"),
+      });
     }
-  });
-  const detailTop = calTop + calendarHeight + 40;
-  ctx.fillStyle = "#ffffff"; ctx.font = "bold 24px sans-serif";
-  ctx.fillText("Session Details", 30, detailTop);
-  ctx.font = "14px sans-serif"; ctx.fillStyle = "#edf1ea";
-  dayEntries.forEach((entry, i) => {
-    const y = detailTop + 40 + i * 28;
-    ctx.fillText(
-      `${formatMinute(entry.start_minute)} | ${entry.module_code} ${entry.session_name} | ${entry.room_name} | ${entry.lecturer_names.join(", ")}`,
-      30, y
-    );
-  });
-  const blob = await new Promise((resolve, reject) => {
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Failed to render PNG export."))), "image/png");
-  });
-  downloadBlob(`${view.mode}-${selectedDay}-timetable.png`, blob);
+    const zipBlob = await buildZipBlob(files);
+    downloadBlob(buildExportFilename(view.mode, "daily-bundle", "zip"), zipBlob);
+    return;
+  }
+
+  if (view.mode === "admin") {
+    const canvases = activeDays.map((day) => renderDailyCanvas(view, day, { detailed: true }));
+    await renderPdf(canvases, buildExportFilename(view.mode, "week", "pdf"));
+    return;
+  }
+
+  const canvas = renderWeeklyCanvas(view);
+  await renderPdf([canvas], buildExportFilename(view.mode, "week", "pdf"));
+}
+
+async function exportPng(view, scope) {
+  const activeDays = collectActiveDays(view.solution.entries);
+  if (view.mode === "admin" && scope === "daily_bundle") {
+    const files = [];
+    for (const day of activeDays) {
+      const canvas = renderDailyCanvas(view, day, { detailed: true });
+      files.push({
+        name: buildExportFilename(view.mode, day.toLowerCase(), "png"),
+        blob: await canvasToBlob(canvas),
+      });
+    }
+    const zipBlob = await buildZipBlob(files);
+    downloadBlob(buildExportFilename(view.mode, "daily-bundle", "zip"), zipBlob);
+    return;
+  }
+
+  const canvas = view.mode === "admin"
+    ? combineCanvasesVertical(activeDays.map((day) => renderDailyCanvas(view, day, { detailed: true })), view.title)
+    : renderWeeklyCanvas(view);
+  const blob = await canvasToBlob(canvas);
+  downloadBlob(buildExportFilename(view.mode, "week", "png"), blob);
 }
 
 // ─── Session Detail Modal ──────────────────────────────────────────────────────
@@ -619,13 +967,13 @@ function AdminDayCalendarInner({ entries, selectedDay, minuteHeight, onEntryClic
                 <button
                   key={`${entry.session_id}-${entry.occurrence_index ?? 1}-${idx}`}
                   type="button"
-                  className={`week-cal-entry ${toneClass}`}
-                  style={{
-                    top: `${placement.top + 2}px`,
-                    height: `${h}px`,
-                    left: "4px",
-                    right: "4px",
-                  }}
+                className={`week-cal-entry ${toneClass}`}
+                style={{
+                  top: `${placement.top + 4}px`,
+                  height: `${Math.max(h - 8, 22)}px`,
+                  left: "6px",
+                  right: "6px",
+                }}
                   onClick={() => handleCardClick(entry)}
                   title={[
                     `${entry.module_code} ${entry.session_name}`,
@@ -806,10 +1154,10 @@ function DayCalendarInner({ entries, selectedDay, minuteHeight, onEntryClick }) 
                 type="button"
                 className={`week-cal-entry ${toneClass}${hasExtras ? " has-extras" : ""}`}
                 style={{
-                  top: `${placement.top + 2}px`,
-                  height: `${Math.max(blockHeight - 4, 22)}px`,
-                  left: "6px",
-                  right: "6px",
+                  top: `${placement.top + 4}px`,
+                  height: `${Math.max(blockHeight - 8, 22)}px`,
+                  left: "8px",
+                  right: "8px",
                 }}
                 onClick={(e) => handleCardClick(e, primary, placement)}
                 title={hasExtras
@@ -977,7 +1325,9 @@ function ViewStudio() {
   const [modalEntry, setModalEntry] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [selectedDay, setSelectedDay] = useState(days[0]);
+  const [visualExportScope, setVisualExportScope] = useState("whole_week");
 
   const minuteHeight = densityModes[densityMode].minuteHeight;
 
@@ -1082,14 +1432,21 @@ function ViewStudio() {
   }, [mode, needsSelection, selectedLecturerId, selectedDegreeId, selectedPathId, loadView]);
 
   const handleExport = async (format) => {
+    setError("");
+    setExporting(true);
     try {
       if (!view) { setError("Load a timetable before exporting."); return; }
-      if (format === "pdf") { await exportPdf(view, entryMap, selectedDay); return; }
+      const exportScope =
+        mode === "admin" && (format === "pdf" || format === "png")
+          ? visualExportScope
+          : "whole_week";
+      if (format === "pdf") { await exportPdf(view, exportScope); return; }
       if (format === "xls") { await exportWorkbook(view, entryMap); return; }
-      if (format === "png") { await exportPng(view, entryMap, selectedDay); return; }
+      if (format === "png") { await exportPng(view, exportScope); return; }
       const response = await timetableStudioService.exportView({
         mode,
         format,
+        scope: exportScope,
         importRunId: activeImportRunId,
         lecturerId: mode === "lecturer" ? selectedLecturerId : undefined,
         degreeId: mode === "student" ? selectedDegreeId : undefined,
@@ -1102,6 +1459,8 @@ function ViewStudio() {
       downloadBase64(response.filename, response.content_type, response.content);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -1119,6 +1478,16 @@ function ViewStudio() {
 
   return (
     <div className="page-shell">
+      {exporting ? (
+        <div className="setup-blocking-overlay" role="status" aria-live="polite" aria-busy="true">
+          <div className="setup-blocking-dialog">
+            <div className="setup-blocking-spinner" aria-hidden="true" />
+            <strong>Exporting timetable</strong>
+            <p>The file is being prepared for download.</p>
+            <span>Please wait until the export finishes.</span>
+          </div>
+        </div>
+      ) : null}
       <div className="panel studio-panel">
 
         {/* ── Toolbar Row 1: Title + Mode + Filters ── */}
@@ -1230,11 +1599,22 @@ function ViewStudio() {
           </div>
           <div className="vs-control-group vs-export-group" data-tour="views-export-controls">
             <span className="vs-control-label">Export</span>
+            {mode === "admin" && (
+              <select
+                value={visualExportScope}
+                onChange={(e) => setVisualExportScope(e.target.value)}
+                className="vs-filter-select"
+                aria-label="Admin visual export scope"
+              >
+                <option value="whole_week">Visual: Whole week</option>
+                <option value="daily_bundle">Visual: Daily bundle</option>
+              </select>
+            )}
             <div className="vs-export-buttons">
-              <button type="button" className="ghost-btn vs-export-btn" onClick={() => handleExport("pdf")}>PDF</button>
-              <button type="button" className="ghost-btn vs-export-btn" onClick={() => handleExport("csv")}>CSV</button>
-              <button type="button" className="ghost-btn vs-export-btn" onClick={() => handleExport("xls")}>XLSX</button>
-              <button type="button" className="ghost-btn vs-export-btn" onClick={() => handleExport("png")}>PNG</button>
+              <button type="button" className="ghost-btn vs-export-btn" onClick={() => handleExport("pdf")} disabled={exporting}>PDF</button>
+              <button type="button" className="ghost-btn vs-export-btn" onClick={() => handleExport("csv")} disabled={exporting}>CSV</button>
+              <button type="button" className="ghost-btn vs-export-btn" onClick={() => handleExport("xls")} disabled={exporting}>XLSX</button>
+              <button type="button" className="ghost-btn vs-export-btn" onClick={() => handleExport("png")} disabled={exporting}>PNG</button>
             </div>
           </div>
         </div>
