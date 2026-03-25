@@ -1,10 +1,42 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import "../styles/App.css";
 import { useTheme } from "../hooks/useTheme";
 
-const MainNavbar = ({ onHelp }) => {
+const MainNavbar = ({ onStartBasicTour, onStartTechnicalTour }) => {
   const { theme, toggle } = useTheme();
+  const [helpMenuOpen, setHelpMenuOpen] = useState(false);
+  const helpMenuRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickAway = (event) => {
+      if (!helpMenuRef.current?.contains(event.target)) {
+        setHelpMenuOpen(false);
+      }
+    };
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        setHelpMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickAway);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickAway);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
+
+  const handleStartBasicTour = () => {
+    setHelpMenuOpen(false);
+    onStartBasicTour?.();
+  };
+
+  const handleStartTechnicalTour = () => {
+    setHelpMenuOpen(false);
+    onStartTechnicalTour?.();
+  };
+
   return (
     <header className="main-header">
       <div className="main-logo">
@@ -20,15 +52,40 @@ const MainNavbar = ({ onHelp }) => {
           <NavLink to="/generate" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Generate</NavLink>
           <NavLink to="/views" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Views</NavLink>
         </nav>
-        <button
-          className="help-btn"
-          onClick={onHelp}
-          title="Open tutorial"
-          aria-label="Open tutorial"
-          data-tour="nav-help"
-        >
-          ?
-        </button>
+        <div className="help-menu-shell" ref={helpMenuRef} data-tour="nav-help">
+          <button
+            className="help-btn"
+            onClick={() => setHelpMenuOpen((prev) => !prev)}
+            title="Open walkthrough menu"
+            aria-label="Open walkthrough menu"
+            aria-expanded={helpMenuOpen}
+            aria-haspopup="menu"
+          >
+            ?
+          </button>
+          {helpMenuOpen ? (
+            <div className="help-menu-popover" role="menu" aria-label="Walkthrough menu">
+              <button
+                type="button"
+                className="help-menu-item"
+                onClick={handleStartBasicTour}
+                role="menuitem"
+              >
+                <strong>Start basic tour</strong>
+                <span>Beginner walkthrough across Setup, Generate, and Views.</span>
+              </button>
+              <button
+                type="button"
+                className="help-menu-item"
+                onClick={handleStartTechnicalTour}
+                role="menuitem"
+              >
+                <strong>Start technical tour</strong>
+                <span>Advanced workflow and model concepts for technical users.</span>
+              </button>
+            </div>
+          ) : null}
+        </div>
         <button
           className="theme-toggle"
           onClick={toggle}

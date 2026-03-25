@@ -7,15 +7,20 @@ import './styles/App.css';
 
 import MainNavbar from './components/MainNavbar.jsx';
 import OnboardingTutorial from './components/OnboardingTutorial.jsx';
-import { onboardingTourSteps } from './components/onboardingTourSteps.js';
+import {
+  BASIC_TOUR,
+  TECHNICAL_TOUR,
+  onboardingTourSteps,
+} from './components/onboardingTourSteps.js';
 import { useOnboarding } from './hooks/useOnboarding.js';
 
 function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { open, close, complete, reopen, currentStep, updateStep } = useOnboarding();
-  const safeCurrentStep = Math.max(0, Math.min(currentStep, onboardingTourSteps.length - 1));
-  const currentTourStep = onboardingTourSteps[safeCurrentStep] || onboardingTourSteps[0];
+  const { open, close, complete, reopen, currentStep, currentTour, updateStep } = useOnboarding();
+  const activeTourSteps = onboardingTourSteps[currentTour] || onboardingTourSteps[BASIC_TOUR];
+  const safeCurrentStep = Math.max(0, Math.min(currentStep, activeTourSteps.length - 1));
+  const currentTourStep = activeTourSteps[safeCurrentStep] || activeTourSteps[0];
 
   useEffect(() => {
     if (!open) {
@@ -34,7 +39,10 @@ function AppShell() {
 
   return (
     <>
-      <MainNavbar onHelp={reopen} />
+      <MainNavbar
+        onStartBasicTour={() => reopen(BASIC_TOUR)}
+        onStartTechnicalTour={() => reopen(TECHNICAL_TOUR)}
+      />
       <Routes>
          <Route path="/setup" element={<SetupStudio />} />
          <Route path="/generate" element={<GenerateStudio />} />
@@ -43,7 +51,7 @@ function AppShell() {
       </Routes>
       {open && (
         <OnboardingTutorial
-          steps={onboardingTourSteps}
+          steps={activeTourSteps}
           currentStep={safeCurrentStep}
           onClose={close}
           onComplete={handleComplete}

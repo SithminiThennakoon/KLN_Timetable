@@ -1017,7 +1017,7 @@ function SetupStudio() {
         {loadingWorkspace && <div className="info-banner">Loading the current import snapshot...</div>}
 
         {showUtilities && (
-          <section className="studio-card setup-utilities-card">
+          <section className="studio-card setup-utilities-card" data-tour="setup-utilities">
             <div className="studio-header compact">
               <div>
                 <h2>Utilities</h2>
@@ -1236,7 +1236,7 @@ function SetupStudio() {
                           </select>
                         </label>
                       </div>
-                      <div className="setup-review-table-wrap">
+                      <div className="setup-review-table-wrap" data-tour="setup-review-buckets">
                         <table className="setup-review-table">
                           <thead>
                             <tr>

@@ -554,7 +554,7 @@ function GenerateStudio() {
             </section>
 
             {activeImportRunId && (
-              <section className="studio-card">
+              <section className="studio-card" data-tour="generate-verification">
                 <div className="studio-header compact">
                   <div>
                     <h2>Verification</h2>

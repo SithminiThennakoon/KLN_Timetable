@@ -19,6 +19,14 @@ const steps = [
     body: "This is where setup starts.",
     placement: "bottom",
   },
+  {
+    id: "fallback",
+    targetId: "missing-target",
+    fallbackTargetId: "nav-help",
+    title: "Fallback target",
+    body: "This uses the fallback anchor.",
+    placement: "bottom",
+  },
 ];
 
 function renderTour(currentStep = 0, extraTarget = null) {
@@ -58,6 +66,24 @@ describe("OnboardingTutorial", () => {
     );
 
     expect(await screen.findByText(/Preparing the next area of the app/i)).toBeInTheDocument();
+  });
+
+  it("uses a fallback target when the preferred target is unavailable", async () => {
+    render(
+      <div>
+        <button data-tour="nav-help">Help</button>
+        <OnboardingTutorial
+          steps={steps}
+          currentStep={2}
+          onStepChange={vi.fn()}
+          onClose={vi.fn()}
+          onComplete={vi.fn()}
+        />
+      </div>
+    );
+
+    expect(await screen.findByText("Fallback target")).toBeInTheDocument();
+    expect(screen.queryByText(/Preparing the next area of the app/i)).not.toBeInTheDocument();
   });
 
   it("uses the supplied callbacks for next and close actions", async () => {

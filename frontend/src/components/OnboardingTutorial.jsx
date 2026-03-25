@@ -9,10 +9,17 @@ function clamp(value, min, max) {
 }
 
 function findTarget(step) {
-  if (!step?.targetId || typeof document === "undefined") {
+  if (typeof document === "undefined") {
     return null;
   }
-  return document.querySelector(`[data-tour="${step.targetId}"]`);
+  const selectors = [step?.targetId, step?.fallbackTargetId].filter(Boolean);
+  for (const selector of selectors) {
+    const match = document.querySelector(`[data-tour="${selector}"]`);
+    if (match) {
+      return match;
+    }
+  }
+  return null;
 }
 
 function resolvePlacement(rect, placement, viewportWidth, viewportHeight) {
