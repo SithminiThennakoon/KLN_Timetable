@@ -1026,7 +1026,7 @@ function SetupStudio() {
                   snapshots or a realistic CSV fixture pack for full import testing.
                 </p>
               </div>
-              <div className="studio-actions">
+              <div className="studio-actions" data-tour="setup-fixture-pack">
                 <button type="button" className="ghost-btn" onClick={handleStartFresh}>
                   Start Fresh
                 </button>
@@ -1513,7 +1513,7 @@ function SetupStudio() {
           )}
 
           {sessionsNeedingRepair.length > 0 && (
-            <div className="schema-notes compact setup-repair-queue">
+            <div className="schema-notes compact setup-repair-queue" data-tour="setup-repair-queue">
               <h3>Repair Queue</h3>
               <div className="constraint-list">
                 {sessionsNeedingRepair.map((session) => {

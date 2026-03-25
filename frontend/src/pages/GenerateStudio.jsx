@@ -507,7 +507,7 @@ function GenerateStudio() {
                 </div>
               )}
               {sortedPossibleCombinations.length > 0 && (
-                <div className="schema-notes">
+                <div className="schema-notes" data-tour="generate-combinations">
                   <h3>Possible nice-to-have combinations</h3>
                   <p>
                     The selected nice-to-have set could not be satisfied together. Try one of the combinations below instead.
@@ -652,7 +652,7 @@ function GenerateStudio() {
               </section>
             )}
 
-            <section className="studio-card">
+            <section className="studio-card" data-tour="generate-preview-solutions">
               <h2>Preview Solutions</h2>
               {requiresConstraintNarrowing && (
                 <p className="helper-copy">
