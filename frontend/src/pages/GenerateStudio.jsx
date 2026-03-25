@@ -4,6 +4,9 @@ import {
   combinationCatalogKey,
   softConstraintCombinationCatalog,
 } from "../data/softConstraintCombinationCatalog";
+import pythonLogo from "../assets/verifiers/python-logo-generic.svg";
+import rustLogo from "../assets/verifiers/rust-logo-blk.svg";
+import elixirLogo from "../assets/verifiers/elixir-logo.png";
 
 const defaultSoftConstraints = [
   {
@@ -82,6 +85,21 @@ const generationLimits = {
 };
 const activeImportRunStorageKey = "kln_active_import_run_id";
 
+const verifierLogos = {
+  python: {
+    src: pythonLogo,
+    alt: "Python logo",
+  },
+  rust: {
+    src: rustLogo,
+    alt: "Rust logo",
+  },
+  elixir: {
+    src: elixirLogo,
+    alt: "Elixir logo",
+  },
+};
+
 function formatMilliseconds(value) {
   if (!value) {
     return "0 ms";
@@ -118,6 +136,16 @@ function formatCombinationCount(suggestion) {
     return "100+";
   }
   return String(suggestion.solution_count);
+}
+
+function renderVerifierBadge(name) {
+  const logo = verifierLogos[name];
+  return (
+    <span key={name} className={`verifier-badge verifier-${name}`}>
+      {logo ? <img src={logo.src} alt={logo.alt} className="verifier-badge-icon" /> : null}
+      <span>{name}</span>
+    </span>
+  );
 }
 
 function GenerateStudio() {
@@ -582,7 +610,10 @@ function GenerateStudio() {
                     <div className="summary-grid">
                       <div className="summary-item">
                         <span>Completed verifiers</span>
-                        <strong>{(verification.completed_verifiers || []).join(", ") || "None"}</strong>
+                        <strong className="verifier-name-list">
+                          {(verification.completed_verifiers || []).map(renderVerifierBadge)}
+                          {(verification.completed_verifiers || []).length === 0 ? "None" : null}
+                        </strong>
                       </div>
                       <div className="summary-item">
                         <span>Hard constraints</span>
@@ -590,7 +621,10 @@ function GenerateStudio() {
                       </div>
                       <div className="summary-item">
                         <span>Missing verifiers</span>
-                        <strong>{(verification.missing_verifiers || []).join(", ") || "None"}</strong>
+                        <strong className="verifier-name-list">
+                          {(verification.missing_verifiers || []).map(renderVerifierBadge)}
+                          {(verification.missing_verifiers || []).length === 0 ? "None" : null}
+                        </strong>
                       </div>
                       <div className="summary-item">
                         <span>Verified solution</span>
@@ -617,7 +651,10 @@ function GenerateStudio() {
                     )}
                     {Object.entries(verification.results || {}).map(([key, result]) => (
                       <div key={key} className="schema-notes">
-                        <h3>{key} verifier</h3>
+                        <h3>
+                          {renderVerifierBadge(key)}
+                          <span>{key} verifier</span>
+                        </h3>
                         <p>
                           Hard constraints: {result.hard_valid ? "Pass" : "Fail"} | Violations:{" "}
                           {result.hard_violations?.length || 0} | Checked entries:{" "}
