@@ -508,22 +508,46 @@ function SetupStudio() {
     if (typeof window === "undefined") {
       return;
     }
-    try {
-      const activeTour = window.localStorage.getItem("kln-onboarding-active-tour");
-      if (activeTour !== TECHNICAL_TOUR) {
-        return;
+
+    const syncUtilitiesFromOnboarding = (detail = null) => {
+      try {
+        const activeTour =
+          detail?.tourType || window.localStorage.getItem("kln-onboarding-active-tour");
+        const isOpen =
+          typeof detail?.open === "boolean"
+            ? detail.open
+            : window.sessionStorage.getItem("kln-onboarding-open-session") === "1";
+        if (activeTour !== TECHNICAL_TOUR || !isOpen) {
+          setShowUtilities(false);
+          return;
+        }
+        const rawStep =
+          typeof detail?.step === "number"
+            ? detail.step
+            : Number(window.localStorage.getItem("kln-onboarding-technical-step"));
+        const stepIndex = Number.isInteger(rawStep) && rawStep >= 0 ? rawStep : 0;
+        const activeStep = onboardingTourSteps[TECHNICAL_TOUR]?.[stepIndex];
+        const shouldExposeUtilities =
+          activeStep?.id === "setup-utilities-technical" ||
+          activeStep?.id === "setup-utilities-open-state" ||
+          activeStep?.id === "setup-fixture-pack-technical";
+        setShowUtilities(shouldExposeUtilities);
+      } catch {
+        // ignore storage access issues
       }
-      const rawStep = Number(window.localStorage.getItem("kln-onboarding-technical-step"));
-      const stepIndex = Number.isInteger(rawStep) && rawStep >= 0 ? rawStep : 0;
-      const activeStep = onboardingTourSteps[TECHNICAL_TOUR]?.[stepIndex];
-      const shouldExposeUtilities =
-        activeStep?.id === "setup-utilities-technical" ||
-        activeStep?.id === "setup-fixture-pack-technical";
-      setShowUtilities(shouldExposeUtilities);
-    } catch {
-      // ignore storage access issues
-    }
-  }, [status, activeImportRunId]);
+    };
+
+    syncUtilitiesFromOnboarding();
+
+    const handleOnboardingStateChange = (event) => {
+      syncUtilitiesFromOnboarding(event.detail);
+    };
+
+    window.addEventListener("kln:onboarding-state-change", handleOnboardingStateChange);
+    return () => {
+      window.removeEventListener("kln:onboarding-state-change", handleOnboardingStateChange);
+    };
+  }, []);
 
   const hasChosenImportSource = Boolean(selectedFile);
   const summaryCards = useMemo(() => buildWorkspaceSummary(workspace), [workspace]);

@@ -10,6 +10,17 @@ const ACTIVE_SESSION_OPEN_KEY = 'kln-onboarding-open-session'
 const BASIC_SESSION_DISMISSED_KEY = 'kln-onboarding-basic-dismissed-session'
 const TECHNICAL_SESSION_DISMISSED_KEY = 'kln-onboarding-technical-dismissed-session'
 
+function emitOnboardingStateChange(tourType, step, open) {
+  if (typeof window === 'undefined') {
+    return
+  }
+  window.dispatchEvent(
+    new CustomEvent('kln:onboarding-state-change', {
+      detail: { tourType, step, open },
+    })
+  )
+}
+
 function resolveStepStorageKey(tourType) {
   return tourType === TECHNICAL_TOUR ? TECHNICAL_STEP_STORAGE_KEY : BASIC_STEP_STORAGE_KEY
 }
@@ -63,6 +74,7 @@ export function useOnboarding() {
       // ignore storage errors
     }
     setOpen(false)
+    emitOnboardingStateChange(currentTour, currentStep, false)
   }
 
   const complete = () => {
@@ -74,6 +86,7 @@ export function useOnboarding() {
       // ignore storage errors
     }
     setOpen(false)
+    emitOnboardingStateChange(currentTour, currentStep, false)
   }
 
   const reopen = (tourType = BASIC_TOUR) => {
@@ -88,6 +101,7 @@ export function useOnboarding() {
       // ignore storage errors
     }
     setOpen(true)
+    emitOnboardingStateChange(tourType, 0, true)
   }
   const updateStep = (step) => {
     setCurrentStep(step)
@@ -97,6 +111,7 @@ export function useOnboarding() {
     } catch {
       // ignore storage errors
     }
+    emitOnboardingStateChange(currentTour, step, open)
   }
 
   return { open, close, complete, reopen, currentStep, currentTour, updateStep }
