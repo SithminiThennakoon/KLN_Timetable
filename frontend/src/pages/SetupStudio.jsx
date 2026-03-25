@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { timetableStudioService } from "../services/timetableStudioService";
+import { onboardingTourSteps, TECHNICAL_TOUR } from "../components/onboardingTourSteps.js";
 
 const activeImportRunStorageKey = "kln_active_import_run_id";
 const reviewPageSize = 25;
@@ -502,6 +503,27 @@ function SetupStudio() {
   const [lecturerForm, setLecturerForm] = useState(emptyLecturerForm);
   const [roomForm, setRoomForm] = useState(emptyRoomForm);
   const [sessionForm, setSessionForm] = useState(emptySessionForm);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      const activeTour = window.localStorage.getItem("kln-onboarding-active-tour");
+      if (activeTour !== TECHNICAL_TOUR) {
+        return;
+      }
+      const rawStep = Number(window.localStorage.getItem("kln-onboarding-technical-step"));
+      const stepIndex = Number.isInteger(rawStep) && rawStep >= 0 ? rawStep : 0;
+      const activeStep = onboardingTourSteps[TECHNICAL_TOUR]?.[stepIndex];
+      const shouldExposeUtilities =
+        activeStep?.id === "setup-utilities-technical" ||
+        activeStep?.id === "setup-fixture-pack-technical";
+      setShowUtilities(shouldExposeUtilities);
+    } catch {
+      // ignore storage access issues
+    }
+  }, [status, activeImportRunId]);
 
   const hasChosenImportSource = Boolean(selectedFile);
   const summaryCards = useMemo(() => buildWorkspaceSummary(workspace), [workspace]);

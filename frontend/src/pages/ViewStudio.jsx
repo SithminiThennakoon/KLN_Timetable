@@ -691,7 +691,7 @@ const AdminDayCalendar = memo(AdminDayCalendarInner);
 
 function DayPickerInner({ selectedDay, onSelectDay, dayLoad }) {
   return (
-    <div className="day-picker" role="tablist" aria-label="Select day">
+    <div className="day-picker" role="tablist" aria-label="Select day" data-tour="views-day-picker">
       {days.map((day) => {
         const load = dayLoad.find((d) => d.day === day);
         const isActive = day === selectedDay;
@@ -1194,7 +1194,7 @@ function ViewStudio() {
 
         {/* ── Toolbar Row 2: Layout + Density + Export ── */}
         <div className="vs-toolbar-row vs-toolbar-row-2">
-          <div className="vs-control-group">
+          <div className="vs-control-group" data-tour="views-layout-controls">
             <span className="vs-control-label">View</span>
             <div className="vs-toggle-group" role="tablist" aria-label="Layout mode">
               <button
@@ -1213,7 +1213,7 @@ function ViewStudio() {
               </button>
             </div>
           </div>
-          <div className="vs-control-group">
+          <div className="vs-control-group" data-tour="views-density-controls">
             <span className="vs-control-label">Density</span>
             <div className="vs-toggle-group" role="tablist" aria-label="Density mode">
               {Object.entries(densityModes).map(([key, opt]) => (
@@ -1283,7 +1283,7 @@ function ViewStudio() {
                   onSelectDay={setSelectedDay}
                   dayLoad={dayLoad}
                 />
-                <section className="studio-card vs-calendar-card">
+                <section className="studio-card vs-calendar-card" data-tour="views-calendar-surface">
                   {mode === "admin" ? (
                     <AdminDayCalendar
                       entries={view.solution.entries}
