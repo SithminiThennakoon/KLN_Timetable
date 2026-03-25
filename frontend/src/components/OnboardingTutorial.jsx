@@ -32,6 +32,12 @@ function resolvePlacement(rect, placement, viewportWidth, viewportHeight) {
 
   const centeredLeft = rect.left + rect.width / 2 - panelWidth / 2;
   const centeredTop = rect.top + rect.height / 2 - panelHeight / 2;
+  const availableAbove = rect.top - spacing - VIEWPORT_PADDING;
+  const availableBelow = viewportHeight - rect.bottom - spacing - VIEWPORT_PADDING;
+  const availableLeft = rect.left - spacing - VIEWPORT_PADDING;
+  const availableRight = viewportWidth - rect.right - spacing - VIEWPORT_PADDING;
+  const targetIsLarge =
+    rect.width > viewportWidth * 0.55 || rect.height > viewportHeight * 0.35;
 
   const placements = {
     right: {
@@ -52,14 +58,29 @@ function resolvePlacement(rect, placement, viewportWidth, viewportHeight) {
     },
   };
 
-  const preferred = placements[placement] || placements.bottom;
+  let preferredPlacement = placement;
+  if (targetIsLarge) {
+    if (availableAbove >= panelHeight) {
+      preferredPlacement = "top";
+    } else if (availableRight >= panelWidth) {
+      preferredPlacement = "right";
+    } else if (availableLeft >= panelWidth) {
+      preferredPlacement = "left";
+    } else if (availableBelow >= panelHeight) {
+      preferredPlacement = "bottom";
+    }
+  }
+
+  const preferred = placements[preferredPlacement] || placements.bottom;
   const fitsPreferred =
     preferred.left >= VIEWPORT_PADDING &&
     preferred.left + panelWidth <= viewportWidth - VIEWPORT_PADDING &&
     preferred.top >= VIEWPORT_PADDING &&
     preferred.top + panelHeight <= viewportHeight - VIEWPORT_PADDING;
 
-  const fallbackOrder = ["bottom", "right", "left", "top"];
+  const fallbackOrder = targetIsLarge
+    ? ["top", "right", "left", "bottom"]
+    : ["bottom", "right", "left", "top"];
   const chosen = fitsPreferred
     ? preferred
     : fallbackOrder
