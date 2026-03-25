@@ -1,92 +1,57 @@
 # KLN Timetable System
 
-Web app for building and generating Faculty of Science timetables for the University of Kelaniya.
+Snapshot-first timetable builder and generator for the Faculty of Science, University of Kelaniya.
 
-For the full realistic dataset generation work, tradeoffs, and final working configuration, see [REALISTIC_SOLVER_NOTES.md](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/REALISTIC_SOLVER_NOTES.md).
+The active product flow is:
 
-The active product is the rebuilt `v2` timetable flow. Legacy auth, dashboard, and CRUD codepaths have been removed from the running app and the repo now centers on:
+1. `Setup`
+2. `Generate`
+3. `Views`
 
-- guided manual dataset entry
-- full timetable generation with hard constraints
-- optional nice-to-have constraints
-- default timetable selection
-- admin, lecturer, and student timetable views
-- PDF, CSV, XLSX, and PNG exports
+The system imports student enrolment data first, materializes an academic snapshot, enriches that snapshot with support CSVs or small local fixes, generates timetable solutions, verifies the selected solution, and exports audience-specific views.
+
+## What The Product Does
+
+- imports student enrolments from CSV
+- reviews and materializes an academic snapshot
+- imports support CSVs for rooms, lecturers, modules, sessions, and session-lecturer links
+- repairs small missing data directly inside Setup
+- generates hard-constraint-valid timetable solutions
+- applies optional nice-to-have preferences during generation
+- verifies the selected solution with Python, Rust, and Elixir verifiers
+- shows admin, lecturer, and student timetable views
+- exports timetable views as `PDF`, `CSV`, `XLSX`, and `PNG`
 
 ## Active Workflow
 
-1. Open `Setup` and enter the timetable dataset manually.
-2. Define degrees, paths, lecturers, rooms, student cohorts, modules, and sessions.
-3. Generate timetables in `Generate`.
-4. Review the number of valid solutions and pick a default timetable.
-5. Open `Views` to inspect the default timetable in admin, lecturer, or student mode.
-6. Export the current view if needed.
+### 1. Setup
 
-## Product Rules
+- import `student_enrollments.csv`
+- analyze review buckets
+- review the projected import
+- click `Use This Import` to materialize the snapshot
+- import any support CSVs the source system can provide
+- repair only the remaining local issues that the readiness list identifies
 
-- No authentication or login flow.
-- Weekly timetable only.
-- Working hours are `08:00` to `18:00`, Monday to Friday.
-- Lunch break is `12:00` to `13:00` with no sessions.
-- Session durations must be multiples of `30` minutes.
-- Hard constraints include:
-  - room capacity
-  - room/session compatibility
-  - specific-room restrictions
-  - room clash prevention
-  - lecturer clash prevention
-  - student-group clash prevention
-- Nice-to-have constraints currently include:
-  - spreading repeated weekly sessions across different days
+### 2. Generate
 
-## Current Implementation
+- generate timetable solutions from the active snapshot
+- add optional preferences only when the solution space is too broad or when the faculty wants a narrower result
+- choose a default solution
+- run verification against the normalized snapshot
 
-### Frontend
+### 3. Views
 
-Active pages:
+- inspect the default timetable in `admin`, `lecturer`, or `student` mode
+- export the current view using the format appropriate for the audience
 
-- [frontend/src/pages/SetupStudio.jsx](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/frontend/src/pages/SetupStudio.jsx)
-- [frontend/src/pages/GenerateStudio.jsx](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/frontend/src/pages/GenerateStudio.jsx)
-- [frontend/src/pages/ViewStudio.jsx](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/frontend/src/pages/ViewStudio.jsx)
-
-Active service layer:
-
-- [frontend/src/services/timetableStudioService.js](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/frontend/src/services/timetableStudioService.js)
-- [frontend/src/services/apiClient.js](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/frontend/src/services/apiClient.js)
-
-### Backend
-
-Active backend entrypoints:
-
-- [backend/app/main.py](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/backend/app/main.py)
-- [backend/app/routes/timetable_v2.py](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/backend/app/routes/timetable_v2.py)
-- [backend/app/services/timetable_v2.py](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/backend/app/services/timetable_v2.py)
-- [backend/app/models/v2.py](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/backend/app/models/v2.py)
-- [backend/app/schemas/v2.py](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/backend/app/schemas/v2.py)
-
-## API Surface
-
-Mounted API prefix: `/api/v2`
-
-- `GET /dataset`
-- `GET /dataset/full`
-- `POST /dataset`
-- `POST /dataset/demo`
-- `GET /lookups`
-- `POST /generate`
-- `GET /generate/latest`
-- `POST /solutions/default`
-- `GET /views`
-- `GET /exports`
-
-## Setup
+## Quick Start
 
 ### Backend
 
 Requirements:
 
-- Python 3.11+ is recommended
-- SQLite is the default database
+- Python `3.11+`
 
 Environment:
 
@@ -97,143 +62,97 @@ CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 RESET_DB=false
 ```
 
-Example file:
-
-- [backend/.env.example](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/backend/.env.example)
-
 Run:
 
-```bash
+```powershell
 cd backend
 python -m venv .venv
-source .venv/bin/activate
+.venv\Scripts\activate
 pip install -r requirements.txt
-python main.py
+uvicorn app.main:app --reload --port 8000
 ```
-
-Backend runs on `http://localhost:8000` by default.
 
 ### Frontend
 
 Requirements:
 
-- Node.js 18+
+- Node.js `18+`
 
 Run:
 
-```bash
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
-Frontend runs through Vite.
+Frontend default URL:
 
-Environment:
+- `http://localhost:5173`
 
-```env
-VITE_API_BASE_URL=/api
-```
+Backend default URL:
 
-Example production file:
+- `http://127.0.0.1:8000`
 
-- [frontend/.env.production.example](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/frontend/.env.production.example)
+## Important Repo Paths
 
-For split hosting, set `VITE_API_BASE_URL` to the public backend base such as `https://api.example.com/api`.
+- active API: `backend/app/routes/timetable_v2.py`
+- backend entrypoint: `backend/app/main.py`
+- setup page: `frontend/src/pages/SetupStudio.jsx`
+- generate page: `frontend/src/pages/GenerateStudio.jsx`
+- views page: `frontend/src/pages/ViewStudio.jsx`
+- realistic import fixtures: `backend/testdata/import_fixtures/production_like/`
+- fixture generator: `backend/scripts/generate_import_fixture_pack.py`
+- deployment assets: `deploy/azure/`
 
-## Deployment
+## Documentation
 
-Recommended low-cost deployment shape:
+The handover manuals are authored in Typst under `docs/typst/`.
 
-- backend on a single Azure Linux VM
-- frontend on Cloudflare Pages
-- SQLite database file on the Azure VM
+Deliverables:
 
-Deployment notes:
+- `User Manual.pdf`
+- `Technical Documentation.pdf`
+- `ABC Handover.pdf`
 
-- keep the backend as a single app instance when using SQLite
-- put the SQLite file on a persistent VM path such as `/var/lib/kln-timetable/app.db`
-- set `CORS_ALLOWED_ORIGINS` to the exact Cloudflare Pages production domain and preview domains you want to allow
-- keep `RESET_DB=false` in production
-- use the provided systemd and Nginx templates in `deploy/azure/`
+Source files:
 
-For a step-by-step deployment guide, see [DEPLOYMENT_AZURE_CLOUDFLARE.md](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/DEPLOYMENT_AZURE_CLOUDFLARE.md).
+- `docs/typst/user-manual.typ`
+- `docs/typst/technical-documentation.typ`
+- `docs/typst/abc-handover.typ`
+- `docs/typst/README.md`
 
-## Desktop Launcher
+## Deployment Shape
 
-A repo-local desktop launcher GUI is available at [launcher_gui.py](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/launcher_gui.py).
+Recommended low-cost production shape:
 
-Run it from the repo root:
+- backend on a single Linux VM
+- frontend on static hosting
+- SQLite on the same VM as the backend
+- reverse proxy using the templates in `deploy/azure/`
 
-```bash
-.venv/bin/python launcher_gui.py
-```
+The checked-in systemd and Nginx templates assume:
 
-For a non-technical Linux user, use one of these instead:
+- backend working directory `/opt/kln-timetable`
+- service user `kln`
+- `uvicorn app.main:app --host 127.0.0.1 --port 8000`
 
-- double-click [Launch KLN Timetable.sh](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/Launch%20KLN%20Timetable.sh)
-- or place [kln-timetable-launcher.desktop](/home/sasindu/Documents/Projects/UOK Sithu Timetable/KLN_Timetable/kln-timetable-launcher.desktop) on the desktop/app launcher and run it like a normal Linux app
+## Verification Notes
 
-The launcher can:
+- Python verification is available through the active API
+- Rust and Elixir verifiers exist in the repo and are part of the broader verification suite
+- a timetable is only fully trusted when the required verifiers complete successfully
 
-- start the repo-local MariaDB, backend, and frontend together
-- stop them cleanly
-- restart the full stack
-- show separate backend and frontend log panes
-- copy backend and frontend logs independently
+Related docs:
 
-Cleanup behavior is safe by default:
+- `docs/verification-contract.md`
+- `docs/prompts-feature-status.md`
 
-- stops repo-local launcher-managed services
-- clears stale MariaDB pid/socket state when no live DB process owns it
-- reports external port conflicts instead of killing unrelated processes
+## Known Practical Limits
 
-## Verification
-
-Backend:
-
-```bash
-python -m compileall backend/app
-.venv/bin/python -m unittest backend.tests.test_timetable_v2
-```
-
-Frontend:
-
-```bash
-cd frontend
-npm test
-npm run build
-```
-
-## Test Coverage
-
-Backend regression coverage currently includes:
-
-- infeasibility diagnostics
-- internal cohort splitting
-- parallel-room scheduling success and failure
-- truncation behavior
-- default solution switching
-- degree/path student filtering
-- soft-constraint fallback behavior
-- CSV and XLS export payload shaping
-
-Frontend coverage currently includes:
-
-- setup wizard hydration, validation, and save shaping
-- generation request and threshold messaging
-- student view filtering
-- export path selection and local export payload shaping
-
-## Known Limits
-
-- Export tests validate branching and payload shaping, not binary document fidelity.
-- PDF and PNG exports are generated client-side, so document rendering depends on browser capabilities.
-- XLS backend export still exists only as a basic tabular payload for API completeness; the active UI downloads real `.xlsx` files client-side.
-- The solver supports internal splitting and same-time parallel-room sessions, but very specialized teaching patterns may still need future extension.
-
-## Branch
-
-Current development branch for the rebuild:
-
-- `feature/v2-timetable-rebuild`
+- PDF and PNG exports are generated client-side
+- `CSV` and `XLSX` are data-first exports
+- visual export scope differs by audience:
+  - `lecturer` and `student`: whole-week visual exports
+  - `admin`: whole-week or daily-bundle visual exports
+- large enrolment imports can take noticeable time during materialization
